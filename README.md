@@ -32,6 +32,8 @@ Copy to Grasshopper Libraries:
 
 Verify: `./scripts/verify-install.ps1`
 
+Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px).
+
 ### Environment
 
 | Variable | Default | Purpose |

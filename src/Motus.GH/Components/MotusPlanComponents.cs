@@ -32,7 +32,7 @@ public sealed class MotusPlanJointPathComponent : MotusComponentBase
     private PlanningResult? _cached;
     private string _cacheKey = "";
 
-    public MotusPlanJointPathComponent() : base("Motus Plan Joint Path", "Plan", "Joint-space linear plan", "Plan") { }
+    public MotusPlanJointPathComponent() : base("Motus Plan Joint Path", "Plan", "Joint-space linear plan", "Plan", "flow-arrow") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddBooleanParameter("Run", "R", "Plan when true", GH_ParamAccess.item, false);
@@ -84,7 +84,7 @@ public sealed class MotusPlanCartesianPathComponent : MotusComponentBase
     private PlanningResult? _cached;
     private string _cacheKey = "";
 
-    public MotusPlanCartesianPathComponent() : base("Motus Plan Cartesian Path", "PlanCart", "Cartesian goal via IK + joint path", "Plan") { }
+    public MotusPlanCartesianPathComponent() : base("Motus Plan Cartesian Path", "PlanCart", "Cartesian goal via IK + joint path", "Plan", "compass-tool") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddBooleanParameter("Run", "R", "Plan when true", GH_ParamAccess.item, false);
@@ -139,7 +139,7 @@ public sealed class MotusPlanRrtConnectComponent : MotusComponentBase
     private PlanningResult? _cached;
     private string _cacheKey = "";
 
-    public MotusPlanRrtConnectComponent() : base("Motus Plan RRT Connect", "RRT", "RRT-Connect with collision", "Plan") { }
+    public MotusPlanRrtConnectComponent() : base("Motus Plan RRT Connect", "RRT", "RRT-Connect with collision", "Plan", "graph") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddBooleanParameter("Run", "R", "Plan when true", GH_ParamAccess.item, false);
@@ -197,7 +197,7 @@ public sealed class MotusPlanRrtConnectComponent : MotusComponentBase
 
 public sealed class MotusValidateTrajectoryComponent : MotusComponentBase
 {
-    public MotusValidateTrajectoryComponent() : base("Motus Validate Trajectory", "Valid", "Validate trajectory", "Plan") { }
+    public MotusValidateTrajectoryComponent() : base("Motus Validate Trajectory", "Valid", "Validate trajectory", "Plan", "check-circle") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);

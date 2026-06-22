@@ -8,7 +8,7 @@ namespace Motus.GH.Components;
 
 public sealed class MotusCollisionSphereComponent : MotusComponentBase
 {
-    public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision") { }
+    public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision", "sphere") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddPointParameter("Center", "C", "Sphere center", GH_ParamAccess.item, Point3d.Origin);
@@ -31,7 +31,7 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
 
 public sealed class MotusCollisionBoxComponent : MotusComponentBase
 {
-    public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision") { }
+    public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddPlaneParameter("Plane", "P", "Box center/orientation", GH_ParamAccess.item, Plane.WorldXY);
@@ -55,7 +55,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
 
 public sealed class MotusCollisionSceneComponent : MotusComponentBase
 {
-    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects", "Collision") { }
+    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects", "Collision", "tree-structure") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "S", "Collision scene", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -75,7 +75,7 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
 
 public sealed class MotusCartesianPoseComponent : MotusComponentBase
 {
-    public MotusCartesianPoseComponent() : base("Motus Cartesian Pose", "Pose", "TCP goal from plane", "Model") { }
+    public MotusCartesianPoseComponent() : base("Motus Cartesian Pose", "Pose", "TCP goal from plane", "Model", "map-pin") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddPlaneParameter("Plane", "P", "TCP plane (meters)", GH_ParamAccess.item, Plane.WorldXY);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Pose", "P", "Cartesian pose", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)

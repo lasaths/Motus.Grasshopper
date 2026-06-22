@@ -12,15 +12,17 @@ namespace Motus.GH.Components;
 
 public abstract class MotusComponentBase : GH_Component
 {
-    protected MotusComponentBase(string name, string nickname, string desc, string sub)
-        : base(name, nickname, desc, "Motus", sub) { }
+    private readonly string _iconName;
 
-    protected override System.Drawing.Bitmap Icon => MotusIcon.Get();
+    protected MotusComponentBase(string name, string nickname, string desc, string sub, string iconName = "cube")
+        : base(name, nickname, desc, "Motus", sub) => _iconName = iconName;
+
+    protected override System.Drawing.Bitmap Icon => MotusIcon.Get(_iconName);
 }
 
 public sealed class MotusRobotModelComponent : MotusComponentBase
 {
-    public MotusRobotModelComponent() : base("Motus Robot Model", "Robot", "Wrap a robot preset as a model", "Model") { }
+    public MotusRobotModelComponent() : base("Motus Robot Model", "Robot", "Wrap a robot preset as a model", "Model", "cube") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Preset", "P", "Robot preset", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Model", "M", "Robot model", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -36,7 +38,7 @@ public sealed class MotusRobotModelComponent : MotusComponentBase
 
 public sealed class MotusUrPresetComponent : MotusComponentBase
 {
-    public MotusUrPresetComponent() : base("Motus UR Preset", "UR", "Load a Universal Robots preset", "Model") { }
+    public MotusUrPresetComponent() : base("Motus UR Preset", "UR", "Load a Universal Robots preset", "Model", "package") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddTextParameter("Model", "M", "Model name e.g. UR5e", GH_ParamAccess.item, "UR5e");
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Preset", "P", "Robot preset", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -51,7 +53,7 @@ public sealed class MotusUrPresetComponent : MotusComponentBase
 
 public sealed class MotusKukaPresetComponent : MotusComponentBase
 {
-    public MotusKukaPresetComponent() : base("Motus KUKA Preset", "KUKA", "Load a KUKA preset", "Model") { }
+    public MotusKukaPresetComponent() : base("Motus KUKA Preset", "KUKA", "Load a KUKA preset", "Model", "package") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddTextParameter("Model", "M", "Model name e.g. KR 6 R900", GH_ParamAccess.item, "KR 6 R900");
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Preset", "P", "Robot preset", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -66,7 +68,7 @@ public sealed class MotusKukaPresetComponent : MotusComponentBase
 
 public sealed class MotusCustomRobotComponent : MotusComponentBase
 {
-    public MotusCustomRobotComponent() : base("Motus Custom Robot", "Custom", "Build robot from JSON preset path", "Model") { }
+    public MotusCustomRobotComponent() : base("Motus Custom Robot", "Custom", "Build robot from JSON preset path", "Model", "download-simple") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddTextParameter("JsonPath", "J", "Path to preset JSON", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Preset", "P", "Robot preset", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -81,7 +83,7 @@ public sealed class MotusCustomRobotComponent : MotusComponentBase
 
 public sealed class MotusJointStateComponent : MotusComponentBase
 {
-    public MotusJointStateComponent() : base("Motus Joint State", "Joints", "Create joint state (radians)", "Model") { }
+    public MotusJointStateComponent() : base("Motus Joint State", "Joints", "Create joint state (radians)", "Model", "gear-six") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddNumberParameter("Joints", "J", "Joint angles in radians", GH_ParamAccess.list);
@@ -102,7 +104,7 @@ public sealed class MotusJointStateComponent : MotusComponentBase
 
 public sealed class MotusToolFrameComponent : MotusComponentBase
 {
-    public MotusToolFrameComponent() : base("Motus Tool Frame", "Tool", "Define tool frame from plane", "Model") { }
+    public MotusToolFrameComponent() : base("Motus Tool Frame", "Tool", "Define tool frame from plane", "Model", "compass-tool") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddPlaneParameter("Plane", "P", "Tool plane (meters)", GH_ParamAccess.item, Plane.WorldXY);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Tool", "T", "Tool frame", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -116,7 +118,7 @@ public sealed class MotusToolFrameComponent : MotusComponentBase
 
 public sealed class MotusBaseFrameComponent : MotusComponentBase
 {
-    public MotusBaseFrameComponent() : base("Motus Base Frame", "Base", "Define base frame from plane", "Model") { }
+    public MotusBaseFrameComponent() : base("Motus Base Frame", "Base", "Define base frame from plane", "Model", "map-pin") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddPlaneParameter("Plane", "P", "Base plane (meters)", GH_ParamAccess.item, Plane.WorldXY);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Base", "B", "Base frame", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -130,7 +132,7 @@ public sealed class MotusBaseFrameComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryInfoComponent : MotusComponentBase
 {
-    public MotusTrajectoryInfoComponent() : base("Motus Trajectory Info", "Info", "Trajectory summary", "Plan") { }
+    public MotusTrajectoryInfoComponent() : base("Motus Trajectory Info", "Info", "Trajectory summary", "Plan", "graph") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
@@ -151,7 +153,7 @@ public sealed class MotusTrajectoryInfoComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToJointListsComponent : MotusComponentBase
 {
-    public MotusTrajectoryToJointListsComponent() : base("Motus Trajectory to Joint Lists", "ToJ", "Export joint lists per axis", "Export") { }
+    public MotusTrajectoryToJointListsComponent() : base("Motus Trajectory to Joint Lists", "ToJ", "Export joint lists per axis", "Export", "tree-structure") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
@@ -178,7 +180,7 @@ public sealed class MotusTrajectoryToJointListsComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
 {
-    public MotusTrajectoryToPlanesComponent() : base("Motus Trajectory to Planes", "ToPl", "TCP planes via FK", "Export") { }
+    public MotusTrajectoryToPlanesComponent() : base("Motus Trajectory to Planes", "ToPl", "TCP planes via FK", "Export", "map-pin") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
@@ -201,7 +203,7 @@ public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToPosesComponent : MotusComponentBase
 {
-    public MotusTrajectoryToPosesComponent() : base("Motus Trajectory to Poses", "ToPs", "TCP frames via FK", "Export") { }
+    public MotusTrajectoryToPosesComponent() : base("Motus Trajectory to Poses", "ToPs", "TCP frames via FK", "Export", "compass-tool") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
@@ -231,7 +233,7 @@ public sealed class MotusTrajectoryToPosesComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToJsonComponent : MotusComponentBase
 {
-    public MotusTrajectoryToJsonComponent() : base("Motus Trajectory to JSON", "ToJson", "Export trajectory JSON", "Export") { }
+    public MotusTrajectoryToJsonComponent() : base("Motus Trajectory to JSON", "ToJson", "Export trajectory JSON", "Export", "export") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddTextParameter("Json", "J", "JSON", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -245,7 +247,7 @@ public sealed class MotusTrajectoryToJsonComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToCsvComponent : MotusComponentBase
 {
-    public MotusTrajectoryToCsvComponent() : base("Motus Trajectory to CSV", "ToCsv", "Export trajectory CSV", "Export") { }
+    public MotusTrajectoryToCsvComponent() : base("Motus Trajectory to CSV", "ToCsv", "Export trajectory CSV", "Export", "download-simple") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddTextParameter("Csv", "C", "CSV", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -259,7 +261,7 @@ public sealed class MotusTrajectoryToCsvComponent : MotusComponentBase
 
 public sealed class MotusPreviewRobotComponent : MotusComponentBase
 {
-    public MotusPreviewRobotComponent() : base("Motus Preview Robot", "PrevRb", "FK link preview", "Preview") { }
+    public MotusPreviewRobotComponent() : base("Motus Preview Robot", "PrevRb", "FK link preview", "Preview", "eye") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
@@ -289,7 +291,7 @@ public sealed class MotusPreviewRobotComponent : MotusComponentBase
 
 public sealed class MotusPreviewTcpPathComponent : MotusComponentBase
 {
-    public MotusPreviewTcpPathComponent() : base("Motus Preview TCP Path", "PrevTCP", "FK TCP path", "Preview") { }
+    public MotusPreviewTcpPathComponent() : base("Motus Preview TCP Path", "PrevTCP", "FK TCP path", "Preview", "path") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
@@ -313,7 +315,7 @@ public sealed class MotusPreviewTcpPathComponent : MotusComponentBase
 
 public sealed class MotusPreviewTrajectoryComponent : MotusComponentBase
 {
-    public MotusPreviewTrajectoryComponent() : base("Motus Preview Trajectory", "PrevTr", "Start/goal + invalid segments", "Preview") { }
+    public MotusPreviewTrajectoryComponent() : base("Motus Preview Trajectory", "PrevTr", "Start/goal + invalid segments", "Preview", "path") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);

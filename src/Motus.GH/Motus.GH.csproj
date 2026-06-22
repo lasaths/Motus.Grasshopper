@@ -27,6 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\icons\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="$(MotusNetRoot)resources\robots\**\*.json" Link="resources\robots\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
