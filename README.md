@@ -2,25 +2,43 @@
 
 Rhino 8 / Grasshopper plugin for Motus robot motion planning, preview, and export.
 
+Licensed under [MIT](LICENSE).
+
 ## Requirements
 
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
-- Built [Motus.NET](../Motus.NET) sibling repository
+- [Motus.NET](https://github.com/lasaths/Motus.NET) cloned as sibling: `../Motus.NET`
 
 ## Build
 
-```bash
-dotnet build Motus.Grasshopper.slnx
-# or on Windows:
-./build.ps1
+Motus.Grasshopper compiles against **pre-built Motus.NET DLLs** (NuGet packaging later).
+
+```powershell
+./build.ps1                      # Release (default)
+./build.ps1 -Configuration Debug
+./build.ps1 -Zip                 # also writes dist/Motus.Grasshopper-Release.zip
 ```
 
-Output: `src/Motus.GH/bin/Debug/net8.0/Motus.GH.gha`
+This builds `../Motus.NET` first, then the plugin.
 
-Copy `Motus.GH.gha`, `Motus.*.dll`, and the `resources/` folder into your Grasshopper libraries folder, or load via Grasshopper Developer > Manage Grasshopper Libraries.
+Output: `src/Motus.GH/bin/Release/net8.0/`
 
-Grasshopper and GH_IO references point to the default Rhino 8 install path (`C:\Program Files\Rhino 8\...`).
+Copy to Grasshopper Libraries:
+
+- `Motus.GH.gha`
+- `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`, `Motus.Rhino.dll`
+- `resources/robots/`
+
+Verify: `./scripts/verify-install.ps1`
+
+### Environment
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
+| `MotusNetRoot` | `../Motus.NET/` | Motus.NET DLL location |
+| `MotusNetConfiguration` | matches build config | `Debug` or `Release` |
 
 ## First workflow
 
@@ -48,6 +66,8 @@ Grasshopper and GH_IO references point to the default Rhino 8 install path (`C:\
 Motus outputs neutral trajectories. Wire exports manually into UR.RTDE.Grasshopper, VirtualRobot, Robots, or custom scripts. Motus does not depend on those plugins.
 
 See [docs/external-plugin-workflows.md](docs/external-plugin-workflows.md) and [examples/README.md](examples/README.md).
+
+Before release, run [docs/qa-checklist.md](docs/qa-checklist.md) in Rhino 8.
 
 ## Safety
 

@@ -1,0 +1,45 @@
+<Project>
+  <PropertyGroup>
+    <_MotusCoreDll>$(MotusNetRoot)src\Motus.Core\bin\$(MotusNetConfiguration)\net8.0\Motus.Core.dll</_MotusCoreDll>
+    <_MotusGeometryDll>$(MotusNetRoot)src\Motus.Geometry\bin\$(MotusNetConfiguration)\net8.0\Motus.Geometry.dll</_MotusGeometryDll>
+    <_MotusPresetsDll>$(MotusNetRoot)src\Motus.Presets\bin\$(MotusNetConfiguration)\net8.0\Motus.Presets.dll</_MotusPresetsDll>
+    <_MotusOmplDll>$(MotusNetRoot)src\Motus.OMPL.NET\bin\$(MotusNetConfiguration)\net8.0\Motus.OMPL.NET.dll</_MotusOmplDll>
+  </PropertyGroup>
+
+  <Target Name="EnsureMotusNetDlls" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(_MotusCoreDll)')"
+           Text="Motus.Core.dll not found at $(_MotusCoreDll). Build Motus.NET: dotnet build $(MotusNetRoot)Motus.NET.slnx -c $(MotusNetConfiguration)" />
+    <Error Condition="'$(MSBuildProjectName)' != 'Motus.Core' and !Exists('$(_MotusGeometryDll)')"
+           Text="Motus.Geometry.dll not found. Build Motus.NET first." />
+  </Target>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.Rhino'">
+    <Reference Include="Motus.Core">
+      <HintPath>$(_MotusCoreDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Motus.Geometry">
+      <HintPath>$(_MotusGeometryDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.GH'">
+    <Reference Include="Motus.Core">
+      <HintPath>$(_MotusCoreDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Motus.Geometry">
+      <HintPath>$(_MotusGeometryDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Motus.Presets">
+      <HintPath>$(_MotusPresetsDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Motus.OMPL.NET">
+      <HintPath>$(_MotusOmplDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <MotusNetRoot Condition="'$(MotusNetRoot)' == ''">$(MSBuildThisFileDirectory)..\Motus.NET\</MotusNetRoot>
+    <MotusNetConfiguration Condition="'$(MotusNetConfiguration)' == ''">$(Configuration)</MotusNetConfiguration>
+    <Rhino8Dir Condition="'$(Rhino8Dir)' == ''">C:\Program Files\Rhino 8</Rhino8Dir>
+  </PropertyGroup>
+</Project>

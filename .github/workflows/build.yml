@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Motus.Grasshopper
+
+      - uses: actions/checkout@v4
+        with:
+          repository: lasaths/Motus.NET
+          path: Motus.NET
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Motus.NET
+        run: dotnet build Motus.NET/Motus.NET.slnx -c Release
+
+      - name: Test Motus.NET
+        run: dotnet test Motus.NET/Motus.NET.slnx -c Release --no-build
+
+      - name: Build Motus.Grasshopper
+        run: dotnet build Motus.Grasshopper/Motus.Grasshopper.slnx -c Release /p:MotusNetConfiguration=Release
+        env:
+          MotusNetRoot: ${{ github.workspace }}/Motus.NET/
+
+      - name: Package zip
+        shell: pwsh
+        run: ./build.ps1 -Configuration Release -Zip
+        working-directory: Motus.Grasshopper
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Motus.Grasshopper-Release
+          path: Motus.Grasshopper/dist/*.zip

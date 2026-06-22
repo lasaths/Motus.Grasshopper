@@ -3,6 +3,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.GH;
 using Motus.GH.Data;
+using Motus.GH.Resources;
 using Motus.Presets;
 using Motus.Rhino;
 using Rhino.Geometry;
@@ -14,7 +15,7 @@ public abstract class MotusComponentBase : GH_Component
     protected MotusComponentBase(string name, string nickname, string desc, string sub)
         : base(name, nickname, desc, "Motus", sub) { }
 
-    protected override System.Drawing.Bitmap Icon => null!;
+    protected override System.Drawing.Bitmap Icon => MotusIcon.Get();
 }
 
 public sealed class MotusRobotModelComponent : MotusComponentBase
