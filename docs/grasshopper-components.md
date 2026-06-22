@@ -13,13 +13,24 @@ All components live under the **Motus** tab.
 | Motus Joint State | Joint list, UseDegrees | Joint state |
 | Motus Tool Frame | Plane (m) | Tool frame |
 | Motus Base Frame | Plane (m) | Base frame |
+| Motus Cartesian Pose | Plane (m) | Cartesian TCP goal |
+
+## Collision
+
+| Component | Notes |
+|-----------|-------|
+| Motus Collision Sphere | Center point + radius (m) |
+| Motus Collision Box | Plane + half extents (m) |
+| Motus Collision Scene | Merge collision objects |
 
 ## Plan
 
 | Component | Notes |
 |-----------|-------|
-| Motus Plan Joint Path | **Run** must be true to plan; caches last result when idle |
-| Motus Validate Trajectory | Joint limits, monotonic time, and per-segment velocity checks |
+| Motus Plan Joint Path | **Run** or **AutoReplan**; optional collision scene |
+| Motus Plan Cartesian Path | IK goal + joint-linear path |
+| Motus Plan RRT Connect | RRT-Connect with collision; supports solution cancel |
+| Motus Validate Trajectory | Joint limits, velocity, acceleration, optional collision |
 | Motus Trajectory Info | Point count, duration, robot name |
 
 ## Export
@@ -27,8 +38,8 @@ All components live under the **Motus** tab.
 | Component | Output |
 |-----------|--------|
 | Motus Trajectory to Joint Lists | Times + per-axis joint trees (rad) |
-| Motus Trajectory to Planes | Simplified TCP planes (placeholder FK) |
-| Motus Trajectory to Poses | Motus frames per point |
+| Motus Trajectory to Planes | FK TCP planes |
+| Motus Trajectory to Poses | FK TCP frames |
 | Motus Trajectory to JSON | JSON string |
 | Motus Trajectory to CSV | CSV string |
 
@@ -36,14 +47,14 @@ All components live under the **Motus** tab.
 
 | Component | Output |
 |-----------|--------|
-| Motus Preview Robot | Stick-figure link lines for one joint state |
-| Motus Preview TCP Path | Polyline from trajectory |
-| Motus Preview Trajectory | Start/goal points + goal stick figure |
+| Motus Preview Robot | Link lines, link meshes, TCP plane |
+| Motus Preview TCP Path | FK TCP polyline |
+| Motus Preview Trajectory | Start/goal TCP, valid/invalid segments, goal links |
 
 ## Data types
 
-Custom Goo wrappers: `RobotModelGoo`, `JointStateGoo`, `TrajectoryGoo`, `FrameGoo`, `ToolFrameGoo`, `BaseFrameGoo`. Components also expose native GH types (numbers, text, planes, curves) where useful.
+Custom Goo wrappers: `RobotModelGoo`, `JointStateGoo`, `TrajectoryGoo`, `FrameGoo`, `ToolFrameGoo`, `BaseFrameGoo`, `CollisionSceneGoo`, `CartesianPoseGoo`.
 
 ## Units
 
-Joint inputs: **radians** by default. Enable **UseDegrees** on Motus Joint State for degree input. Planes and preview geometry use **meters** (Rhino document units should match).
+Joint inputs: **radians** by default. Enable **UseDegrees** on Motus Joint State for degree input. Planes and preview geometry use **meters**.

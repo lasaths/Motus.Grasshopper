@@ -1,5 +1,7 @@
 using Grasshopper.Kernel;
 using Motus.Core;
+using Motus.Geometry;
+using Motus.GH;
 using Motus.GH.Data;
 using Motus.Presets;
 using Motus.Rhino;
@@ -125,83 +127,6 @@ public sealed class MotusBaseFrameComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("ea9aae72-c7ec-4422-ab24-0906e0f78a95");
 }
 
-public sealed class MotusPlanJointPathComponent : MotusComponentBase
-{
-    private PlanningResult? _cached;
-    private string _cacheKey = "";
-
-    public MotusPlanJointPathComponent() : base("Motus Plan Joint Path", "Plan", "Joint-space linear plan (Run gate)", "Plan") { }
-    protected override void RegisterInputParams(GH_InputParamManager p)
-    {
-        p.AddBooleanParameter("Run", "R", "Plan only when true", GH_ParamAccess.item, false);
-        p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddGenericParameter("Start", "S", "Start joint state", GH_ParamAccess.item);
-        p.AddGenericParameter("Goal", "G", "Goal joint state", GH_ParamAccess.item);
-        p.AddNumberParameter("MaxStep", "St", "Max joint step (rad)", GH_ParamAccess.item, 0.05);
-    }
-    protected override void RegisterOutputParams(GH_OutputParamManager p)
-    {
-        p.AddGenericParameter("Trajectory", "T", "Planned trajectory", GH_ParamAccess.item);
-        p.AddTextParameter("Status", "St", "Status message", GH_ParamAccess.item);
-        p.AddTextParameter("Warnings", "W", "Warnings", GH_ParamAccess.list);
-    }
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        var run = false;
-        if (!da.GetData(0, ref run) || !run)
-        {
-            if (_cached?.Success == true) da.SetData(0, new TrajectoryGoo(_cached.Trajectory!));
-            da.SetData(1, run ? "" : "Idle (set Run=true to plan).");
-            return;
-        }
-
-        RobotModelGoo? robotGoo = null; JointStateGoo? startGoo = null; JointStateGoo? goalGoo = null;
-        var maxStep = 0.05;
-        if (!da.GetData(1, ref robotGoo) || !da.GetData(2, ref startGoo) || !da.GetData(3, ref goalGoo)) return;
-        da.GetData(4, ref maxStep);
-
-        var key = $"{robotGoo!.Value.DisplayName}|{string.Join(",", startGoo!.Value.Positions)}|{string.Join(",", goalGoo!.Value.Positions)}|{maxStep}";
-        if (key == _cacheKey && _cached != null)
-        {
-            if (_cached.Success) da.SetData(0, new TrajectoryGoo(_cached.Trajectory!));
-            da.SetData(1, _cached.Success ? "Success (cached)." : string.Join("; ", _cached.Errors));
-            da.SetDataList(2, _cached.Warnings);
-            return;
-        }
-
-        var req = new PlanningRequest(robotGoo.Value, startGoo.Value, goalGoo.Value, new PlanningOptions { MaxJointStepRadians = maxStep });
-        _cached = new JointLinearPlanner().Plan(req);
-        _cacheKey = key;
-
-        if (_cached.Success) da.SetData(0, new TrajectoryGoo(_cached.Trajectory!));
-        da.SetData(1, _cached.Success ? "Success." : string.Join("; ", _cached.Errors));
-        da.SetDataList(2, _cached.Warnings);
-    }
-    public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");
-}
-
-public sealed class MotusValidateTrajectoryComponent : MotusComponentBase
-{
-    public MotusValidateTrajectoryComponent() : base("Motus Validate Trajectory", "Valid", "Validate trajectory", "Plan") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
-    protected override void RegisterOutputParams(GH_OutputParamManager p)
-    {
-        p.AddBooleanParameter("Valid", "V", "Is valid", GH_ParamAccess.item);
-        p.AddTextParameter("Errors", "E", "Errors", GH_ParamAccess.list);
-        p.AddTextParameter("Warnings", "W", "Warnings", GH_ParamAccess.list);
-    }
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        TrajectoryGoo? t = null;
-        if (!da.GetData(0, ref t)) return;
-        var r = new TrajectoryValidator().Validate(t!.Value);
-        da.SetData(0, r.IsValid);
-        da.SetDataList(1, r.Errors);
-        da.SetDataList(2, r.Warnings);
-    }
-    public override Guid ComponentGuid => new Guid("81caa6c6-166e-4e58-8325-8c6df7270ce0");
-}
-
 public sealed class MotusTrajectoryInfoComponent : MotusComponentBase
 {
     public MotusTrajectoryInfoComponent() : base("Motus Trajectory Info", "Info", "Trajectory summary", "Plan") { }
@@ -252,14 +177,22 @@ public sealed class MotusTrajectoryToJointListsComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
 {
-    public MotusTrajectoryToPlanesComponent() : base("Motus Trajectory to Planes", "ToPl", "Placeholder TCP planes (base frame)", "Export") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddPlaneParameter("Planes", "P", "TCP planes (simplified)", GH_ParamAccess.list);
+    public MotusTrajectoryToPlanesComponent() : base("Motus Trajectory to Planes", "ToPl", "TCP planes via FK", "Export") { }
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+        p.AddGenericParameter("Base", "B", "Base frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Tool", "Tf", "Tool frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+    }
+    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddPlaneParameter("Planes", "P", "TCP planes", GH_ParamAccess.list);
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        TrajectoryGoo? t = null;
-        if (!da.GetData(0, ref t)) return;
-        var planes = t!.Value.Points.Select(pt => FrameConversion.ToPlane(t.Value.Robot.Preset.BaseFrame.Frame)).ToList();
+        if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
+        var baseF = GhExtract.OptionalBaseFrame(da, 1);
+        var tool = GhExtract.OptionalToolFrame(da, 2);
+        var planes = t.Points.Select(pt => KinematicsPreview.TcpPlane(t.Robot, pt.JointState, baseF, tool)).ToList();
         da.SetDataList(0, planes);
     }
     public override Guid ComponentGuid => new Guid("2957489a-d4bd-429d-8de3-6b5390640851");
@@ -267,14 +200,29 @@ public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryToPosesComponent : MotusComponentBase
 {
-    public MotusTrajectoryToPosesComponent() : base("Motus Trajectory to Poses", "ToPs", "Export Motus frames", "Export") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+    public MotusTrajectoryToPosesComponent() : base("Motus Trajectory to Poses", "ToPs", "TCP frames via FK", "Export") { }
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+        p.AddGenericParameter("Base", "B", "Base frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Tool", "Tf", "Tool frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+    }
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Frames", "F", "Frames per point", GH_ParamAccess.list);
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        TrajectoryGoo? t = null;
-        if (!da.GetData(0, ref t)) return;
-        var frames = t!.Value.Points.Select(_ => new FrameGoo(t.Value.Robot.Preset.BaseFrame.Frame)).ToList();
+        if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
+        var baseF = GhExtract.OptionalBaseFrame(da, 1);
+        var tool = GhExtract.OptionalToolFrame(da, 2);
+        var fk = KinematicsPreview.TryFk(t.Robot);
+        var b = KinematicsPreview.ResolveBase(t.Robot, baseF);
+        var tf = KinematicsPreview.ResolveTool(t.Robot, tool);
+        var frames = t.Points.Select(pt =>
+        {
+            if (fk is null) return new FrameGoo(b.Frame);
+            return new FrameGoo(fk.ComputeTcp(pt.JointState, b, tf).Tcp);
+        }).ToList();
         da.SetDataList(0, frames);
     }
     public override Guid ComponentGuid => new Guid("bba81a6e-b7b8-498e-bfb4-25662c074a45");
@@ -310,60 +258,99 @@ public sealed class MotusTrajectoryToCsvComponent : MotusComponentBase
 
 public sealed class MotusPreviewRobotComponent : MotusComponentBase
 {
-    public MotusPreviewRobotComponent() : base("Motus Preview Robot", "PrevRb", "Preview stick robot", "Preview") { }
+    public MotusPreviewRobotComponent() : base("Motus Preview Robot", "PrevRb", "FK link preview", "Preview") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
         p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+        p.AddGenericParameter("Base", "B", "Base frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Tool", "Tf", "Tool frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddLineParameter("Links", "L", "Link lines", GH_ParamAccess.list);
+    protected override void RegisterOutputParams(GH_OutputParamManager p)
+    {
+        p.AddLineParameter("Links", "L", "Link lines", GH_ParamAccess.list);
+        p.AddMeshParameter("Meshes", "M", "Link meshes", GH_ParamAccess.list);
+        p.AddPlaneParameter("Tool", "T", "TCP plane", GH_ParamAccess.item);
+    }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        JointStateGoo? s = null;
-        if (!da.GetData(1, ref s)) return;
-        da.SetDataList(0, RobotPreview.StickLinks(s!.Value).ToList());
+        if (!GhExtract.TryRobot(da, 0, out var robot) || !GhExtract.TryJointState(da, 1, out var state)) return;
+        var baseF = GhExtract.OptionalBaseFrame(da, 2);
+        var tool = GhExtract.OptionalToolFrame(da, 3);
+        da.SetDataList(0, KinematicsPreview.LinkLines(robot, state, baseF, tool).ToList());
+        da.SetDataList(1, KinematicsPreview.LinkMeshes(robot, state, baseF, tool).ToList());
+        da.SetData(2, KinematicsPreview.TcpPlane(robot, state, baseF, tool));
     }
     public override Guid ComponentGuid => new Guid("458ed2f4-5ce1-4541-8df4-bc4ff9fbee00");
 }
 
 public sealed class MotusPreviewTcpPathComponent : MotusComponentBase
 {
-    public MotusPreviewTcpPathComponent() : base("Motus Preview TCP Path", "PrevTCP", "Preview simplified TCP path", "Preview") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+    public MotusPreviewTcpPathComponent() : base("Motus Preview TCP Path", "PrevTCP", "FK TCP path", "Preview") { }
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+        p.AddGenericParameter("Base", "B", "Base frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Tool", "Tf", "Tool frame override (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+    }
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddCurveParameter("Path", "P", "TCP polyline", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        TrajectoryGoo? t = null;
-        if (!da.GetData(0, ref t)) return;
-        var states = t!.Value.Points.Select(p => p.JointState);
-        da.SetData(0, RobotPreview.TcpPathFromJointStates(states).ToNurbsCurve());
+        if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
+        var baseF = GhExtract.OptionalBaseFrame(da, 1);
+        var tool = GhExtract.OptionalToolFrame(da, 2);
+        var states = t.Points.Select(p => p.JointState);
+        var pl = KinematicsPreview.TcpPath(t.Robot, states, baseF, tool);
+        da.SetData(0, pl.Count >= 2 ? pl.ToNurbsCurve() : null);
     }
     public override Guid ComponentGuid => new Guid("7ba0b37a-7508-47da-8ac3-c2023d52270d");
 }
 
 public sealed class MotusPreviewTrajectoryComponent : MotusComponentBase
 {
-    public MotusPreviewTrajectoryComponent() : base("Motus Preview Trajectory", "PrevTr", "Preview start/goal markers", "Preview") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+    public MotusPreviewTrajectoryComponent() : base("Motus Preview Trajectory", "PrevTr", "Start/goal + invalid segments", "Preview") { }
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Trajectory", "T", "Trajectory", GH_ParamAccess.item);
+        p.AddGenericParameter("Collision", "C", "Collision scene for segment check (optional)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter("CheckAccel", "A", "Check acceleration", GH_ParamAccess.item, true);
+    }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddPointParameter("Start", "S", "Start point", GH_ParamAccess.item);
-        p.AddPointParameter("Goal", "G", "Goal point", GH_ParamAccess.item);
-        p.AddLineParameter("Links", "L", "Goal stick figure", GH_ParamAccess.list);
+        p.AddPointParameter("Start", "S", "Start TCP", GH_ParamAccess.item);
+        p.AddPointParameter("Goal", "G", "Goal TCP", GH_ParamAccess.item);
+        p.AddLineParameter("Valid", "V", "Valid TCP segments", GH_ParamAccess.list);
+        p.AddLineParameter("Invalid", "I", "Invalid TCP segments", GH_ParamAccess.list);
+        p.AddLineParameter("GoalLinks", "L", "Goal link lines", GH_ParamAccess.list);
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        TrajectoryGoo? t = null;
-        if (!da.GetData(0, ref t) || t!.Value.Points.Count == 0) return;
-        var start = t.Value.Points[0].JointState;
-        var goal = t.Value.Points[^1].JointState;
-        var startLines = RobotPreview.StickLinks(start).ToList();
-        var goalPt = startLines.Count > 0 ? startLines[^1].To : Point3d.Origin;
-        var startPt = startLines.Count > 0 ? startLines[0].From : Point3d.Origin;
-        da.SetData(0, startPt);
-        var goalLines = RobotPreview.StickLinks(goal).ToList();
-        da.SetData(1, goalLines.Count > 0 ? goalLines[^1].To : goalPt);
-        da.SetDataList(2, RobotPreview.StickLinks(goal).ToList());
+        if (!GhExtract.TryTrajectory(da, 0, out var t) || t.Points.Count == 0) return;
+        var scene = GhExtract.OptionalCollisionScene(da, 1);
+        var checkAccel = true;
+        da.GetData(2, ref checkAccel);
+
+        ICollisionChecker? checker = null;
+        if (scene is not null && KinematicsProfiles.TryGet(t.Robot.Preset, out _))
+            checker = new SphereCollisionChecker(t.Robot.Preset);
+
+        var opts = new TrajectoryValidationOptions { CollisionChecker = checker, CollisionScene = scene, CheckAcceleration = checkAccel };
+        KinematicsPreview.TrajectorySegments(t.Robot, t, opts, out var valid, out var invalid);
+
+        var start = t.Points[0].JointState;
+        var goal = t.Points[^1].JointState;
+        var goalLines = KinematicsPreview.LinkLines(t.Robot, goal).ToList();
+
+        da.SetData(0, KinematicsPreview.TcpPlane(t.Robot, start).Origin);
+        da.SetData(1, KinematicsPreview.TcpPlane(t.Robot, goal).Origin);
+        da.SetDataList(2, valid);
+        da.SetDataList(3, invalid);
+        da.SetDataList(4, goalLines);
     }
     public override Guid ComponentGuid => new Guid("45a84387-3f82-443a-a6f5-309a8c3be32c");
 }

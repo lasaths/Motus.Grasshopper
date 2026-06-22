@@ -27,10 +27,21 @@ Grasshopper and GH_IO references point to the default Rhino 8 install path (`C:\
 1. **Motus UR Preset** (or KUKA) → model name e.g. `UR5e`
 2. **Motus Robot Model** → wrap preset
 3. **Motus Joint State** × 2 → start and goal (radians, or set UseDegrees)
-4. **Motus Plan Joint Path** → set **Run** = true
+4. **Motus Plan Joint Path** → set **Run** = true (or **AutoReplan** for continuous)
 5. **Motus Validate Trajectory** / **Motus Trajectory Info**
 6. **Motus Preview Robot** / **Motus Preview Trajectory** / **Motus Preview TCP Path**
 7. **Motus Trajectory to JSON** / **CSV** / **Joint Lists**
+
+### Collision-aware planning
+
+1. **Motus Collision Sphere** / **Box** → **Motus Collision Scene**
+2. **Motus Plan RRT Connect** with scene wired to **Collision**
+3. Validate with collision scene on **Motus Validate Trajectory**
+
+### Cartesian goals
+
+1. **Motus Cartesian Pose** from a goal plane
+2. **Motus Plan Cartesian Path** with start joint state + pose goal
 
 ## External plugins
 

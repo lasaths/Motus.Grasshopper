@@ -1,30 +1,21 @@
 # Preview
 
-Motus includes a **basic** Rhino viewport preview — not a replacement for VirtualRobot or Robots.
+Motus uses **DH forward kinematics** for Rhino viewport preview when the robot preset has a kinematics profile (all bundled UR/KUKA presets).
 
 ## What is shown
 
 | Component | Geometry |
 |-----------|----------|
-| Motus Preview Robot | Stick-figure links from base following joint angles (simplified 2.5D heuristic) |
-| Motus Preview TCP Path | Polyline sampling first joint contribution along trajectory |
-| Motus Preview Trajectory | Start point, goal point, goal-configuration stick figure |
+| Motus Preview Robot | FK link lines, cylinder link meshes, TCP plane (tool frame) |
+| Motus Preview TCP Path | TCP polyline along trajectory |
+| Motus Preview Trajectory | Start/goal TCP points, valid/invalid TCP segments, goal link lines |
 
-## Limitations (milestone 1)
+## Invalid segments
 
-- No accurate forward kinematics mesh model yet
-- Link lengths are fixed heuristics (~0.12–0.15 m per segment)
-- Tool frame and base frame components affect data model but preview uses simplified stick geometry
-- Invalid trajectory segments are not yet highlighted in preview
+Wire a **Motus Collision Scene** into **Motus Preview Trajectory** (and enable acceleration checks) to split TCP motion into **Valid** vs **Invalid** line outputs. Color them downstream in Grasshopper.
 
 ## Tips
 
-- Connect preview components to a **Geometry** pipeline or use Grasshopper preview bubbles
-- Keep Rhino document units in **meters** to match Motus internal units
-- For production visualization, export trajectory data to VirtualRobot or Robots
-
-## Future
-
-- FK-based link transforms from preset DH parameters
-- TCP frame display and invalid segment coloring
-- Optional mesh preview from preset link lengths
+- Optional **Base** / **Tool** inputs override preset frames on preview and export components.
+- Keep Rhino document units in **meters**.
+- For production visualization, export trajectory data to VirtualRobot or Robots.

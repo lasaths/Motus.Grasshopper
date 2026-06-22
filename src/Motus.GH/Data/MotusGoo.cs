@@ -69,3 +69,19 @@ public sealed class BaseFrameGoo : GH_Goo<BaseFrame>
     public override IGH_Goo Duplicate() => new BaseFrameGoo(Value);
     public override string ToString() => "BaseFrame";
 }
+
+public sealed class CollisionSceneGoo : MotusGooBase<CollisionScene>
+{
+    public CollisionSceneGoo() : base(new CollisionScene()) { }
+    public CollisionSceneGoo(CollisionScene scene) : base(scene) { }
+    public override string ToString() => $"CollisionScene ({Value.Objects.Count} objs)";
+    public override IGH_Goo Duplicate() => new CollisionSceneGoo(Value);
+}
+
+public sealed class CartesianPoseGoo : MotusGooBase<CartesianPose>
+{
+    public CartesianPoseGoo() : base(new CartesianPose(Frame.Identity)) { }
+    public CartesianPoseGoo(CartesianPose pose) : base(pose) { }
+    public override string ToString() => "CartesianPose";
+    public override IGH_Goo Duplicate() => new CartesianPoseGoo(Value);
+}
