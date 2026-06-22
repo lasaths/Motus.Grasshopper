@@ -28,7 +28,7 @@ public sealed class MotusRobotModelComponent : MotusComponentBase
         if (preset == null) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Expected RobotPreset."); return; }
         da.SetData(0, new RobotModelGoo(preset.ToModel()));
     }
-    public override Guid ComponentGuid => new("a1000001-0001-4000-8000-000000000001");
+    public override Guid ComponentGuid => new Guid("aa3e8488-943e-426f-b205-e8db5f684998");
 }
 
 public sealed class MotusUrPresetComponent : MotusComponentBase
@@ -43,7 +43,7 @@ public sealed class MotusUrPresetComponent : MotusComponentBase
         try { da.SetData(0, PresetLoader.LoadByModelName(name)); }
         catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
     }
-    public override Guid ComponentGuid => new("a1000002-0002-4000-8000-000000000002");
+    public override Guid ComponentGuid => new Guid("fffae605-7c51-4c47-bfe6-20eb540594da");
 }
 
 public sealed class MotusKukaPresetComponent : MotusComponentBase
@@ -58,7 +58,7 @@ public sealed class MotusKukaPresetComponent : MotusComponentBase
         try { da.SetData(0, PresetLoader.LoadByModelName(name)); }
         catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
     }
-    public override Guid ComponentGuid => new("a1000003-0003-4000-8000-000000000003");
+    public override Guid ComponentGuid => new Guid("fd6defff-52bc-4abd-81e0-352cc5332fb8");
 }
 
 public sealed class MotusCustomRobotComponent : MotusComponentBase
@@ -73,7 +73,7 @@ public sealed class MotusCustomRobotComponent : MotusComponentBase
         try { da.SetData(0, PresetLoader.LoadFromFile(path)); }
         catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
     }
-    public override Guid ComponentGuid => new("a1000004-0004-4000-8000-000000000004");
+    public override Guid ComponentGuid => new Guid("90a11b5a-2ef1-41f7-b8e6-f60223c1572b");
 }
 
 public sealed class MotusJointStateComponent : MotusComponentBase
@@ -94,7 +94,7 @@ public sealed class MotusJointStateComponent : MotusComponentBase
         var arr = deg ? Units.ToRadians(vals.ToArray()) : vals.ToArray();
         da.SetData(0, new JointStateGoo(new JointState(arr)));
     }
-    public override Guid ComponentGuid => new("a1000005-0005-4000-8000-000000000005");
+    public override Guid ComponentGuid => new Guid("380f17c2-5d5f-4f77-a251-8309f25ef61e");
 }
 
 public sealed class MotusToolFrameComponent : MotusComponentBase
@@ -108,7 +108,7 @@ public sealed class MotusToolFrameComponent : MotusComponentBase
         if (!da.GetData(0, ref pl)) return;
         da.SetData(0, new ToolFrameGoo(new ToolFrame(FrameConversion.FromPlane(pl))));
     }
-    public override Guid ComponentGuid => new("a1000006-0006-4000-8000-000000000006");
+    public override Guid ComponentGuid => new Guid("f8235119-89ff-4bc8-a6be-196401e81226");
 }
 
 public sealed class MotusBaseFrameComponent : MotusComponentBase
@@ -122,7 +122,7 @@ public sealed class MotusBaseFrameComponent : MotusComponentBase
         if (!da.GetData(0, ref pl)) return;
         da.SetData(0, new BaseFrameGoo(new BaseFrame(FrameConversion.FromPlane(pl))));
     }
-    public override Guid ComponentGuid => new("a1000007-0007-4000-8000-000000000007");
+    public override Guid ComponentGuid => new Guid("ea9aae72-c7ec-4422-ab24-0906e0f78a95");
 }
 
 public sealed class MotusPlanJointPathComponent : MotusComponentBase
@@ -177,7 +177,7 @@ public sealed class MotusPlanJointPathComponent : MotusComponentBase
         da.SetData(1, _cached.Success ? "Success." : string.Join("; ", _cached.Errors));
         da.SetDataList(2, _cached.Warnings);
     }
-    public override Guid ComponentGuid => new("a1000008-0008-4000-8000-000000000008");
+    public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");
 }
 
 public sealed class MotusValidateTrajectoryComponent : MotusComponentBase
@@ -199,7 +199,7 @@ public sealed class MotusValidateTrajectoryComponent : MotusComponentBase
         da.SetDataList(1, r.Errors);
         da.SetDataList(2, r.Warnings);
     }
-    public override Guid ComponentGuid => new("a1000009-0009-4000-8000-000000000009");
+    public override Guid ComponentGuid => new Guid("81caa6c6-166e-4e58-8325-8c6df7270ce0");
 }
 
 public sealed class MotusTrajectoryInfoComponent : MotusComponentBase
@@ -220,7 +220,7 @@ public sealed class MotusTrajectoryInfoComponent : MotusComponentBase
         da.SetData(1, t.Value.DurationSeconds);
         da.SetData(2, t.Value.Robot.DisplayName);
     }
-    public override Guid ComponentGuid => new("a1000010-0010-4000-8000-000000000010");
+    public override Guid ComponentGuid => new Guid("c195135d-2f94-44f5-9fab-fab3b55aabfd");
 }
 
 public sealed class MotusTrajectoryToJointListsComponent : MotusComponentBase
@@ -247,7 +247,7 @@ public sealed class MotusTrajectoryToJointListsComponent : MotusComponentBase
         da.SetDataList(0, times);
         da.SetData(1, tree);
     }
-    public override Guid ComponentGuid => new("a1000011-0011-4000-8000-000000000011");
+    public override Guid ComponentGuid => new Guid("a72b5cfa-5cf5-4e54-a5cd-943e2aae82da");
 }
 
 public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
@@ -262,7 +262,7 @@ public sealed class MotusTrajectoryToPlanesComponent : MotusComponentBase
         var planes = t!.Value.Points.Select(pt => FrameConversion.ToPlane(t.Value.Robot.Preset.BaseFrame.Frame)).ToList();
         da.SetDataList(0, planes);
     }
-    public override Guid ComponentGuid => new("a1000012-0012-4000-8000-000000000012");
+    public override Guid ComponentGuid => new Guid("2957489a-d4bd-429d-8de3-6b5390640851");
 }
 
 public sealed class MotusTrajectoryToPosesComponent : MotusComponentBase
@@ -277,7 +277,7 @@ public sealed class MotusTrajectoryToPosesComponent : MotusComponentBase
         var frames = t!.Value.Points.Select(_ => new FrameGoo(t.Value.Robot.Preset.BaseFrame.Frame)).ToList();
         da.SetDataList(0, frames);
     }
-    public override Guid ComponentGuid => new("a1000013-0013-4000-8000-000000000013");
+    public override Guid ComponentGuid => new Guid("bba81a6e-b7b8-498e-bfb4-25662c074a45");
 }
 
 public sealed class MotusTrajectoryToJsonComponent : MotusComponentBase
@@ -291,7 +291,7 @@ public sealed class MotusTrajectoryToJsonComponent : MotusComponentBase
         if (!da.GetData(0, ref t)) return;
         da.SetData(0, TrajectoryExport.ToJson(t!.Value));
     }
-    public override Guid ComponentGuid => new("a1000014-0014-4000-8000-000000000014");
+    public override Guid ComponentGuid => new Guid("0a443b6f-605b-48e3-843c-cd0a709f8379");
 }
 
 public sealed class MotusTrajectoryToCsvComponent : MotusComponentBase
@@ -305,7 +305,7 @@ public sealed class MotusTrajectoryToCsvComponent : MotusComponentBase
         if (!da.GetData(0, ref t)) return;
         da.SetData(0, TrajectoryExport.ToCsv(t!.Value));
     }
-    public override Guid ComponentGuid => new("a1000015-0015-4000-8000-000000000015");
+    public override Guid ComponentGuid => new Guid("955a1c3b-1108-4ecd-8111-4360ba3a202f");
 }
 
 public sealed class MotusPreviewRobotComponent : MotusComponentBase
@@ -323,7 +323,7 @@ public sealed class MotusPreviewRobotComponent : MotusComponentBase
         if (!da.GetData(1, ref s)) return;
         da.SetDataList(0, RobotPreview.StickLinks(s!.Value).ToList());
     }
-    public override Guid ComponentGuid => new("a1000016-0016-4000-8000-000000000016");
+    public override Guid ComponentGuid => new Guid("458ed2f4-5ce1-4541-8df4-bc4ff9fbee00");
 }
 
 public sealed class MotusPreviewTcpPathComponent : MotusComponentBase
@@ -338,7 +338,7 @@ public sealed class MotusPreviewTcpPathComponent : MotusComponentBase
         var states = t!.Value.Points.Select(p => p.JointState);
         da.SetData(0, RobotPreview.TcpPathFromJointStates(states).ToNurbsCurve());
     }
-    public override Guid ComponentGuid => new("a1000017-0017-4000-8000-000000000017");
+    public override Guid ComponentGuid => new Guid("7ba0b37a-7508-47da-8ac3-c2023d52270d");
 }
 
 public sealed class MotusPreviewTrajectoryComponent : MotusComponentBase
@@ -365,5 +365,5 @@ public sealed class MotusPreviewTrajectoryComponent : MotusComponentBase
         da.SetData(1, goalLines.Count > 0 ? goalLines[^1].To : goalPt);
         da.SetDataList(2, RobotPreview.StickLinks(goal).ToList());
     }
-    public override Guid ComponentGuid => new("a1000018-0018-4000-8000-000000000018");
+    public override Guid ComponentGuid => new Guid("45a84387-3f82-443a-a6f5-309a8c3be32c");
 }

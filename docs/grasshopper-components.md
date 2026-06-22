@@ -19,7 +19,7 @@ All components live under the **Motus** tab.
 | Component | Notes |
 |-----------|-------|
 | Motus Plan Joint Path | **Run** must be true to plan; caches last result when idle |
-| Motus Validate Trajectory | Errors and warnings lists |
+| Motus Validate Trajectory | Joint limits, monotonic time, and per-segment velocity checks |
 | Motus Trajectory Info | Point count, duration, robot name |
 
 ## Export

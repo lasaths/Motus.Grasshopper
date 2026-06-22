@@ -12,11 +12,13 @@ Rhino 8 / Grasshopper plugin for Motus robot motion planning, preview, and expor
 
 ```bash
 dotnet build Motus.Grasshopper.slnx
+# or on Windows:
+./build.ps1
 ```
 
 Output: `src/Motus.GH/bin/Debug/net8.0/Motus.GH.gha`
 
-Copy the `.gha` and `resources/robots/` folder next to it into your Grasshopper libraries folder, or load via Grasshopper Developer > Manage Grasshopper Libraries.
+Copy `Motus.GH.gha`, `Motus.*.dll`, and the `resources/` folder into your Grasshopper libraries folder, or load via Grasshopper Developer > Manage Grasshopper Libraries.
 
 Grasshopper and GH_IO references point to the default Rhino 8 install path (`C:\Program Files\Rhino 8\...`).
 
