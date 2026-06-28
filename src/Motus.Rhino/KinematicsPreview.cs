@@ -44,17 +44,28 @@ public static class KinematicsPreview
         var tool = ResolveTool(robot, toolOverride);
         var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
         var radii = fk.LinkRadiiMeters;
+
+        // Thin structural links follow the real chain: base -> joint centres -> TCP.
         var prev = ToPoint(baseF.Frame);
         for (var i = 0; i < origins.Count; i++)
         {
             var pt = ToPoint(origins[i]);
-            var mesh = CylinderMesh(prev, pt, radii[i]);
+            var mesh = CylinderMesh(prev, pt, radii[i] * 0.45);
             if (mesh is not null) yield return mesh;
             prev = pt;
         }
         var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
-        var toolMesh = CylinderMesh(prev, tcp, radii[^1] * 0.6);
+        var toolMesh = CylinderMesh(prev, tcp, radii[^1] * 0.35);
         if (toolMesh is not null) yield return toolMesh;
+
+        // Fat barrels mark each joint, aligned to its rotation axis (the DH frame's Z),
+        // so the skeleton reads as an articulated arm rather than a bare polyline.
+        for (var i = 0; i < origins.Count; i++)
+        {
+            var plane = FrameConversion.ToPlane(origins[i]);
+            var jointMesh = BarrelMesh(plane.Origin, plane.ZAxis, radii[i], radii[i] * 1.6);
+            if (jointMesh is not null) yield return jointMesh;
+        }
     }
 
     public static Plane TcpPlane(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
@@ -128,6 +139,14 @@ public static class KinematicsPreview
         dir.Unitize();
         var plane = new Plane(from, dir);
         return Mesh.CreateFromCylinder(new Cylinder(new Circle(plane, radius), length), 12, 1);
+    }
+
+    // Barrel centred on a joint, extending +/- halfLength along its rotation axis.
+    private static Mesh? BarrelMesh(Point3d center, Vector3d axis, double radius, double halfLength)
+    {
+        if (radius <= 0 || halfLength <= 0 || !axis.Unitize()) return null;
+        var basePlane = new Plane(center - axis * halfLength, axis);
+        return Mesh.CreateFromCylinder(new Cylinder(new Circle(basePlane, radius), halfLength * 2), 16, 1);
     }
 
   // ponytail: 2.5D fallback when preset has no kinematics profile
