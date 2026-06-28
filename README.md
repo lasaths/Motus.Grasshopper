@@ -22,9 +22,9 @@ Motus.Grasshopper compiles against **pre-built Motus.NET DLLs** (NuGet packaging
 
 This builds `../Motus.NET` first, then the plugin.
 
-Output: `src/Motus.GH/bin/Release/net8.0/`
+Output: `src/Motus.GH/bin/Release/net8.0-windows/`
 
-Copy to Grasshopper Libraries:
+Copy to `%APPDATA%\Grasshopper\Libraries\Motus`:
 
 - `Motus.GH.gha`
 - `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`, `Motus.Rhino.dll`
@@ -35,8 +35,10 @@ Verify: `./scripts/verify-install.ps1`
 Install to Grasshopper Libraries (Windows):
 
 ```powershell
-./scripts/install.ps1
+./build.ps1 -Install
 ```
+
+Copies to `%APPDATA%\Grasshopper\Libraries\Motus` (e.g. `C:\Users\...\AppData\Roaming\Grasshopper\Libraries\Motus`).
 
 Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px).
 
@@ -50,24 +52,29 @@ Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px)
 
 ## First workflow
 
-1. **Motus UR Preset** (or KUKA) → model name e.g. `UR5e`
-2. **Motus Robot Model** → wrap preset
-3. **Motus Joint State** × 2 → start and goal (radians, or set UseDegrees)
-4. **Motus Plan Joint Path** → set **Run** = true (or **AutoReplan** for continuous)
-5. **Motus Validate Trajectory** / **Motus Trajectory Info**
-6. **Motus Preview Robot** / **Motus Preview Trajectory** / **Motus Preview TCP Path**
-7. **Motus Trajectory to JSON** / **CSV** / **Joint Lists**
+1. **Motus Robot** → pick a preset from the dropdown (e.g. `UR5e`)
+2. Drop a Rhino **Plane** for the target → wire to **Motus Plan** `Goal`
+3. **Motus Plan** → click the **Plan** button (`Start` defaults to home)
+4. **Motus Preview** → click **Play** to animate
+5. **Motus Export** → `Json` / `Csv`, or **Motus Trajectory Data** for planes/times/joints
+
+That is three nodes for a working, animated plan. `Goal` also accepts a **Motus Joint State** for joint-space targets.
 
 ### Collision-aware planning
 
 1. **Motus Collision Sphere** / **Box** → **Motus Collision Scene**
-2. **Motus Plan RRT Connect** with scene wired to **Collision**
-3. Validate with collision scene on **Motus Validate Trajectory**
+2. Wire the scene into **Motus Plan** `Collision`. With a joint goal this plans with RRT-Connect; with a plane goal the Cartesian planner respects the scene.
 
-### Cartesian goals
+### Cartesian vs joint goals
 
-1. **Motus Cartesian Pose** from a goal plane
-2. **Motus Plan Cartesian Path** with start joint state + pose goal
+- **Plane** `Goal` → Cartesian target solved via IK.
+- **Motus Joint State** `Goal` → joint-space target.
+
+## Changelog
+
+### 0.3.0 — breaking palette redesign
+
+The component palette was consolidated from ~25 components to 9 for simplicity ("no human error, only bad design"): one `Motus Robot`, one `Motus Plan` (planner inferred from inputs, plane or joint goal, home-default start, Plan button), one `Motus Preview` (with Play), plus `Motus Trajectory Data`, `Motus Export`, the three collision nodes, and `Motus Joint State`. Several component GUIDs changed and the preset/robot/cartesian-pose/validate/play nodes were removed or merged, so **definitions saved against 0.2.x must be rewired**.
 
 ## External plugins
 
@@ -75,7 +82,7 @@ Motus outputs neutral trajectories. Wire exports manually into UR.RTDE.Grasshopp
 
 See [docs/external-plugin-workflows.md](docs/external-plugin-workflows.md) and [examples/README.md](examples/README.md).
 
-Before release, run [docs/qa-checklist.md](docs/qa-checklist.md) in Rhino 8.
+Before release, run `./scripts/verify-qa.ps1 -Configuration Release -Install` and [docs/qa-checklist.md](docs/qa-checklist.md) in Rhino 8.
 
 ## Safety
 

@@ -1,55 +1,42 @@
 # Example Grasshopper Definitions
 
-Binary `.gh` files must be saved from **Rhino 8** after you verify the plugin with [scripts/verify-install.ps1](../scripts/verify-install.ps1) and [docs/qa-checklist.md](../docs/qa-checklist.md).
+Two definitions cover the whole 0.3 palette. They ship pre-wired with sensible
+default values; open one in Rhino 8 / Grasshopper, press **Plan**, and (after a
+quick look) **Save** to re-bake them against your installed component version.
 
-Once tested, save canvases here:
+| File | Workflow |
+|------|----------|
+| `01_basic_planning.ghx` | Robot + joint goal -> Plan -> Preview + Export |
+| `02_collision_planning.ghx` | Obstacle -> Scene -> Plan (RRT) -> Preview |
 
-| File | Canvas |
-|------|--------|
-| `01_basic_joint_planning.gh` | UR5e joint plan + validate + preview |
-| `02_ur_presets.gh` | UR3e / UR10e / UR16e variants |
-| `03_kuka_preset_planning.gh` | KR 6 R900 |
-| `04_export_json_csv.gh` | JSON, CSV, joint lists |
-| `05_external_ur_rtde.gh` | Optional — needs UR.RTDE.Grasshopper |
-| `06_external_virtualrobot.gh` | Optional — needs VirtualRobot |
-
-## 01 — Basic joint planning
+## Minimal workflow (01)
 
 ```
-Motus UR Preset (UR5e) → Motus Robot Model
-Panel (6 zeros) → Motus Joint State → Start
-Panel (6×0.5 rad) → Motus Joint State → Goal
-Run toggle → Motus Plan Joint Path ← Robot, Start, Goal
-→ Motus Validate Trajectory, Motus Trajectory Info
-→ Motus Preview Robot, Motus Preview TCP Path
+Motus Robot (UR5e) ----\
+Motus Joint State -------> Motus Plan [Plan] --> Trajectory --> Motus Preview [Play]
+                                                            \--> Motus Export (Json / Csv)
 ```
 
-## 02 — UR preset planning
+1. **Motus Robot** — pick `UR5e` from the dropdown. (Or drop a Rhino **Plane** into `Goal` for a Cartesian target instead of a joint state.)
+2. **Motus Plan** — leave `Start` unwired (defaults to home), click **Plan**.
+3. **Motus Preview** — wire `Trajectory`, click **Play** to animate.
+4. **Motus Export** / **Motus Trajectory Data** — hang off the same `Trajectory`.
 
-Same as 01; swap preset model names (UR3e, UR10e, UR16e, UR20, UR30).
+## Collision-aware (02)
 
-## 03 — KUKA preset planning
+Add **Motus Collision Sphere** / **Box** → **Motus Collision Scene**, wire the scene
+into **Motus Plan** `Collision`. With a joint goal this plans with RRT-Connect.
 
-```
-Motus KUKA Preset (KR 6 R900) → Motus Robot Model → …
-```
+## Editing / re-saving
 
-## 04 — Export JSON / CSV
+The `.ghx` are authored directly against the Grasshopper archive format, so they
+open with every node placed, wired, and seeded. If you tweak a graph, just
+**File → Save** from Grasshopper — re-saving guarantees the archive matches the
+installed component version.
 
-```
-Motus Plan Joint Path → Trajectory
-→ Motus Trajectory to JSON / CSV / Joint Lists
-→ Panel / Stream Filter for file write
-```
+### External plugins (optional)
 
-## 05 — External: UR.RTDE.Grasshopper (optional)
-
-Requires UR.RTDE.Grasshopper installed separately.
-
-## 06 — External: VirtualRobot (optional)
-
-Requires VirtualRobot installed separately.
-
-## Saving
-
-File → Save As → `examples/0N_....gh` after validating the graph in Rhino.
+| File | Needs |
+|------|-------|
+| `05_external_ur_rtde.gh` | UR.RTDE.Grasshopper |
+| `06_external_virtualrobot.gh` | VirtualRobot |

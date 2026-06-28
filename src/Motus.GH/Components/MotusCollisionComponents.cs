@@ -55,7 +55,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
 
 public sealed class MotusCollisionSceneComponent : MotusComponentBase
 {
-    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects", "Collision", "tree-structure") { }
+    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects", "Collision", "circles-three-plus") { }
     protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "S", "Collision scene", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -71,18 +71,4 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
         da.SetData(0, new CollisionSceneGoo(new CollisionScene(objects)));
     }
     public override Guid ComponentGuid => new Guid("e3c4d5e6-f7a8-4901-c234-56789abcdef0");
-}
-
-public sealed class MotusCartesianPoseComponent : MotusComponentBase
-{
-    public MotusCartesianPoseComponent() : base("Motus Cartesian Pose", "Pose", "TCP goal from plane", "Model", "map-pin") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddPlaneParameter("Plane", "P", "TCP plane (meters)", GH_ParamAccess.item, Plane.WorldXY);
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Pose", "P", "Cartesian pose", GH_ParamAccess.item);
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        var pl = Plane.WorldXY;
-        if (!da.GetData(0, ref pl)) return;
-        da.SetData(0, new CartesianPoseGoo(new CartesianPose(FrameConversion.FromPlane(pl))));
-    }
-    public override Guid ComponentGuid => new Guid("f4d5e6f7-a8b9-4012-d345-6789abcdef01");
 }

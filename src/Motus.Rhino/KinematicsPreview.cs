@@ -89,15 +89,17 @@ public static class KinematicsPreview
         Trajectory trajectory,
         TrajectoryValidationOptions? validation,
         out List<Line> valid,
-        out List<Line> invalid)
+        out List<Line> invalid,
+        BaseFrame? baseOverride = null,
+        ToolFrame? toolOverride = null)
     {
         valid = new List<Line>();
         invalid = new List<Line>();
         if (trajectory.Points.Count < 2) return;
 
         var fk = TryFk(robot);
-        var baseF = robot.Preset.BaseFrame;
-        var tool = robot.Preset.ToolFrame;
+        var baseF = ResolveBase(robot, baseOverride);
+        var tool = ResolveTool(robot, toolOverride);
         var validator = new TrajectoryValidator();
         var opts = validation ?? new TrajectoryValidationOptions();
 

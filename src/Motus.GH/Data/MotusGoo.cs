@@ -26,7 +26,6 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
     public JointStateGoo() { }
     public JointStateGoo(JointState s) : base(s) { }
     public override string ToString() => $"Joints[{Value?.AxisCount}]";
-    public override IGH_Goo Duplicate() => new JointStateGoo(Value);
 }
 
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
@@ -34,40 +33,6 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
     public override string ToString() => $"Trajectory ({Value?.Points.Count} pts)";
-    public override IGH_Goo Duplicate() => new TrajectoryGoo(Value);
-}
-
-public sealed class FrameGoo : GH_Goo<Frame>
-{
-    public FrameGoo() => Value = Frame.Identity;
-    public FrameGoo(Frame f) => Value = f;
-    public override bool IsValid => true;
-    public override string TypeName => "Frame";
-    public override string TypeDescription => "Motus Frame";
-    public override IGH_Goo Duplicate() => new FrameGoo(Value);
-    public override string ToString() => Value.ToString();
-}
-
-public sealed class ToolFrameGoo : GH_Goo<ToolFrame>
-{
-    public ToolFrameGoo() => Value = ToolFrame.Identity;
-    public ToolFrameGoo(ToolFrame f) => Value = f;
-    public override bool IsValid => true;
-    public override string TypeName => "ToolFrame";
-    public override string TypeDescription => "Motus ToolFrame";
-    public override IGH_Goo Duplicate() => new ToolFrameGoo(Value);
-    public override string ToString() => Value.Name ?? "ToolFrame";
-}
-
-public sealed class BaseFrameGoo : GH_Goo<BaseFrame>
-{
-    public BaseFrameGoo() => Value = BaseFrame.Identity;
-    public BaseFrameGoo(BaseFrame f) => Value = f;
-    public override bool IsValid => true;
-    public override string TypeName => "BaseFrame";
-    public override string TypeDescription => "Motus BaseFrame";
-    public override IGH_Goo Duplicate() => new BaseFrameGoo(Value);
-    public override string ToString() => "BaseFrame";
 }
 
 public sealed class CollisionSceneGoo : MotusGooBase<CollisionScene>
@@ -75,13 +40,4 @@ public sealed class CollisionSceneGoo : MotusGooBase<CollisionScene>
     public CollisionSceneGoo() : base(new CollisionScene()) { }
     public CollisionSceneGoo(CollisionScene scene) : base(scene) { }
     public override string ToString() => $"CollisionScene ({Value.Objects.Count} objs)";
-    public override IGH_Goo Duplicate() => new CollisionSceneGoo(Value);
-}
-
-public sealed class CartesianPoseGoo : MotusGooBase<CartesianPose>
-{
-    public CartesianPoseGoo() : base(new CartesianPose(Frame.Identity)) { }
-    public CartesianPoseGoo(CartesianPose pose) : base(pose) { }
-    public override string ToString() => "CartesianPose";
-    public override IGH_Goo Duplicate() => new CartesianPoseGoo(Value);
 }

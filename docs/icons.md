@@ -1,33 +1,29 @@
 # Phosphor component icons
 
-Grasshopper component icons are [Phosphor Icons](https://phosphoricons.com) exported as 24×24 PNG (`bold`, `#00c49a`).
+Grasshopper component icons are [Phosphor Icons](https://phosphoricons.com) exported as 24×24 PNG (`bold`, `#00c49a`). Each component has a unique icon.
 
 Source files: `src/Motus.GH/Resources/icons/`
 
 ## Regenerate
 
 ```bash
-# via phosphor-icons MCP get-icon, or CLI when available:
+# via phosphor-icons MCP get-icon, or CLI:
 # phosphor-icons icon cube export eye --weight bold --color "#00c49a" --size 24 --dir src/Motus.GH/Resources/icons
 ```
+
+The **Motus ribbon tab** icon (and `M` shortcut letter) is registered in `MotusGhPlugin.cs` via `GH_AssemblyPriority` using the `robot` icon.
 
 ## Component mapping
 
 | Component | Phosphor icon |
 |-----------|---------------|
-| Robot Model | cube |
-| UR/KUKA Preset | package |
-| Custom Robot | download-simple |
-| Joint State | gear-six |
-| Tool Frame / To Poses / Plan Cartesian | compass-tool |
-| Base Frame / Cartesian Pose / To Planes | map-pin |
-| Collision Sphere | sphere |
-| Collision Box | bounding-box |
-| Collision Scene / To Joint Lists | tree-structure |
-| Plan Joint Path | flow-arrow |
-| Plan RRT / Trajectory Info | graph |
-| Validate Trajectory | check-circle |
-| To JSON | export |
-| To CSV | download-simple |
-| Preview Robot | eye |
-| Preview TCP / Trajectory | path |
+| Motus (ribbon tab) | robot |
+| Motus Robot | cube |
+| Motus Joint State | gear-six |
+| Motus Plan | flow-arrow |
+| Motus Collision Sphere | sphere |
+| Motus Collision Box | bounding-box |
+| Motus Collision Scene | circles-three-plus |
+| Motus Preview | eye |
+| Motus Trajectory Data | grid-four |
+| Motus Export | export |

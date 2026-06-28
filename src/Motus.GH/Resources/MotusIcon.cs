@@ -8,20 +8,13 @@ internal static class MotusIcon
 
     public static System.Drawing.Bitmap Get(string iconName)
     {
-        var key = $"{iconName}-bold";
-        if (Cache.TryGetValue(key, out var cached)) return cached;
+        if (Cache.TryGetValue(iconName, out var cached)) return cached;
 
-        var asm = Assembly.GetExecutingAssembly();
-        var suffix = $"{iconName}-bold.png";
-        var resourceName = asm.GetManifestResourceNames()
-            .FirstOrDefault(n => n.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
-
-        if (resourceName is null)
-            throw new InvalidOperationException($"Phosphor icon resource not found: {suffix}");
-
-        using var stream = asm.GetManifestResourceStream(resourceName)!;
+        var resourceName = $"Motus.GH.Resources.icons.{iconName}-bold.png";
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Phosphor icon resource not found: {resourceName}");
         var bmp = new System.Drawing.Bitmap(stream);
-        Cache[key] = bmp;
+        Cache[iconName] = bmp;
         return bmp;
     }
 }

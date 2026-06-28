@@ -13,7 +13,7 @@
            Text="Motus.Geometry.dll not found. Build Motus.NET first." />
   </Target>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.Rhino'">
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.Rhino' or '$(MSBuildProjectName)' == 'Motus.GH'">
     <Reference Include="Motus.Core">
       <HintPath>$(_MotusCoreDll)</HintPath>
       <Private>true</Private>
@@ -25,14 +25,6 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.GH'">
-    <Reference Include="Motus.Core">
-      <HintPath>$(_MotusCoreDll)</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="Motus.Geometry">
-      <HintPath>$(_MotusGeometryDll)</HintPath>
-      <Private>true</Private>
-    </Reference>
     <Reference Include="Motus.Presets">
       <HintPath>$(_MotusPresetsDll)</HintPath>
       <Private>true</Private>

@@ -4,8 +4,8 @@ Motus is intentionally independent. It outputs neutral trajectories and exports 
 
 ## UR.RTDE.Grasshopper
 
-1. Plan with Motus (**Motus Plan Joint Path**)
-2. Export joint lists or JSON (**Motus Trajectory to Joint Lists** / **JSON**)
+1. Plan with **Motus Plan**
+2. Get joint trees from **Motus Trajectory Data** (`Joints`) or JSON from **Motus Export**
 3. In UR.RTDE.Grasshopper, map Motus joint arrays to your RTDE move/joint components
 4. Verify speeds, blends, and safety on the real controller before running
 
@@ -20,9 +20,9 @@ Motus does not reference UR.RTDE.Grasshopper at build time.
 
 ## CSV / JSON / scripting
 
-- **JSON** — structured trajectory with times and joint arrays in radians
-- **CSV** — `time_seconds,j1,j2,...` for spreadsheets or Python scripts
-- **Joint Lists** — Grasshopper trees for parametric downstream graphs
+- **Json** (Motus Export) — structured trajectory with times and joint arrays in radians
+- **Csv** (Motus Export) — `time_seconds,joint_1_rad,...` for spreadsheets or Python scripts
+- **Joints** (Motus Trajectory Data) — Grasshopper trees for parametric downstream graphs
 
 ## Example files
 

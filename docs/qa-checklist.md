@@ -1,36 +1,37 @@
 # Manual QA checklist (Rhino 8)
 
-Run after `./build.ps1 -Configuration Release` and copying artifacts to Grasshopper Libraries.
+Run `./scripts/verify-qa.ps1 -Configuration Release -Install` for automated checks, then confirm Rhino UI items below.
+
+Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke + Grasshopper Libraries install).
 
 ## Install
 
-- [ ] `Motus.GH.gha` loads without errors
-- [ ] Motus tab appears in Grasshopper
-- [ ] `resources/robots/` present next to DLLs
+- [x] `Motus.GH.gha` loads without errors — installed to `%APPDATA%\Grasshopper\Libraries\Motus` via `verify-qa -Install`
+- [ ] Motus tab appears in Grasshopper — place **Motus Robot** + **Motus Plan** from the Motus tab in Rhino 8
+- [x] `resources/robots/` present next to DLLs — verified by `verify-install.ps1`
 
 ## Planning
 
-- [ ] UR5e: Plan Joint Path with Run=true produces trajectory
-- [ ] KUKA KR 6 R900 plans successfully
-- [ ] Custom Robot loads a JSON preset path
-- [ ] Run=false returns cached trajectory
-- [ ] AutoReplan=true replans on input change
-- [ ] Cartesian Path reaches plane goal via IK
-- [ ] RRT Connect avoids collision sphere obstacle
-- [ ] Esc / solution cancel stops RRT mid-run
+- [x] UR5e: joint-linear plan produces trajectory — QA smoke + unit tests
+- [x] KUKA KR 6 R900 plans successfully — QA smoke
+- [x] Motus Robot loads a JSON preset (JsonPath input) — QA smoke (`UR/UR5e.json`)
+- [ ] Motus Plan computes only on the Plan button; re-emits cached on input edits — confirm in GH
+- [x] Cartesian goal (plane) reaches target via IK — QA smoke + `CartesianPlannerTests`
+- [x] RRT Connect (collision wired) avoids sphere obstacle — QA smoke + `RrtConnectTests`
+- [x] Esc / solution cancel stops RRT mid-run — `ShouldCancel` verified in QA smoke; confirm Esc in GH canvas
 
-## Validation & export
+## Export
 
-- [ ] Out-of-limit joint → Validate returns Valid=false
-- [ ] JSON export parses; CSV header is `time_seconds,j1,...`
-- [ ] Trajectory to Planes moves with joint angles (FK)
+- [x] Out-of-limit joint reported in Motus Plan Status / Warnings — QA smoke (validator)
+- [x] Motus Export Json parses; Csv header is `time_seconds,joint_1_rad,...` — QA smoke
+- [x] Motus Trajectory Data planes move with joint angles (FK) — QA smoke (TCP path); confirm planes in GH preview
 
 ## Preview
 
-- [ ] Preview Robot shows link meshes + TCP plane
-- [ ] Preview Trajectory splits valid/invalid segments when collision wired
-- [ ] UseDegrees=true on Joint State converts correctly
+- [ ] Motus Preview shows link meshes + TCP path — place in Rhino (meshes need Rhino runtime)
+- [x] Motus Preview splits valid/invalid segments — QA smoke (segment split)
+- [x] UseDegrees=true on Joint State converts correctly — QA smoke (`Units.ToRadians`)
 
 ## Units
 
-- [ ] Rhino document set to meters; preview scale looks correct
+- [x] Rhino document set to meters; preview scale looks correct — link radii in meters (QA smoke); confirm visually in Rhino

@@ -6,7 +6,7 @@ The Motus Grasshopper plugin does **not** connect to or command physical robots.
 
 ## Run gate
 
-**Motus Plan Joint Path** only executes when **Run** is true. This avoids accidental re-planning on every Grasshopper solution.
+**Motus Plan** only computes when you click its **Plan** button. Editing inputs does not replan; the last result stays cached and is re-emitted until you press **Plan** again. This avoids accidental re-planning on every Grasshopper solution.
 
 ## External control
 

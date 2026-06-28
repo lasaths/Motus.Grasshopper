@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$out = Join-Path $PSScriptRoot "..\src\Motus.GH\bin\$Configuration\net8.0"
+$out = Join-Path $PSScriptRoot "..\src\Motus.GH\bin\$Configuration\net8.0-windows"
 $required = @(
     "Motus.GH.gha",
     "Motus.Core.dll",
@@ -25,4 +25,4 @@ if (-not (Test-Path $robots)) { $missing += "resources\robots\UR\UR5e.json" }
 if ($missing.Count -gt 0) {
     Write-Error "Missing: $($missing -join ', '). Run ./build.ps1 -Configuration $Configuration first."
 }
-Write-Host "OK: $out ready for Grasshopper Libraries copy."
+Write-Host "OK: $out ready for Grasshopper Libraries\Motus copy."
