@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using Grasshopper;
 using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
@@ -73,12 +74,15 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
 
     public override GH_ObjectResponse RespondToMouseUp(GH_Canvas sender, GH_CanvasMouseEvent e)
     {
-        if (e.Button == MouseButtons.Left && _buttonBounds.Contains(e.CanvasLocation) && _mouseDown)
+        // Only act when we own the press. Always Release here so the Capture taken in
+        // RespondToMouseDown is balanced even if the cursor moved off the button.
+        if (e.Button == MouseButtons.Left && _mouseDown)
         {
+            var clicked = _buttonBounds.Contains(e.CanvasLocation);
             _mouseDown = false;
             _mouseOver = false;
             Owner.OnDisplayExpired(false);
-            _onClick();
+            if (clicked) _onClick();
             return GH_ObjectResponse.Release;
         }
         _mouseDown = false;
@@ -87,14 +91,24 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
 
     public override GH_ObjectResponse RespondToMouseMove(GH_Canvas sender, GH_CanvasMouseEvent e)
     {
+        // Balanced Capture/Release: grab the mouse when entering the button, give it back
+        // when leaving. Capturing on every move (or never releasing) blocks the canvas.
         var over = _buttonBounds.Contains(e.CanvasLocation);
-        if (over != _mouseOver)
+        if (over && !_mouseOver)
         {
-            _mouseOver = over;
+            _mouseOver = true;
             Owner.OnDisplayExpired(false);
-            sender.Cursor = over ? Cursors.Hand : Cursors.Default;
+            sender.Cursor = Cursors.Hand;
+            return GH_ObjectResponse.Capture;
         }
-        return over ? GH_ObjectResponse.Handled : base.RespondToMouseMove(sender, e);
+        if (!over && _mouseOver)
+        {
+            _mouseOver = false;
+            Owner.OnDisplayExpired(false);
+            Instances.CursorServer.ResetCursor(sender);
+            return GH_ObjectResponse.Release;
+        }
+        return base.RespondToMouseMove(sender, e);
     }
 
     /// <summary>Widen the component to <paramref name="minWidth"/> and shift the output params to stay right-aligned.</summary>
