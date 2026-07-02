@@ -17,7 +17,7 @@ Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke 
 - [x] Motus Robot loads a JSON preset (JsonPath input) — QA smoke (`UR/UR5e.json`)
 - [ ] Motus Plan computes only on the Plan button; re-emits cached on input edits — confirm in GH
 - [x] Cartesian goal (plane) reaches target via IK — QA smoke + `CartesianPlannerTests`
-- [x] RRT Connect (collision wired) avoids sphere obstacle — QA smoke + `RrtConnectTests`
+- [x] RRT Connect (collision wired) avoids sphere obstacle — QA smoke uses `RobotMeshCollisionChecker` + `RrtConnectTests`
 - [x] Esc / solution cancel stops RRT mid-run — `ShouldCancel` verified in QA smoke; confirm Esc in GH canvas
 
 ## Export

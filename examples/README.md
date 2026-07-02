@@ -24,8 +24,13 @@ Motus Joint State -------> Motus Plan [Plan] --> Trajectory --> Motus Preview [P
 
 ## Collision-aware (02)
 
-Add **Motus Collision Sphere** / **Box** → **Motus Collision Scene**, wire the scene
+Add **Motus Collision Sphere** / **Box** / **Mesh** → **Motus Collision Scene**, wire the scene
 into **Motus Plan** `Collision`. With a joint goal this plans with RRT-Connect.
+
+Optional: wire an SRDF file path into **ColScene** `Srdf` to add allowed collision pairs
+(see `examples/srdf/table_base.srdf`). Use `link:0`…`link:5` for robot links or obstacle names from your scene.
+
+**UR10e:** pick `UR10e` on **Motus Robot** (bundled preset includes link capsules). For URDF import demos see `examples/ur10e/` (minimal chain from [Universal Robots ROS2 description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)).
 
 ## Editing / re-saving
 

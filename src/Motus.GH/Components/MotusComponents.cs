@@ -298,7 +298,7 @@ public sealed class MotusExportComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
-        p.AddBooleanParameter("Retime", "R", "Apply trapezoidal joint retiming before export", GH_ParamAccess.item, true);
+        p.AddBooleanParameter("Retime", "R", "Apply bottleneck path retiming before export", GH_ParamAccess.item, true);
         p[p.ParamCount - 1].Optional = true;
         p.AddBooleanParameter("Validate", "V", "Validate limits/velocity after retiming", GH_ParamAccess.item, false);
         p[p.ParamCount - 1].Optional = true;

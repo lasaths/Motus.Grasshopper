@@ -5,7 +5,7 @@
     <_MotusPresetsDll>$(MotusNetRoot)src\Motus.Presets\bin\$(MotusNetConfiguration)\net8.0\Motus.Presets.dll</_MotusPresetsDll>
     <_MotusOmplDll>$(MotusNetRoot)src\Motus.OMPL.NET\bin\$(MotusNetConfiguration)\net8.0\Motus.OMPL.NET.dll</_MotusOmplDll>
     <_MotusNetVersionFile>$(MotusNetRoot)motus-net.version</_MotusNetVersionFile>
-    <MotusNetRequiredVersion Condition="'$(MotusNetRequiredVersion)' == ''">0.3.0</MotusNetRequiredVersion>
+    <MotusNetRequiredVersion Condition="'$(MotusNetRequiredVersion)' == ''">0.3.1</MotusNetRequiredVersion>
   </PropertyGroup>
 
   <Target Name="VerifyMotusNetVersion" BeforeTargets="EnsureMotusNetDlls">

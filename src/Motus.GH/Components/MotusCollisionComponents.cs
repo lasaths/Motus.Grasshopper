@@ -1,6 +1,7 @@
 using Grasshopper.Kernel;
 using Motus.Core;
 using Motus.GH.Data;
+using Motus.Presets;
 using Motus.Rhino;
 using Rhino.Geometry;
 
@@ -55,9 +56,14 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
 
 public sealed class MotusCollisionSceneComponent : MotusComponentBase
 {
-    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects", "Collision", "circles-three-plus") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "S", "Collision scene", GH_ParamAccess.item);
+    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs", "Collision", "circles-three-plus") { }
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
+        p.AddTextParameter("Srdf", "S", "Optional SRDF file path (disable_collisions pairs)", GH_ParamAccess.item, "");
+        p[p.ParamCount - 1].Optional = true;
+    }
+    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "Sc", "Collision scene", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var raw = new List<object>();
@@ -68,7 +74,29 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
             if (o is CollisionObject co) objects.Add(co);
             else AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Skipped non-collision input.");
         }
-        da.SetData(0, new CollisionSceneGoo(new CollisionScene(objects)));
+        var scene = new CollisionScene(objects);
+        var srdfPath = "";
+        da.GetData(1, ref srdfPath);
+        if (!string.IsNullOrWhiteSpace(srdfPath))
+        {
+            if (!File.Exists(srdfPath))
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"SRDF file not found: {srdfPath}");
+            }
+            else
+            {
+                try
+                {
+                    var pairs = SrdfLoader.LoadAllowedPairs(srdfPath);
+                    scene = SrdfLoader.MergeAllowedPairs(scene, pairs);
+                }
+                catch (Exception ex)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"SRDF load failed: {ex.Message}");
+                }
+            }
+        }
+        da.SetData(0, new CollisionSceneGoo(scene));
     }
     public override Guid ComponentGuid => new Guid("e3c4d5e6-f7a8-4901-c234-56789abcdef0");
 }

@@ -33,7 +33,8 @@ All components live under the **Motus** tab. The palette is intentionally small:
 |-----------|-------|
 | Motus Collision Sphere | Center point + radius (m) |
 | Motus Collision Box | Plane + half extents (m) |
-| Motus Collision Scene | Merge collision objects |
+| Motus Collision Mesh | Rhino mesh obstacle (meters) |
+| Motus Collision Scene | Merge collision objects; optional **Srdf** path for allowed pairs (`link:N` or obstacle names) |
 
 ## Preview
 

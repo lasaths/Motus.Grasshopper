@@ -65,7 +65,9 @@ That is three nodes for a working, animated plan. `Goal` also accepts a **Motus 
 1. **Motus Collision Sphere** / **Box** / **Mesh** → **Motus Collision Scene**
 2. Wire the scene into **Motus Plan** `Collision`:
    - **Plane goal** → true TCP-linear (LIN) planning with collision validation on the path
-   - **Joint goal** → RRT-Connect obstacle avoidance (sphere or mesh checker)
+   - **Joint goal** → RRT-Connect with per-link capsules when the preset includes `collisionLinks`
+
+Optional: wire an SRDF file path into **ColScene** `Srdf` for allowed collision pairs (`examples/srdf/table_base.srdf`).
 
 Without a collision scene, joint goals use joint-linear interpolation (free space only).
 
@@ -74,7 +76,7 @@ Without a collision scene, joint goals use joint-linear interpolation (free spac
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper requires Motus.NET **0.2.0** (see `motus-net.version` in the Motus.NET repo). `./build.ps1` builds the sibling repo first and verifies the version pin.
+Motus.Grasshopper requires Motus.NET **0.3.1** (see `motus-net.version` in the Motus.NET repo). `./build.ps1` builds the sibling repo first and verifies the version pin.
 
 ## Changelog
 

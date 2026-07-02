@@ -106,8 +106,8 @@ var freeHome = robotChecker.IsCollisionFree(start, new CollisionScene());
 if (!freeHome) Fail("Home config should be collision-free with link capsules");
 Ok("RobotMeshCollisionChecker uses preset collisionLinks");
 
-// RRT with collision + cancel
-var checker = new SphereCollisionChecker(urPreset);
+// RRT with per-link collision checker (preset collisionLinks)
+var meshChecker = new RobotMeshCollisionChecker(urRobot);
 var rrtGoal = new JointState(new[] { 0.6, -0.6, 0.6, -0.6, -0.6, 0.3 });
 CollisionScene? scene = null;
 foreach (var pose in new[]
@@ -119,18 +119,19 @@ foreach (var pose in new[]
 })
 {
     var trial = new CollisionScene(new[] { CollisionObject.Sphere("block", pose, 0.05) });
-    if (checker.IsCollisionFree(start, trial) && checker.IsCollisionFree(rrtGoal, trial)
-        && !checker.SegmentCollisionFree(start, rrtGoal, trial, 0.08))
+    if (meshChecker.IsCollisionFree(start, trial) && meshChecker.IsCollisionFree(rrtGoal, trial)
+        && !meshChecker.SegmentCollisionFree(start, rrtGoal, trial, 0.08))
     {
         scene = trial;
         break;
     }
 }
 if (scene is null) Fail("Could not find collision scene for RRT smoke test");
-var rrtResult = new RrtConnectPlanner(checker, new RrtConnectOptions { MaxIterations = 10000, RandomSeed = 11 })
-    .Plan(new PlanningRequest(urRobot, start, rrtGoal, new PlanningOptions { CollisionScene = scene, MaxJointStepRadians = 0.08, CollisionChecker = checker }));
+var rrtOpts = new PlanningOptions { CollisionScene = scene, MaxJointStepRadians = 0.08, CollisionChecker = meshChecker };
+var rrtResult = new RrtConnectPlanner(meshChecker, new RrtConnectOptions { MaxIterations = 10000, RandomSeed = 11 })
+    .Plan(new PlanningRequest(urRobot, start, rrtGoal, rrtOpts));
 if (!rrtResult.Success) Fail($"RRT: {string.Join("; ", rrtResult.Errors)}");
-Ok("RRT Connect avoids collision sphere obstacle");
+Ok("RRT Connect avoids obstacle with RobotMeshCollisionChecker");
 
 var cancelResult = new RrtConnectPlanner(urPreset, new RrtConnectOptions
 {

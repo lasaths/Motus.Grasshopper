@@ -88,9 +88,11 @@ public sealed class MotusPlanComponent : MotusComponentBase
     private PlanningResult PlanRrt(RobotModel robot, JointState start, JointState goal, CollisionScene scene)
     {
         var checker = GhExtract.TryCollisionChecker(robot, scene);
+        if (checker is null)
+            return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
         var opts = new RrtConnectOptions { MaxIterations = 4000, RandomSeed = 42, ShouldCancel = () => OnPingDocument() is null };
         var req = new PlanningRequest(robot, start, goal, new PlanningOptions { CollisionScene = scene, CollisionChecker = checker });
-        return new RrtConnectPlanner(robot.Preset, opts).Plan(req);
+        return new RrtConnectPlanner(checker, opts).Plan(req);
     }
 
     public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");
