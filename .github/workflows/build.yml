@@ -34,6 +34,12 @@ jobs:
         env:
           MotusNetRoot: ${{ github.workspace }}/Motus.NET/
 
+      - name: QA smoke
+        run: dotnet run --project scripts/qa-smoke/QaSmoke.csproj -c Release
+        working-directory: Motus.Grasshopper
+        env:
+          MotusNetRoot: ${{ github.workspace }}/Motus.NET/
+
       - name: Package zip
         shell: pwsh
         run: ./build.ps1 -Configuration Release -Zip

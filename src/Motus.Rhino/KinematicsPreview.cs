@@ -37,35 +37,56 @@ public static class KinematicsPreview
 
     public static IEnumerable<Mesh> LinkMeshes(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
     {
-        var fk = TryFk(robot);
-        if (fk is null) yield break;
+        if (!KinematicsProfiles.TryGet(robot.Preset, out var chain) || TryFk(robot) is null)
+            yield break;
 
         var baseF = ResolveBase(robot, baseOverride);
         var tool = ResolveTool(robot, toolOverride);
-        var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
-        var radii = fk.LinkRadiiMeters;
+        var basePlane = FrameConversion.ToPlane(baseF.Frame);
+        var links = chain.Links;
+        var radii = chain.LinkRadiiMeters;
+        var joints = state.Positions;
+        if (joints.Length != links.Length) yield break;
 
-        // Thin structural links follow the real chain: base -> joint centres -> TCP.
-        var prev = ToPoint(baseF.Frame);
-        for (var i = 0; i < origins.Count; i++)
+        var cumulative = Transform.Identity;
+        for (var i = 0; i < links.Length; i++)
         {
-            var pt = ToPoint(origins[i]);
-            var mesh = CylinderMesh(prev, pt, radii[i] * 0.45);
-            if (mesh is not null) yield return mesh;
-            prev = pt;
-        }
-        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
-        var toolMesh = CylinderMesh(prev, tcp, radii[^1] * 0.35);
-        if (toolMesh is not null) yield return toolMesh;
+            var link = links[i];
+            var theta = joints[i] + link.ThetaOffset;
+            var parentPlane = basePlane;
+            parentPlane.Transform(cumulative);
 
-        // Fat barrels mark each joint, aligned to its rotation axis (the DH frame's Z),
-        // so the skeleton reads as an articulated arm rather than a bare polyline.
-        for (var i = 0; i < origins.Count; i++)
-        {
-            var plane = FrameConversion.ToPlane(origins[i]);
-            var jointMesh = BarrelMesh(plane.Origin, plane.ZAxis, radii[i], radii[i] * 1.6);
+            var jointMesh = JointSphere(parentPlane.Origin, radii[i] * 0.75);
             if (jointMesh is not null) yield return jointMesh;
+
+            var jointPlane = parentPlane;
+            jointPlane.Rotate(theta, jointPlane.ZAxis);
+            var linkRadius = radii[i] * 0.5;
+
+            if (Math.Abs(link.D) > 1e-6)
+            {
+                var dEnd = jointPlane.Origin + jointPlane.ZAxis * link.D;
+                var dMesh = CylinderMesh(jointPlane.Origin, dEnd, linkRadius);
+                if (dMesh is not null) yield return dMesh;
+            }
+
+            if (Math.Abs(link.A) > 1e-6)
+            {
+                var aStart = jointPlane.Origin + jointPlane.ZAxis * link.D;
+                var aEnd = aStart + jointPlane.XAxis * link.A;
+                var aMesh = CylinderMesh(aStart, aEnd, linkRadius);
+                if (aMesh is not null) yield return aMesh;
+            }
+
+            cumulative *= DhTransform(theta, link.D, link.A, link.Alpha);
         }
+
+        var flangePlane = basePlane;
+        flangePlane.Transform(cumulative);
+        var fk = new DhForwardKinematics(robot.Preset);
+        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
+        var flangeMesh = CylinderMesh(flangePlane.Origin, tcp, radii[^1] * 0.4);
+        if (flangeMesh is not null) yield return flangeMesh;
     }
 
     public static Plane TcpPlane(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
@@ -131,6 +152,21 @@ public static class KinematicsPreview
         }
     }
 
+    private static Transform DhTransform(double theta, double d, double a, double alpha)
+    {
+        var ct = Math.Cos(theta);
+        var st = Math.Sin(theta);
+        var ca = Math.Cos(alpha);
+        var sa = Math.Sin(alpha);
+        return new Transform
+        {
+            M00 = ct, M01 = -st * ca, M02 = st * sa, M03 = a * ct,
+            M10 = st, M11 = ct * ca, M12 = -ct * sa, M13 = a * st,
+            M20 = 0, M21 = sa, M22 = ca, M23 = d,
+            M30 = 0, M31 = 0, M32 = 0, M33 = 1
+        };
+    }
+
     private static Mesh? CylinderMesh(Point3d from, Point3d to, double radius)
     {
         var length = from.DistanceTo(to);
@@ -141,15 +177,13 @@ public static class KinematicsPreview
         return Mesh.CreateFromCylinder(new Cylinder(new Circle(plane, radius), length), 12, 1);
     }
 
-    // Barrel centred on a joint, extending +/- halfLength along its rotation axis.
-    private static Mesh? BarrelMesh(Point3d center, Vector3d axis, double radius, double halfLength)
+    private static Mesh? JointSphere(Point3d center, double radius)
     {
-        if (radius <= 0 || halfLength <= 0 || !axis.Unitize()) return null;
-        var basePlane = new Plane(center - axis * halfLength, axis);
-        return Mesh.CreateFromCylinder(new Cylinder(new Circle(basePlane, radius), halfLength * 2), 16, 1);
+        if (radius <= 0) return null;
+        return Mesh.CreateFromSphere(new Sphere(center, radius), 12, 12);
     }
 
-  // ponytail: 2.5D fallback when preset has no kinematics profile
+    // ponytail: 2.5D fallback when preset has no kinematics profile
     private static IEnumerable<Line> LegacyStickLinks(JointState state)
     {
         const double linkLength = 0.12;

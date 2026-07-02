@@ -1,6 +1,7 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Types;
+using GH_IO.Serialization;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH;
@@ -9,6 +10,9 @@ using Motus.GH.Resources;
 using Motus.GH.UI;
 using Motus.Presets;
 using Motus.Rhino;
+using Rhino.Display;
+using Rhino.Geometry;
+using System.Drawing;
 
 namespace Motus.GH.Components;
 
@@ -49,10 +53,10 @@ public sealed class MotusRobotComponent : MotusComponentBase
         da.GetData(1, ref jsonPath);
         try
         {
-            var preset = string.IsNullOrWhiteSpace(jsonPath)
-                ? PresetLoader.LoadByModelName(name)
-                : PresetLoader.LoadFromFile(jsonPath);
-            da.SetData(0, new RobotModelGoo(new RobotModel(preset)));
+            var model = string.IsNullOrWhiteSpace(jsonPath)
+                ? PresetLoader.LoadRobotModelByName(name)
+                : PresetLoader.LoadRobotModelFromFile(jsonPath);
+            da.SetData(0, new RobotModelGoo(model));
         }
         catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
     }
@@ -82,10 +86,16 @@ public sealed class MotusJointStateComponent : MotusComponentBase
 
 public sealed class MotusPreviewComponent : MotusComponentBase
 {
+    private static readonly Color CurrentColor = Color.FromArgb(200, 0, 196, 154);
+    private static readonly Color StartColor = Color.FromArgb(90, 220, 220, 220);
+    private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
+    private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
+
     private Trajectory? _trajectory;
     private DateTime _playStartUtc;
     private bool _playing;
     private int _index;
+    private bool _showStart;
 
     // Per-trajectory outputs (TCP path, invalid segments) don't change frame-to-frame,
     // so cache them and only recompute when the trajectory reference changes. Recomputing
@@ -93,14 +103,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase
     private Trajectory? _staticsFor;
     private global::Rhino.Geometry.Curve? _tcpCurve;
     private List<global::Rhino.Geometry.Line> _invalidSegments = new();
+    private List<Mesh> _currentMeshes = new();
+    private List<Mesh> _startMeshes = new();
 
     public MotusPreviewComponent() : base("Motus Preview", "Preview", "Animated FK preview; click Play/Stop on the component", "Preview", "eye") { }
 
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, () => _playing ? "\u25A0 Stop" : "\u25B6 Play", () => _playing, TogglePlayback);
 
-    protected override void RegisterInputParams(GH_InputParamManager p) =>
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
         p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
+        p.AddBooleanParameter("ShowStart", "S", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
+    }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
@@ -111,6 +126,62 @@ public sealed class MotusPreviewComponent : MotusComponentBase
         p.AddNumberParameter("Time", "Tm", "Elapsed trajectory time at current frame (seconds)", GH_ParamAccess.item);
         p.AddIntegerParameter("Index", "I", "Current waypoint index (0-based)", GH_ParamAccess.item);
         p.AddLineParameter("Invalid", "X", "Invalid TCP segments (joint/velocity/acceleration limits)", GH_ParamAccess.list);
+    }
+
+    public override BoundingBox ClippingBox
+    {
+        get
+        {
+            var bb = BoundingBox.Empty;
+            foreach (var mesh in _currentMeshes)
+                bb.Union(mesh.GetBoundingBox(false));
+            if (_showStart)
+            {
+                foreach (var mesh in _startMeshes)
+                    bb.Union(mesh.GetBoundingBox(false));
+            }
+            if (_tcpCurve is not null)
+                bb.Union(_tcpCurve.GetBoundingBox(false));
+            return bb.IsValid ? bb : BoundingBox.Unset;
+        }
+    }
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (Locked) return;
+
+        var currentMat = new DisplayMaterial(CurrentColor) { Transparency = 0.2 };
+        foreach (var mesh in _currentMeshes)
+            args.Display.DrawMeshShaded(mesh, currentMat);
+
+        if (!_showStart) return;
+        var startMat = new DisplayMaterial(StartColor) { Transparency = 0.55 };
+        foreach (var mesh in _startMeshes)
+            args.Display.DrawMeshShaded(mesh, startMat);
+    }
+
+    public override void DrawViewportWires(IGH_PreviewArgs args)
+    {
+        if (Locked) return;
+
+        if (_tcpCurve is not null)
+            args.Display.DrawCurve(_tcpCurve, PathColor, 2);
+
+        foreach (var line in _invalidSegments)
+            args.Display.DrawLine(line, InvalidColor, 3);
+    }
+
+    public override bool Write(GH_IWriter writer)
+    {
+        writer.SetBoolean("ShowStart", _showStart);
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        if (reader.ItemExists("ShowStart"))
+            _showStart = reader.GetBoolean("ShowStart");
+        return base.Read(reader);
     }
 
     public override void RemovedFromDocument(GH_Document doc)
@@ -143,6 +214,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase
         _trajectory = t;
         if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
 
+        da.GetData(1, ref _showStart);
+
         if (_playing)
         {
             var elapsed = (DateTime.UtcNow - _playStartUtc).TotalSeconds;
@@ -163,13 +236,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase
             _staticsFor = t;
         }
 
-        da.SetDataList(0, KinematicsPreview.LinkMeshes(t.Robot, pt.JointState).ToList());
+        _currentMeshes = KinematicsPreview.LinkMeshes(t.Robot, pt.JointState).ToList();
+        _startMeshes = _showStart
+            ? KinematicsPreview.LinkMeshes(t.Robot, t.Points[0].JointState).ToList()
+            : new List<Mesh>();
+
+        da.SetDataList(0, _currentMeshes);
         da.SetDataList(1, KinematicsPreview.LinkLines(t.Robot, pt.JointState).ToList());
         da.SetData(2, _tcpCurve);
         da.SetData(3, new JointStateGoo(pt.JointState));
         da.SetData(4, pt.TimeSeconds);
         da.SetData(5, _index);
         da.SetDataList(6, _invalidSegments);
+        ExpirePreview(true);
     }
 
     private static int IndexAtTime(Trajectory t, double elapsed)
@@ -216,17 +295,38 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 public sealed class MotusExportComponent : MotusComponentBase
 {
     public MotusExportComponent() : base("Motus Export", "Export", "Serialize a trajectory to JSON and CSV", "Export", "export") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
+        p.AddBooleanParameter("Retime", "R", "Apply trapezoidal joint retiming before export", GH_ParamAccess.item, true);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter("Validate", "V", "Validate limits/velocity after retiming", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+    }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
         p.AddTextParameter("Json", "J", "Trajectory as JSON", GH_ParamAccess.item);
         p.AddTextParameter("Csv", "C", "Trajectory as CSV", GH_ParamAccess.item);
+        p.AddTextParameter("Validation", "Val", "Validation summary when Validate=true", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
         if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
-        da.SetData(0, TrajectoryExport.ToJson(t));
-        da.SetData(1, TrajectoryExport.ToCsv(t));
+        var retime = true;
+        var validate = false;
+        da.GetData(1, ref retime);
+        da.GetData(2, ref validate);
+
+        var result = TrajectoryExport.Export(t, new TrajectoryExportOptions { Retime = retime, Validate = validate });
+        da.SetData(0, result.Json);
+        da.SetData(1, result.Csv);
+        if (validate && result.Validation is not null)
+        {
+            da.SetData(2, result.Validation.IsValid
+                ? "Valid."
+                : string.Join("; ", result.Validation.Errors));
+        }
     }
     public override Guid ComponentGuid => new Guid("0a443b6f-605b-48e3-843c-cd0a709f8379");
 }

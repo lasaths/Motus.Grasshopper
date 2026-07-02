@@ -1,6 +1,7 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
 using Motus.Core;
+using Motus.Geometry;
 using Motus.GH.Data;
 using Rhino.Geometry;
 
@@ -62,6 +63,21 @@ internal static class GhExtract
         return goo.Value;
     }
 
-    public static PlanningOptions BuildOptions(double maxStep, CollisionScene? scene) =>
-        new() { MaxJointStepRadians = maxStep, CollisionScene = scene };
+    public static PlanningOptions BuildOptions(RobotModel robot, double maxStep, CollisionScene? scene) =>
+        new()
+        {
+            MaxJointStepRadians = maxStep,
+            CollisionScene = scene,
+            CollisionChecker = scene is not null ? TryCollisionChecker(robot, scene) : null
+        };
+
+    public static ICollisionChecker? TryCollisionChecker(RobotModel robot, CollisionScene? scene = null)
+    {
+        if (!KinematicsResolver.SupportsModel(robot.Preset)) return null;
+        if (robot.CollisionModel is not null)
+            return new RobotMeshCollisionChecker(robot);
+        if (scene?.Objects.Any(o => o.Shape == CollisionShape.Mesh) == true)
+            return new MeshCollisionChecker(robot.Preset);
+        return new SphereCollisionChecker(robot.Preset);
+    }
 }

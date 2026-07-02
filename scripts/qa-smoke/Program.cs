@@ -16,9 +16,9 @@ static string FindResources()
     {
         foreach (var rel in new[]
         {
+            Path.Combine("..", "Motus.NET", "resources", "robots"),
             Path.Combine("resources", "robots"),
             Path.Combine("src", "Motus.GH", "bin", "Release", "net8.0-windows", "resources", "robots"),
-            Path.Combine("..", "Motus.NET", "resources", "robots")
         })
         {
             var candidate = Path.GetFullPath(Path.Combine(dir, rel));
@@ -33,8 +33,8 @@ Console.WriteLine("Motus QA smoke tests");
 Console.WriteLine($"Resources: {resources}");
 
 // UR5e joint plan
-var urPreset = PresetLoader.LoadByModelName("UR5e", resources);
-var urRobot = new RobotModel(urPreset);
+var urRobot = PresetLoader.LoadRobotModelByName("UR5e", resources);
+var urPreset = urRobot.Preset;
 var start = new JointState(new double[6]);
 var goal = new JointState(Enumerable.Repeat(0.5, 6).ToArray());
 var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(urRobot, start, goal));
@@ -71,13 +71,40 @@ var csv = TrajectoryExport.ToCsv(traj);
 if (!csv.StartsWith("time_seconds,joint_1_rad,")) Fail($"CSV header wrong: {csv.Split('\n')[0]}");
 Ok("JSON export parses; CSV header is time_seconds,joint_1_rad,...");
 
-// Cartesian path (same pattern as Motus.Core.Tests CartesianPlannerTests)
+// Cartesian LIN (Motus Plan plane branch)
 var fk = new DhForwardKinematics(urPreset);
 var cartStart = new JointState(new[] { 0.1, -0.5, 0.8, -0.3, -0.4, 0.2 });
 var goalPose = fk.ComputeTcp(cartStart, urPreset.BaseFrame, urPreset.ToolFrame);
+var linResult = new CartesianLinearPathPlanner(urPreset).PlanToResult(
+    new CartesianPlanningRequest(urRobot, cartStart, goalPose, new PlanningOptions()));
+if (!linResult.Success) Fail($"LIN plan: {string.Join("; ", linResult.Errors)}");
+Ok("Cartesian LIN (TCP-linear) reaches goal via IK");
+
+// Legacy Cartesian joint-linear still available
 var cartResult = new CartesianLinearPlanner(urPreset).Plan(new CartesianPlanningRequest(urRobot, cartStart, goalPose, new PlanningOptions()));
 if (!cartResult.Success) Fail($"Cartesian plan: {string.Join("; ", cartResult.Errors)}");
-Ok("Cartesian Path reaches plane goal via IK");
+Ok("Cartesian joint-linear planner still works");
+
+// Collision honesty: scene without checker fails joint-linear
+var sceneOnly = new CollisionScene(new[] { CollisionObject.Sphere("obs", new Frame(2, 2, 2), 0.05) });
+var noChecker = new JointLinearPlanner().Plan(new PlanningRequest(urRobot, start, goal, new PlanningOptions { CollisionScene = sceneOnly }));
+if (noChecker.Success) Fail("Expected joint-linear to fail without collision checker when scene is set");
+Ok("Joint-linear fails loudly without collision checker");
+
+// Retimed export (bottleneck default)
+var retimedJson = TrajectoryExport.ToJson(traj, retime: true);
+if (!retimedJson.Contains("\"retimed\": true")) Fail("Retimed JSON export missing retimed flag");
+var retimed = TrajectoryExport.Prepare(traj, new TrajectoryExportOptions { Retime = true });
+if (retimed.Points.Count < 2) Fail("Bottleneck retime produced too few points");
+Ok("Trajectory bottleneck retiming before JSON export");
+
+// Per-link robot collision model from preset
+if (urRobot.CollisionModel is null || urRobot.CollisionModel.Links.Count < 6)
+    Fail("UR5e preset should include collisionLinks");
+var robotChecker = new RobotMeshCollisionChecker(urRobot);
+var freeHome = robotChecker.IsCollisionFree(start, new CollisionScene());
+if (!freeHome) Fail("Home config should be collision-free with link capsules");
+Ok("RobotMeshCollisionChecker uses preset collisionLinks");
 
 // RRT with collision + cancel
 var checker = new SphereCollisionChecker(urPreset);
@@ -101,7 +128,7 @@ foreach (var pose in new[]
 }
 if (scene is null) Fail("Could not find collision scene for RRT smoke test");
 var rrtResult = new RrtConnectPlanner(checker, new RrtConnectOptions { MaxIterations = 10000, RandomSeed = 11 })
-    .Plan(new PlanningRequest(urRobot, start, rrtGoal, new PlanningOptions { CollisionScene = scene, MaxJointStepRadians = 0.08 }));
+    .Plan(new PlanningRequest(urRobot, start, rrtGoal, new PlanningOptions { CollisionScene = scene, MaxJointStepRadians = 0.08, CollisionChecker = checker }));
 if (!rrtResult.Success) Fail($"RRT: {string.Join("; ", rrtResult.Errors)}");
 Ok("RRT Connect avoids collision sphere obstacle");
 

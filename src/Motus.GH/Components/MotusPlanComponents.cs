@@ -13,10 +13,11 @@ namespace Motus.GH.Components;
 public sealed class MotusPlanComponent : MotusComponentBase
 {
     private const double MaxJointStep = 0.05;
+    private const double LinStepMeters = 0.005;
     private PlanningResult? _cached;
     private bool _run;
 
-    public MotusPlanComponent() : base("Motus Plan", "Plan", "Plan a motion to a target plane or joint goal; click Plan on the component", "Plan", "flow-arrow") { }
+    public MotusPlanComponent() : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan", "Plan", "flow-arrow") { }
 
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, () => "Plan", () => false, RequestRun);
@@ -24,10 +25,10 @@ public sealed class MotusPlanComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddGenericParameter("Goal", "G", "Target as a Plane (Cartesian/IK) or a Joint State", GH_ParamAccess.item);
+        p.AddGenericParameter("Goal", "G", "Target as a Plane (TCP LIN) or a Joint State", GH_ParamAccess.item);
         p.AddGenericParameter("Start", "S", "Start joint state (defaults to home / all zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Collision", "C", "Collision scene; when wired, joint goals plan with RRT-Connect", GH_ParamAccess.item);
+        p.AddGenericParameter("Collision", "C", "Collision scene; joint goals use RRT-Connect; plane goals validate LIN against scene", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -67,27 +68,28 @@ public sealed class MotusPlanComponent : MotusComponentBase
         var scene = GhExtract.OptionalCollisionScene(da, 3);
 
         _cached = planeGoal is { } plane
-            ? PlanCartesian(robot, start, plane, scene)
+            ? PlanCartesianLin(robot, start, plane, scene)
             : scene is not null
                 ? PlanRrt(robot, start, jointGoal!, scene)
-                : new JointLinearPlanner().Plan(new PlanningRequest(robot, start, jointGoal!, GhExtract.BuildOptions(MaxJointStep, scene)));
+                : new JointLinearPlanner().Plan(new PlanningRequest(robot, start, jointGoal!, GhExtract.BuildOptions(robot, MaxJointStep, scene)));
 
         if (_cached.Success) da.SetData(0, new TrajectoryGoo(_cached.Trajectory!));
         da.SetData(1, _cached.Success ? "Success." : string.Join("; ", _cached.Errors));
         da.SetDataList(2, _cached.Warnings);
     }
 
-    private static PlanningResult PlanCartesian(RobotModel robot, JointState start, Plane plane, CollisionScene? scene)
+    private static PlanningResult PlanCartesianLin(RobotModel robot, JointState start, Plane plane, CollisionScene? scene)
     {
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
-        var req = new CartesianPlanningRequest(robot, start, goal, GhExtract.BuildOptions(MaxJointStep, scene), scene);
-        return new CartesianLinearPlanner(robot.Preset).Plan(req);
+        var req = new CartesianPlanningRequest(robot, start, goal, GhExtract.BuildOptions(robot, MaxJointStep, scene), scene);
+        return new CartesianLinearPathPlanner(robot.Preset).PlanToResult(req, LinStepMeters);
     }
 
     private PlanningResult PlanRrt(RobotModel robot, JointState start, JointState goal, CollisionScene scene)
     {
+        var checker = GhExtract.TryCollisionChecker(robot, scene);
         var opts = new RrtConnectOptions { MaxIterations = 4000, RandomSeed = 42, ShouldCancel = () => OnPingDocument() is null };
-        var req = new PlanningRequest(robot, start, goal, new PlanningOptions { CollisionScene = scene });
+        var req = new PlanningRequest(robot, start, goal, new PlanningOptions { CollisionScene = scene, CollisionChecker = checker });
         return new RrtConnectPlanner(robot.Preset, opts).Plan(req);
     }
 
