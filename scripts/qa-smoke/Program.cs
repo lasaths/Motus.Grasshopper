@@ -16,7 +16,6 @@ static string FindResources()
     {
         foreach (var rel in new[]
         {
-            Path.Combine("..", "Motus.NET", "resources", "robots"),
             Path.Combine("resources", "robots"),
             Path.Combine("src", "Motus.GH", "bin", "Release", "net8.0-windows", "resources", "robots"),
         })

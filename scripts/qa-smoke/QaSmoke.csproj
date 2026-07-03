@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="$(MSBuildThisFileDirectory)..\..\build\MotusNetDll.targets" />
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
@@ -9,17 +8,5 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Motus.Rhino\Motus.Rhino.csproj" />
     <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
-    <Reference Include="Motus.Core">
-      <HintPath>$(_MotusCoreDll)</HintPath>
-    </Reference>
-    <Reference Include="Motus.Geometry">
-      <HintPath>$(_MotusGeometryDll)</HintPath>
-    </Reference>
-    <Reference Include="Motus.Presets">
-      <HintPath>$(_MotusPresetsDll)</HintPath>
-    </Reference>
-    <Reference Include="Motus.OMPL.NET">
-      <HintPath>$(_MotusOmplDll)</HintPath>
-    </Reference>
   </ItemGroup>
 </Project>

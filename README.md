@@ -8,19 +8,16 @@ Licensed under [MIT](LICENSE).
 
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
-- [Motus.NET](https://github.com/lasaths/Motus.NET) cloned as sibling: `../Motus.NET`
+
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.3.2**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
-
-Motus.Grasshopper compiles against **pre-built Motus.NET DLLs** (NuGet packaging later).
 
 ```powershell
 ./build.ps1                      # Release (default)
 ./build.ps1 -Configuration Debug
 ./build.ps1 -Zip                 # also writes dist/Motus.Grasshopper-Release.zip
 ```
-
-This builds `../Motus.NET` first, then the plugin.
 
 Output: `src/Motus.GH/bin/Release/net8.0-windows/`
 
@@ -47,8 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetRoot` | `../Motus.NET/` | Motus.NET DLL location |
-| `MotusNetConfiguration` | matches build config | `Debug` or `Release` |
+| `MotusNetVersion` | `0.3.2` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -76,7 +72,7 @@ Without a collision scene, joint goals use joint-linear interpolation (free spac
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper requires Motus.NET **0.3.1** (see `motus-net.version` in the Motus.NET repo). `./build.ps1` builds the sibling repo first and verifies the version pin.
+Motus.Grasshopper pins Motus.NET **0.3.2** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
 

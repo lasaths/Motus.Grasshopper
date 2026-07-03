@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# ponytail: build Motus.NET DLLs, then Grasshopper plugin + optional release zip
+# Build Grasshopper plugin (Motus.NET from NuGet).
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
@@ -9,26 +9,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$motusNet = Join-Path $root "..\Motus.NET"
 $out = Join-Path $root "src\Motus.GH\bin\$Configuration\net8.0-windows"
 
-if (-not (Test-Path $motusNet)) {
-    throw "Motus.NET not found at $motusNet — clone as sibling of Motus.Grasshopper."
-}
-
-Write-Host "Building Motus.NET ($Configuration)..."
-dotnet build (Join-Path $motusNet "Motus.NET.slnx") -c $Configuration
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 Write-Host "Building Motus.Grasshopper ($Configuration)..."
-dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration /p:MotusNetConfiguration=$Configuration
+dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`nBuilt: $out\Motus.GH.gha"
 Write-Host "Copy to Grasshopper Libraries\Motus:"
 Write-Host "  Motus.GH.gha"
-Write-Host "  Motus.Core.dll, Motus.Geometry.dll, Motus.Presets.dll, Motus.OMPL.NET.dll, Motus.Rhino.dll"
-Write-Host "  resources\robots\"
+Write-Host "  Motus.*.dll (from NuGet + Motus.Rhino.dll)"
+Write-Host "  resources\robots\ (from Motus.Presets package)"
 
 if ($Install) {
     $ghLib = Join-Path $env:APPDATA "Grasshopper\Libraries\Motus"

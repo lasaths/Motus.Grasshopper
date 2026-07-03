@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.3.2</MotusNetVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.Rhino'">
+    <PackageReference Include="Motus.Core" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.GH'">
+    <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'QaSmoke'">
+    <PackageReference Include="Motus.Core" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
+  </ItemGroup>
+</Project>

@@ -12,6 +12,7 @@ $required = @(
     "Motus.Geometry.dll",
     "Motus.Presets.dll",
     "Motus.OMPL.NET.dll",
+    "Motus.OMPL.Native.dll",
     "Motus.Rhino.dll"
 )
 
