@@ -24,6 +24,7 @@ The **Motus ribbon tab** icon (and `M` shortcut letter) is registered in `MotusG
 | Motus Collision Sphere | sphere |
 | Motus Collision Box | bounding-box |
 | Motus Collision Scene | circles-three-plus |
+| Motus Collision Mesh | mesh (cube-transparent) |
 | Motus Preview | eye |
 | Motus Trajectory Data | grid-four |
 | Motus Export | export |

@@ -28,6 +28,9 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\icons\*.png" />
+    <None Include="..\..\resources\viewer_presets.json" Link="resources\viewer_presets.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

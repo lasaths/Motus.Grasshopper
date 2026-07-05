@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.3.2**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.3.3**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,7 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.3.2` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.3.3` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -78,7 +78,7 @@ Motus.Grasshopper pins Motus.NET **0.3.2** via `build/MotusNetPackages.props` (N
 
 ### 0.3.0 — breaking palette redesign
 
-The component palette was consolidated from ~25 components to 9 for simplicity ("no human error, only bad design"): one `Motus Robot`, one `Motus Plan` (planner inferred from inputs, plane or joint goal, home-default start, Plan button), one `Motus Preview` (with Play), plus `Motus Trajectory Data`, `Motus Export`, the three collision nodes, and `Motus Joint State`. Several component GUIDs changed and the preset/robot/cartesian-pose/validate/play nodes were removed or merged, so **definitions saved against 0.2.x must be rewired**.
+The component palette was consolidated from ~25 components to 10 for simplicity ("no human error, only bad design"): one `Motus Robot`, one `Motus Plan` (planner inferred from inputs, plane or joint goal, home-default start, Plan button), one `Motus Preview` (with Play), plus `Motus Trajectory Data`, `Motus Export`, four collision nodes (sphere, box, mesh, scene), and `Motus Joint State`. Several component GUIDs changed and the preset/robot/cartesian-pose/validate/play nodes were removed or merged, so **definitions saved against 0.2.x must be rewired**.
 
 ## External plugins
 

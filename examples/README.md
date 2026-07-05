@@ -41,7 +41,4 @@ installed component version.
 
 ### External plugins (optional)
 
-| File | Needs |
-|------|-------|
-| `05_external_ur_rtde.gh` | UR.RTDE.Grasshopper |
-| `06_external_virtualrobot.gh` | VirtualRobot |
+See [docs/external-plugin-workflows.md](../docs/external-plugin-workflows.md) for UR.RTDE.Grasshopper, VirtualRobot, and other export paths. No bundled `.gh` examples for those plugins.

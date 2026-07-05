@@ -1,4 +1,5 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.GH.Data;
 using Motus.Rhino;
@@ -8,12 +9,12 @@ namespace Motus.GH.Components;
 
 public sealed class MotusCollisionMeshComponent : MotusComponentBase
 {
-    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Rhino mesh obstacle (meters)", "Collision", "mesh") { }
+    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "mesh") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddMeshParameter("Mesh", "M", "Triangle mesh obstacle", GH_ParamAccess.item);
-        p.AddPlaneParameter("Plane", "P", "Mesh pose (origin = mesh local origin)", GH_ParamAccess.item, Plane.WorldXY);
+        p.AddGeometryParameter("Geometry", "G", "Triangle mesh or Brep obstacle", GH_ParamAccess.item);
+        p.AddPlaneParameter("Plane", "P", "Geometry pose (origin = local origin)", GH_ParamAccess.item, Plane.WorldXY);
         p.AddTextParameter("Name", "N", "Obstacle name", GH_ParamAccess.item, "mesh");
     }
 
@@ -22,16 +23,43 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        Mesh? mesh = null;
+        IGH_GeometricGoo? geo = null;
         var pl = Plane.WorldXY;
         var name = "mesh";
-        if (!da.GetData(0, ref mesh) || mesh is null || !mesh.IsValid) return;
+        if (!da.GetData(0, ref geo) || geo is null) return;
         da.GetData(1, ref pl);
         da.GetData(2, ref name);
 
+        CollisionObject? obj = null;
+        if (geo is GH_Mesh ghm && ghm.Value is { IsValid: true } mesh)
+            obj = CollisionMeshBuilder.FromMesh(mesh, pl, name);
+        else if (geo is GH_Brep ghb && ghb.Value is { IsValid: true } brep)
+            obj = CollisionMeshBuilder.FromBrep(brep, pl, name);
+
+        if (obj is null)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Geometry must be a valid Mesh or Brep.");
+            return;
+        }
+
+        da.SetData(0, new CollisionObjectGoo(obj));
+    }
+
+    public override Guid ComponentGuid => new Guid("f4d5e6f7-a8b9-4012-d345-6789abcdef01");
+}
+
+internal static class CollisionMeshBuilder
+{
+    public static CollisionObject? FromMesh(Mesh mesh, Plane plane, string name)
+    {
+        var xform = Transform.PlaneToPlane(Plane.WorldXY, plane);
         var vertices = new List<double[]>(mesh.Vertices.Count);
         foreach (var v in mesh.Vertices)
-            vertices.Add(new[] { (double)v.X, (double)v.Y, (double)v.Z });
+        {
+            var pt = new Point3d(v.X, v.Y, v.Z);
+            pt.Transform(xform);
+            vertices.Add(new[] { pt.X, pt.Y, pt.Z });
+        }
 
         var indices = new List<int>(mesh.Faces.Count * 3);
         foreach (var face in mesh.Faces)
@@ -53,14 +81,18 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
             }
         }
 
-        if (indices.Count < 3)
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Mesh has no faces.");
-            return;
-        }
-
-        da.SetData(0, CollisionObject.Mesh(name, FrameConversion.FromPlane(pl), vertices, indices));
+        if (indices.Count < 3) return null;
+        return CollisionObject.Mesh(name, Frame.Identity, vertices, indices);
     }
 
-    public override Guid ComponentGuid => new Guid("f4d5e6f7-a8b9-4012-d345-6789abcdef01");
+    public static CollisionObject? FromBrep(Brep brep, Plane plane, string name)
+    {
+        var meshes = Mesh.CreateFromBrep(brep, MeshingParameters.Default);
+        if (meshes is null || meshes.Length == 0) return null;
+
+        var combined = new Mesh();
+        foreach (var m in meshes)
+            combined.Append(m);
+        return FromMesh(combined, plane, name);
+    }
 }

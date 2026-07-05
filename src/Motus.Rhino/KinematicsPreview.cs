@@ -6,22 +6,22 @@ namespace Motus.Rhino;
 
 public static class KinematicsPreview
 {
-    public static DhForwardKinematics? TryFk(RobotModel robot) =>
-        KinematicsProfiles.TryGet(robot.Preset, out _) ? new DhForwardKinematics(robot.Preset) : null;
-
-    public static BaseFrame ResolveBase(RobotModel robot, BaseFrame? ghBase) => ghBase ?? robot.Preset.BaseFrame;
-
-    public static ToolFrame ResolveTool(RobotModel robot, ToolFrame? ghTool) => ghTool ?? robot.Preset.ToolFrame;
+    public static IFkSolver? TryFk(RobotModel robot, SerialJointChain? chain = null)
+    {
+        try { return KinematicsResolver.CreateFkSolver(robot.Preset, chain); }
+        catch (InvalidOperationException) { return null; }
+    }
 
     public static Point3d ToPoint(Frame frame) => new(frame.X, frame.Y, frame.Z);
 
-    public static IEnumerable<Line> LinkLines(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
+    public static IEnumerable<Line> LinkLines(
+        RobotModel robot, JointState state, SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        var fk = TryFk(robot);
-        if (fk is null) return LegacyStickLinks(state);
+        if (TryFk(robot, chain) is not { } fk) return [];
 
-        var baseF = ResolveBase(robot, baseOverride);
-        var tool = ResolveTool(robot, toolOverride);
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
         var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
         var lines = new List<Line>();
         var prev = ToPoint(baseF.Frame);
@@ -31,88 +31,68 @@ public static class KinematicsPreview
             lines.Add(new Line(prev, pt));
             prev = pt;
         }
-        lines.Add(new Line(prev, ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp)));
+
+        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
+        if (prev.DistanceTo(tcp) > 1e-6)
+            lines.Add(new Line(prev, tcp));
         return lines;
     }
 
-    public static IEnumerable<Mesh> LinkMeshes(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
+    public static IEnumerable<Mesh> LinkMeshes(
+        RobotModel robot, JointState state, SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        if (!KinematicsProfiles.TryGet(robot.Preset, out var chain) || TryFk(robot) is null)
-            yield break;
+        if (TryFk(robot, chain) is not { } fk) yield break;
 
-        var baseF = ResolveBase(robot, baseOverride);
-        var tool = ResolveTool(robot, toolOverride);
-        var basePlane = FrameConversion.ToPlane(baseF.Frame);
-        var links = chain.Links;
-        var radii = chain.LinkRadiiMeters;
-        var joints = state.Positions;
-        if (joints.Length != links.Length) yield break;
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
+        var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
+        var radii = fk.LinkRadiiMeters;
 
-        var cumulative = Transform.Identity;
-        for (var i = 0; i < links.Length; i++)
+        var prev = ToPoint(baseF.Frame);
+        for (var i = 0; i < origins.Count; i++)
         {
-            var link = links[i];
-            var theta = joints[i] + link.ThetaOffset;
-            var parentPlane = basePlane;
-            parentPlane.Transform(cumulative);
-
-            var jointMesh = JointSphere(parentPlane.Origin, radii[i] * 0.75);
-            if (jointMesh is not null) yield return jointMesh;
-
-            var jointPlane = parentPlane;
-            jointPlane.Rotate(theta, jointPlane.ZAxis);
-            var linkRadius = radii[i] * 0.5;
-
-            if (Math.Abs(link.D) > 1e-6)
-            {
-                var dEnd = jointPlane.Origin + jointPlane.ZAxis * link.D;
-                var dMesh = CylinderMesh(jointPlane.Origin, dEnd, linkRadius);
-                if (dMesh is not null) yield return dMesh;
-            }
-
-            if (Math.Abs(link.A) > 1e-6)
-            {
-                var aStart = jointPlane.Origin + jointPlane.ZAxis * link.D;
-                var aEnd = aStart + jointPlane.XAxis * link.A;
-                var aMesh = CylinderMesh(aStart, aEnd, linkRadius);
-                if (aMesh is not null) yield return aMesh;
-            }
-
-            cumulative *= DhTransform(theta, link.D, link.A, link.Alpha);
+            var pt = ToPoint(origins[i]);
+            var mesh = CylinderMesh(prev, pt, radii[i] * 0.45);
+            if (mesh is not null) yield return mesh;
+            prev = pt;
         }
 
-        var flangePlane = basePlane;
-        flangePlane.Transform(cumulative);
-        var fk = new DhForwardKinematics(robot.Preset);
         var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
-        var flangeMesh = CylinderMesh(flangePlane.Origin, tcp, radii[^1] * 0.4);
-        if (flangeMesh is not null) yield return flangeMesh;
+        if (prev.DistanceTo(tcp) > 1e-6)
+        {
+            var toolMesh = CylinderMesh(prev, tcp, radii[^1] * 0.35);
+            if (toolMesh is not null) yield return toolMesh;
+        }
+
+        for (var i = 0; i < origins.Count; i++)
+        {
+            var plane = FrameConversion.ToPlane(origins[i]);
+            var jointMesh = BarrelMesh(plane.Origin, plane.ZAxis, radii[i], radii[i] * 1.6);
+            if (jointMesh is not null) yield return jointMesh;
+        }
     }
 
-    public static Plane TcpPlane(RobotModel robot, JointState state, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
+    public static Plane TcpPlane(
+        RobotModel robot, JointState state, SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        var fk = TryFk(robot);
-        var baseF = ResolveBase(robot, baseOverride);
-        var tool = ResolveTool(robot, toolOverride);
-        if (fk is null) return FrameConversion.ToPlane(baseF.Frame);
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        if (TryFk(robot, chain) is not { } fk)
+            return FrameConversion.ToPlane(baseF.Frame);
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
         return FrameConversion.ToPlane(fk.ComputeTcp(state, baseF, tool).Tcp);
     }
 
-    public static Polyline TcpPath(RobotModel robot, IEnumerable<JointState> states, BaseFrame? baseOverride = null, ToolFrame? toolOverride = null)
+    public static Polyline TcpPath(
+        RobotModel robot, IEnumerable<JointState> states, SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        var fk = TryFk(robot);
-        var baseF = ResolveBase(robot, baseOverride);
-        var tool = ResolveTool(robot, toolOverride);
-        var pts = new List<Point3d>();
-        foreach (var s in states)
-        {
-            if (fk is null)
-            {
-                pts.Add(s.Positions.Length > 0 ? new Point3d(Math.Cos(s.Positions[0]) * 0.15, Math.Sin(s.Positions[0]) * 0.15, 0) : Point3d.Origin);
-                continue;
-            }
-            pts.Add(ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp));
-        }
+        if (TryFk(robot, chain) is not { } fk) return new Polyline();
+
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
+        var pts = states.Select(s => ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp)).ToList();
         return pts.Count < 2 ? new Polyline() : new Polyline(pts);
     }
 
@@ -122,24 +102,20 @@ public static class KinematicsPreview
         TrajectoryValidationOptions? validation,
         out List<Line> valid,
         out List<Line> invalid,
-        BaseFrame? baseOverride = null,
-        ToolFrame? toolOverride = null)
+        SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null,
+        ToolFrame? toolFrame = null)
     {
         valid = new List<Line>();
         invalid = new List<Line>();
-        if (trajectory.Points.Count < 2) return;
+        if (trajectory.Points.Count < 2 || TryFk(robot, chain) is not { } fk) return;
 
-        var fk = TryFk(robot);
-        var baseF = ResolveBase(robot, baseOverride);
-        var tool = ResolveTool(robot, toolOverride);
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
         var validator = new TrajectoryValidator();
         var opts = validation ?? new TrajectoryValidationOptions();
 
-        Point3d TcpAt(JointState s)
-        {
-            if (fk is null) return LegacyStickLinks(s).LastOrDefault().To;
-            return ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp);
-        }
+        Point3d TcpAt(JointState s) => ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp);
 
         for (var i = 1; i < trajectory.Points.Count; i++)
         {
@@ -152,21 +128,6 @@ public static class KinematicsPreview
         }
     }
 
-    private static Transform DhTransform(double theta, double d, double a, double alpha)
-    {
-        var ct = Math.Cos(theta);
-        var st = Math.Sin(theta);
-        var ca = Math.Cos(alpha);
-        var sa = Math.Sin(alpha);
-        return new Transform
-        {
-            M00 = ct, M01 = -st * ca, M02 = st * sa, M03 = a * ct,
-            M10 = st, M11 = ct * ca, M12 = -ct * sa, M13 = a * st,
-            M20 = 0, M21 = sa, M22 = ca, M23 = d,
-            M30 = 0, M31 = 0, M32 = 0, M33 = 1
-        };
-    }
-
     private static Mesh? CylinderMesh(Point3d from, Point3d to, double radius)
     {
         var length = from.DistanceTo(to);
@@ -177,24 +138,10 @@ public static class KinematicsPreview
         return Mesh.CreateFromCylinder(new Cylinder(new Circle(plane, radius), length), 12, 1);
     }
 
-    private static Mesh? JointSphere(Point3d center, double radius)
+    private static Mesh? BarrelMesh(Point3d center, Vector3d axis, double radius, double halfLength)
     {
-        if (radius <= 0) return null;
-        return Mesh.CreateFromSphere(new Sphere(center, radius), 12, 12);
-    }
-
-    // ponytail: 2.5D fallback when preset has no kinematics profile
-    private static IEnumerable<Line> LegacyStickLinks(JointState state)
-    {
-        const double linkLength = 0.12;
-        var angle = 0.0;
-        var prev = Point3d.Origin;
-        for (var i = 0; i < state.Positions.Length; i++)
-        {
-            angle += state.Positions[i];
-            var next = new Point3d(prev.X + Math.Cos(angle) * linkLength, prev.Y + Math.Sin(angle) * linkLength, prev.Z + (i % 2 == 0 ? linkLength * 0.2 : 0));
-            yield return new Line(prev, next);
-            prev = next;
-        }
+        if (radius <= 0 || halfLength <= 0 || !axis.Unitize()) return null;
+        var basePlane = new Plane(center - axis * halfLength, axis);
+        return Mesh.CreateFromCylinder(new Cylinder(new Circle(basePlane, radius), halfLength * 2), 16, 1);
     }
 }

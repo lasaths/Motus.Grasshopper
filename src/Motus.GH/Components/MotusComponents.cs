@@ -34,6 +34,10 @@ public sealed class MotusRobotComponent : MotusComponentBase
         p.AddTextParameter("Model", "M", "Preset model name (UR5e, KR 6 R900, …)", GH_ParamAccess.item, "UR5e");
         p.AddTextParameter("JsonPath", "J", "Path to a preset JSON (overrides Model when set)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
+        p.AddPlaneParameter("Base", "B", "Optional base frame override (TCP goals are in this frame)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddPlaneParameter("Tool", "T", "Optional tool TCP frame override", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
     public override void AddedToDocument(GH_Document doc)
@@ -49,14 +53,21 @@ public sealed class MotusRobotComponent : MotusComponentBase
     {
         var name = "UR5e";
         var jsonPath = "";
+        var basePl = Plane.Unset;
+        var toolPl = Plane.Unset;
         da.GetData(0, ref name);
         da.GetData(1, ref jsonPath);
+        da.GetData(2, ref basePl);
+        da.GetData(3, ref toolPl);
         try
         {
             var model = string.IsNullOrWhiteSpace(jsonPath)
                 ? PresetLoader.LoadRobotModelByName(name)
                 : PresetLoader.LoadRobotModelFromFile(jsonPath);
-            da.SetData(0, new RobotModelGoo(model));
+            var goo = new RobotModelGoo(model);
+            if (basePl.IsValid) goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
+            if (toolPl.IsValid) goo.ToolFrameOverride = FrameConversion.FromPlane(toolPl);
+            da.SetData(0, goo);
         }
         catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
     }
@@ -70,6 +81,8 @@ public sealed class MotusJointStateComponent : MotusComponentBase
     {
         p.AddNumberParameter("Joints", "J", "Joint angles in radians", GH_ParamAccess.list);
         p.AddBooleanParameter("UseDegrees", "D", "Interpret input as degrees", GH_ParamAccess.item, false);
+        p.AddGenericParameter("Robot", "Rb", "Optional robot for joint count validation", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
@@ -78,6 +91,12 @@ public sealed class MotusJointStateComponent : MotusComponentBase
         var deg = false;
         if (!da.GetDataList(0, vals)) return;
         da.GetData(1, ref deg);
+        if (GhExtract.TryRobot(da, 2, out var robot) && vals.Count != robot.Preset.AxisCount)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Expected {robot.Preset.AxisCount} joints, got {vals.Count}. Order matches URDF chain or preset axis list.");
+            return;
+        }
         var arr = deg ? Units.ToRadians(vals.ToArray()) : vals.ToArray();
         da.SetData(0, new JointStateGoo(new JointState(arr)));
     }
@@ -210,52 +229,53 @@ public sealed class MotusPreviewComponent : MotusComponentBase
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
+        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
+        var t = trajGoo.Value!;
+        var ctx = trajGoo.Context();
         _trajectory = t;
         if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
 
         da.GetData(1, ref _showStart);
 
+        JointState state;
+        double timeSeconds;
         if (_playing)
         {
             var elapsed = (DateTime.UtcNow - _playStartUtc).TotalSeconds;
-            _index = IndexAtTime(t, elapsed);
+            state = TrajectoryInterpolation.AtTime(t, elapsed, out _index);
+            timeSeconds = elapsed;
             if (elapsed >= t.DurationSeconds) _playing = false;
             else ScheduleTick();
         }
-
-        _index = Math.Clamp(_index, 0, t.Points.Count - 1);
-        var pt = t.Points[_index];
+        else
+        {
+            _index = Math.Clamp(_index, 0, t.Points.Count - 1);
+            state = t.Points[_index].JointState;
+            timeSeconds = t.Points[_index].TimeSeconds;
+        }
 
         if (!ReferenceEquals(_staticsFor, t))
         {
-            var pl = KinematicsPreview.TcpPath(t.Robot, t.Points.Select(p => p.JointState));
+            var pl = KinematicsPreview.TcpPath(ctx.Model, t.Points.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
             _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
-            KinematicsPreview.TrajectorySegments(t.Robot, t, new TrajectoryValidationOptions(), out _, out var invalid);
+            KinematicsPreview.TrajectorySegments(ctx.Model, t, new TrajectoryValidationOptions(), out _, out var invalid, ctx.Chain, ctx.Base, ctx.Tool);
             _invalidSegments = invalid;
             _staticsFor = t;
         }
 
-        _currentMeshes = KinematicsPreview.LinkMeshes(t.Robot, pt.JointState).ToList();
+        _currentMeshes = KinematicsPreview.LinkMeshes(ctx.Model, state, ctx.Chain, ctx.Base, ctx.Tool).ToList();
         _startMeshes = _showStart
-            ? KinematicsPreview.LinkMeshes(t.Robot, t.Points[0].JointState).ToList()
+            ? KinematicsPreview.LinkMeshes(ctx.Model, t.Points[0].JointState, ctx.Chain, ctx.Base, ctx.Tool).ToList()
             : new List<Mesh>();
 
         da.SetDataList(0, _currentMeshes);
-        da.SetDataList(1, KinematicsPreview.LinkLines(t.Robot, pt.JointState).ToList());
+        da.SetDataList(1, KinematicsPreview.LinkLines(ctx.Model, state, ctx.Chain, ctx.Base, ctx.Tool).ToList());
         da.SetData(2, _tcpCurve);
-        da.SetData(3, new JointStateGoo(pt.JointState));
-        da.SetData(4, pt.TimeSeconds);
+        da.SetData(3, new JointStateGoo(state));
+        da.SetData(4, timeSeconds);
         da.SetData(5, _index);
         da.SetDataList(6, _invalidSegments);
         ExpirePreview(true);
-    }
-
-    private static int IndexAtTime(Trajectory t, double elapsed)
-    {
-        for (var i = t.Points.Count - 1; i >= 0; i--)
-            if (t.Points[i].TimeSeconds <= elapsed) return i;
-        return 0;
     }
 
     public override Guid ComponentGuid => new Guid("d4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91");
@@ -273,10 +293,12 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryTrajectory(da, 0, out var t)) return;
+        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
+        var t = trajGoo.Value!;
+        var ctx = trajGoo.Context();
         if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
 
-        var planes = t.Points.Select(pt => KinematicsPreview.TcpPlane(t.Robot, pt.JointState)).ToList();
+        var planes = t.Points.Select(pt => KinematicsPreview.TcpPlane(ctx.Model, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool)).ToList();
         var times = t.Points.Select(p => p.TimeSeconds).ToList();
         var tree = new GH_Structure<GH_Number>();
         for (var j = 0; j < t.Robot.Preset.AxisCount; j++)

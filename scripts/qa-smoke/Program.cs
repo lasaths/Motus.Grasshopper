@@ -79,11 +79,6 @@ var linResult = new CartesianLinearPathPlanner(urPreset).PlanToResult(
 if (!linResult.Success) Fail($"LIN plan: {string.Join("; ", linResult.Errors)}");
 Ok("Cartesian LIN (TCP-linear) reaches goal via IK");
 
-// Legacy Cartesian joint-linear still available
-var cartResult = new CartesianLinearPlanner(urPreset).Plan(new CartesianPlanningRequest(urRobot, cartStart, goalPose, new PlanningOptions()));
-if (!cartResult.Success) Fail($"Cartesian plan: {string.Join("; ", cartResult.Errors)}");
-Ok("Cartesian joint-linear planner still works");
-
 // Collision honesty: scene without checker fails joint-linear
 var sceneOnly = new CollisionScene(new[] { CollisionObject.Sphere("obs", new Frame(2, 2, 2), 0.05) });
 var noChecker = new JointLinearPlanner().Plan(new PlanningRequest(urRobot, start, goal, new PlanningOptions { CollisionScene = sceneOnly }));
@@ -108,24 +103,14 @@ Ok("RobotMeshCollisionChecker uses preset collisionLinks");
 // RRT with per-link collision checker (preset collisionLinks)
 var meshChecker = new RobotMeshCollisionChecker(urRobot);
 var rrtGoal = new JointState(new[] { 0.6, -0.6, 0.6, -0.6, -0.6, 0.3 });
-CollisionScene? scene = null;
-foreach (var pose in new[]
-{
-    new Frame(0.18, -0.22, 0.28),
-    new Frame(0.22, -0.18, 0.32),
-    new Frame(0.12, -0.28, 0.24),
-    new Frame(0.25, -0.30, 0.35),
-})
-{
-    var trial = new CollisionScene(new[] { CollisionObject.Sphere("block", pose, 0.05) });
-    if (meshChecker.IsCollisionFree(start, trial) && meshChecker.IsCollisionFree(rrtGoal, trial)
-        && !meshChecker.SegmentCollisionFree(start, rrtGoal, trial, 0.08))
-    {
-        scene = trial;
-        break;
-    }
-}
-if (scene is null) Fail("Could not find collision scene for RRT smoke test");
+var fkRrt = KinematicsResolver.CreateFkSolver(urPreset);
+var midJoints = new JointState(start.Positions.Zip(rrtGoal.Positions, (a, b) => (a + b) * 0.5).ToArray());
+var midTcp = fkRrt.ComputeTcp(midJoints, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var scene = new CollisionScene(new[] { CollisionObject.Sphere("block", midTcp, 0.04) });
+if (!meshChecker.IsCollisionFree(start, scene) || !meshChecker.IsCollisionFree(rrtGoal, scene))
+    Fail("RRT obstacle should not collide with start or goal");
+if (meshChecker.SegmentCollisionFree(start, rrtGoal, scene, 0.08))
+    Fail("RRT obstacle should block the straight joint path");
 var rrtOpts = new PlanningOptions { CollisionScene = scene, MaxJointStepRadians = 0.08, CollisionChecker = meshChecker };
 var rrtResult = new RrtConnectPlanner(meshChecker, new RrtConnectOptions { MaxIterations = 10000, RandomSeed = 11 })
     .Plan(new PlanningRequest(urRobot, start, rrtGoal, rrtOpts));
@@ -141,10 +126,20 @@ if (cancelResult.Success || !cancelResult.Errors.Any(e => e.Contains("cancelled"
     Fail("Expected planning cancelled message");
 Ok("RRT ShouldCancel returns Planning cancelled");
 
-// Preview: FK geometry (Rhino mesh/plane APIs need Rhino runtime)
+// Preview: FK skeleton follows library link origins
 var lines = KinematicsPreview.LinkLines(urRobot, start).ToList();
 if (lines.Count == 0) Fail("No link lines from Preview Robot FK");
-Ok("Preview Robot FK link lines");
+var ur10e = PresetLoader.LoadRobotModelByName("UR10e", resources);
+var ghx = new JointState(new[] { 0.0, -1.2, 1.0, -1.4, -1.5708, 0.0 });
+var fk10 = new DhForwardKinematics(ur10e.Preset);
+var origins = fk10.ComputeLinkOrigins(ghx.Positions, ur10e.Preset.BaseFrame.Frame);
+var previewLines = KinematicsPreview.LinkLines(ur10e, ghx).ToList();
+if (previewLines.Count != origins.Count)
+    Fail($"Preview line count {previewLines.Count} != origin chain {origins.Count}");
+var lastOrigin = origins[^1];
+if (previewLines[^1].To.DistanceTo(new Rhino.Geometry.Point3d(lastOrigin.X, lastOrigin.Y, lastOrigin.Z)) > 1e-4)
+    Fail("Preview last segment should end at final link origin");
+Ok("Preview Robot FK link lines match ComputeLinkOrigins");
 
 // Trajectory segments valid/invalid (uses Point3d only, no Rhino native)
 KinematicsPreview.TrajectorySegments(urRobot, traj, new TrajectoryValidationOptions(), out var valid, out var invalid);
@@ -164,5 +159,80 @@ Ok("UseDegrees=true converts 180° → π rad");
 // Link radii in meters (sanity for viewport scale)
 if (fk.LinkRadiiMeters.Any(r => r <= 0 || r > 0.5)) Fail("Link radii out of expected meter range");
 Ok("Preview geometry uses meter-scale link radii");
+
+// FrameConversion roundtrip (requires Rhino native DLL)
+try
+{
+    var rnd = new Random(7);
+    for (var i = 0; i < 8; i++)
+    {
+        var src = new Frame(rnd.NextDouble() * 0.5, rnd.NextDouble() * 0.5, rnd.NextDouble() * 0.5,
+            0.9, 0.1 * rnd.NextDouble(), 0.2 * rnd.NextDouble(), 0.3 * rnd.NextDouble());
+        var pl = FrameConversion.ToPlane(src);
+        var back = FrameConversion.FromPlane(pl);
+        if (Math.Abs(back.X - src.X) > 1e-4 || Math.Abs(back.Y - src.Y) > 1e-4 || Math.Abs(back.Z - src.Z) > 1e-4)
+            Fail($"Frame roundtrip position drift at sample {i}");
+    }
+    Ok("FrameConversion ToPlane/FromPlane roundtrip within tolerance");
+}
+catch (DllNotFoundException)
+{
+    Ok("FrameConversion roundtrip skipped (Rhino native DLL unavailable in this host)");
+}
+
+// FK parity: KinematicsPreview TCP matches KinematicsResolver
+var resolverFk = KinematicsResolver.CreateFkSolver(urPreset);
+var testJoints = new JointState(new[] { 0.1, -0.5, 0.8, -0.3, -0.4, 0.2 });
+var libTcp = resolverFk.ComputeTcp(testJoints, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var previewFk = KinematicsPreview.TryFk(urRobot)!;
+var previewTcp = previewFk.ComputeTcp(testJoints, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+if (Math.Abs(previewTcp.X - libTcp.X) > 1e-4 || Math.Abs(previewTcp.Y - libTcp.Y) > 1e-4 || Math.Abs(previewTcp.Z - libTcp.Z) > 1e-4)
+    Fail("KinematicsPreview FK diverges from KinematicsResolver");
+Ok("KinematicsPreview FK parity with KinematicsResolver");
+
+// Interpolation smoke: midpoint time between two waypoints
+var twoPt = new Trajectory(urRobot, new[]
+{
+    new TrajectoryPoint(0, start),
+    new TrajectoryPoint(2, goal)
+});
+var midTime = 1.0;
+JointState MidAt(Trajectory tr, double t)
+{
+    var pts = tr.Points;
+    var alpha = (t - pts[0].TimeSeconds) / (pts[1].TimeSeconds - pts[0].TimeSeconds);
+    var q = new double[start.AxisCount];
+    for (var j = 0; j < q.Length; j++)
+        q[j] = pts[0].JointState.Positions[j] + alpha * (pts[1].JointState.Positions[j] - pts[0].JointState.Positions[j]);
+    return new JointState(q);
+}
+var midState = MidAt(twoPt, midTime);
+var midFrame = resolverFk.ComputeTcp(midState, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var endFrame = resolverFk.ComputeTcp(goal, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var startFrame = resolverFk.ComputeTcp(start, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var dStart = Math.Sqrt(Math.Pow(midFrame.X - startFrame.X, 2) + Math.Pow(midFrame.Y - startFrame.Y, 2) + Math.Pow(midFrame.Z - startFrame.Z, 2));
+var dEnd = Math.Sqrt(Math.Pow(midFrame.X - endFrame.X, 2) + Math.Pow(midFrame.Y - endFrame.Y, 2) + Math.Pow(midFrame.Z - endFrame.Z, 2));
+if (dStart < 1e-6 || dEnd < 1e-6)
+    Fail("Interpolated midpoint TCP should lie between endpoints");
+Ok("Trajectory midpoint interpolation produces distinct TCP pose");
+
+// LIN timing: duration should be physically plausible (not frame indices)
+var linStart = new JointState(new[] { 0.0, -0.5, 1.0, -1.0, 0.0, 0.0 });
+var linStartPose = fk.ComputeTcp(linStart, urPreset.BaseFrame, urPreset.ToolFrame);
+var linGoalPose = new CartesianPose(new Frame(
+    linStartPose.Tcp.X + 0.02, linStartPose.Tcp.Y, linStartPose.Tcp.Z,
+    linStartPose.Tcp.Qw, linStartPose.Tcp.Qx, linStartPose.Tcp.Qy, linStartPose.Tcp.Qz));
+var timedLin = new CartesianLinearPathPlanner(urPreset).Plan(linStartPose, linGoalPose, linStart);
+if (timedLin is null) Fail("LIN timing plan returned null");
+if (timedLin!.DurationSeconds < 0.01 || timedLin.DurationSeconds > 60)
+    Fail($"LIN duration implausible: {timedLin.DurationSeconds}s");
+if (timedLin.Points[^1].TimeSeconds < 0.01)
+    Fail("LIN waypoint times should be seconds, not frame indices");
+Ok("Cartesian LIN trajectory has retimed duration in seconds");
+
+// Export includes jointNames when available
+if (urRobot.JointNames is { Count: > 0 } && !json.Contains("jointNames"))
+    Fail("JSON export should include jointNames when robot metadata has them");
+if (urRobot.JointNames is { Count: > 0 }) Ok("Trajectory export includes jointNames metadata");
 
 Console.WriteLine("\nAll automated QA checks passed.");

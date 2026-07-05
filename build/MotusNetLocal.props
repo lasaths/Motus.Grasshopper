@@ -1,0 +1,25 @@
+<Project>
+  <!-- When Motus.NET is a sibling repo, use project references instead of NuGet packages. -->
+  <PropertyGroup>
+    <MotusNetSiblingRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Motus.NET\'))</MotusNetSiblingRoot>
+    <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == '' and Exists('$(MotusNetSiblingRoot)src\Motus.Core\Motus.Core.csproj')">true</UseMotusNetProjectReference>
+    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.3.3-local</MotusNetVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.Rhino'">
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Core\Motus.Core.csproj" />
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Geometry\Motus.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Presets\Motus.Presets.csproj" />
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.OMPL.NET\Motus.OMPL.NET.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'QaSmoke'">
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Core\Motus.Core.csproj" />
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Geometry\Motus.Geometry.csproj" />
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.Presets\Motus.Presets.csproj" />
+    <ProjectReference Include="$(MotusNetSiblingRoot)src\Motus.OMPL.NET\Motus.OMPL.NET.csproj" />
+  </ItemGroup>
+</Project>

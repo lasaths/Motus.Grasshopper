@@ -1,5 +1,7 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
 using Motus.Core;
+using Motus.GH;
 using Motus.GH.Data;
 using Motus.Presets;
 using Motus.Rhino;
@@ -25,7 +27,7 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
         if (!da.GetData(0, ref pt) || !da.GetData(1, ref r)) return;
         da.GetData(2, ref name);
         var frame = new Frame(pt.X, pt.Y, pt.Z);
-        da.SetData(0, CollisionObject.Sphere(name, frame, r));
+        da.SetData(0, new CollisionObjectGoo(CollisionObject.Sphere(name, frame, r)));
     }
     public override Guid ComponentGuid => new Guid("c1a2b3c4-d5e6-4789-a012-3456789abcde");
 }
@@ -49,7 +51,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
         var name = "box";
         if (!da.GetData(0, ref pl) || !da.GetData(1, ref hx) || !da.GetData(2, ref hy) || !da.GetData(3, ref hz)) return;
         da.GetData(4, ref name);
-        da.SetData(0, CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz));
+        da.SetData(0, new CollisionObjectGoo(CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz)));
     }
     public override Guid ComponentGuid => new Guid("d2b3c4d5-e6f7-4890-b123-456789abcdef");
 }
@@ -66,12 +68,12 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
     protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "Sc", "Collision scene", GH_ParamAccess.item);
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        var raw = new List<object>();
-        if (!da.GetDataList(0, raw)) return;
+        var goos = new List<IGH_Goo>();
+        if (!da.GetDataList(0, goos)) return;
         var objects = new List<CollisionObject>();
-        foreach (var o in raw)
+        foreach (var goo in goos)
         {
-            if (o is CollisionObject co) objects.Add(co);
+            if (GhExtract.TryCollisionObject(goo, out var co)) objects.Add(co);
             else AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Skipped non-collision input.");
         }
         var scene = new CollisionScene(objects);

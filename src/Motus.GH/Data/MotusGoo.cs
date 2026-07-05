@@ -1,4 +1,5 @@
 using Motus.Core;
+using Motus.Geometry;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
 
@@ -14,13 +15,6 @@ public abstract class MotusGooBase<T> : GH_Goo<T> where T : class
     public override IGH_Goo Duplicate() => MemberwiseClone() as IGH_Goo ?? this;
 }
 
-public sealed class RobotModelGoo : MotusGooBase<RobotModel>
-{
-    public RobotModelGoo() { }
-    public RobotModelGoo(RobotModel m) : base(m) { }
-    public override string ToString() => Value?.DisplayName ?? "RobotModel";
-}
-
 public sealed class JointStateGoo : MotusGooBase<JointState>
 {
     public JointStateGoo() { }
@@ -30,9 +24,30 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
 
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
+    public SerialJointChain? Chain { get; set; }
+    public Frame? BaseFrameOverride { get; set; }
+    public Frame? ToolFrameOverride { get; set; }
+
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
+
+    public RobotContext Context() =>
+        new(
+            Value!.Robot,
+            Chain,
+            BaseFrameOverride is { } bf ? new BaseFrame(bf) : Value.Robot.Preset.BaseFrame,
+            ToolFrameOverride is { } tf
+                ? new ToolFrame(tf, Value.Robot.Preset.ToolFrame.Name)
+                : Value.Robot.Preset.ToolFrame);
+
     public override string ToString() => $"Trajectory ({Value?.Points.Count} pts)";
+}
+
+public sealed class CollisionObjectGoo : MotusGooBase<CollisionObject>
+{
+    public CollisionObjectGoo() { }
+    public CollisionObjectGoo(CollisionObject obj) : base(obj) { }
+    public override string ToString() => Value?.Name ?? "CollisionObject";
 }
 
 public sealed class CollisionSceneGoo : MotusGooBase<CollisionScene>

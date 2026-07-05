@@ -1,19 +1,19 @@
 <Project>
   <PropertyGroup>
-    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.3.2</MotusNetVersion>
+    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.3.3</MotusNetVersion>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.Rhino'">
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.Rhino'">
     <PackageReference Include="Motus.Core" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Motus.GH'">
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
     <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'QaSmoke'">
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'QaSmoke'">
     <PackageReference Include="Motus.Core" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
