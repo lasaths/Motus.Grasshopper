@@ -41,6 +41,30 @@ static string FindExampleUrdf(string relativePath)
     return FindUpward(relativePath, File.Exists);
 }
 
+static (List<double[]> vertices, List<int> indices) ReadBinaryStl(string path)
+{
+    var bytes = File.ReadAllBytes(path);
+    if (bytes.Length < 84) return (new List<double[]>(), new List<int>());
+    var triCount = BitConverter.ToUInt32(bytes, 80);
+    var vertices = new List<double[]>((int)triCount * 3);
+    var indices = new List<int>((int)triCount * 3);
+    var offset = 84;
+    for (var i = 0; i < triCount && offset + 50 <= bytes.Length; i++)
+    {
+        offset += 12;
+        for (var v = 0; v < 3; v++)
+        {
+            var x = BitConverter.ToSingle(bytes, offset); offset += 4;
+            var y = BitConverter.ToSingle(bytes, offset); offset += 4;
+            var z = BitConverter.ToSingle(bytes, offset); offset += 4;
+            vertices.Add(new[] { (double)x, (double)y, (double)z });
+            indices.Add(vertices.Count - 1);
+        }
+        offset += 2;
+    }
+    return (vertices, indices);
+}
+
 Console.WriteLine("Motus QA smoke tests");
 Console.WriteLine($"Resources: {resources}");
 
@@ -79,6 +103,11 @@ var ur10eFullPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e.urd
 var ur10eFull = UrdfRobotLoader.Load(ur10eFullPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "UR10e" });
 if (ur10eFull.ToModel().Preset.AxisCount != 6) Fail("UR10e full URDF should have 6 axes");
 Ok("URDF load (ur10e) produces robot model");
+
+var ur10eRobotiqPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e_robotiq.urdf"));
+var ur10eRobotiq = UrdfRobotLoader.Load(ur10eRobotiqPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "UR10e" });
+if (ur10eRobotiq.ToModel().Preset.AxisCount != 6) Fail("UR10e+Robotiq URDF should have 6 axes");
+Ok("URDF load (ur10e_robotiq) produces robot model");
 
 var kr210Path = FindExampleUrdf(Path.Combine("examples", "kr210_r3100_ultra", "kr210_r3100_ultra_minimal.urdf"));
 var kr210 = UrdfRobotLoader.Load(kr210Path, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "KR 210 R3100 ultra" });
@@ -227,14 +256,12 @@ if (cancelResult.Success || !cancelResult.Errors.Any(e => e.Contains("cancelled"
     Fail("Expected planning cancelled message");
 Ok("RRT ShouldCancel returns Planning cancelled");
 
-// Preview: FK skeleton follows library link origins
-var lines = KinematicsPreview.LinkLines(urRobot, start).ToList();
-if (lines.Count == 0) Fail("No link lines from Preview Robot FK");
-var ur10e = PresetLoader.LoadRobotModelByName("UR10e", resources);
+// Preview: FK skeleton follows library link origins (UR5e — flange TCP; UR10e has bundled gripper offset)
+var ur5ePreview = PresetLoader.LoadRobotModelByName("UR5e", resources);
 var ghx = new JointState(new[] { 0.0, -1.2, 1.0, -1.4, -1.5708, 0.0 });
-var fk10 = new DhForwardKinematics(ur10e.Preset);
-var origins = fk10.ComputeLinkOrigins(ghx.Positions, ur10e.Preset.BaseFrame.Frame);
-var previewLines = KinematicsPreview.LinkLines(ur10e, ghx).ToList();
+var fk5 = new DhForwardKinematics(ur5ePreview.Preset);
+var origins = fk5.ComputeLinkOrigins(ghx.Positions, ur5ePreview.Preset.BaseFrame.Frame);
+var previewLines = KinematicsPreview.LinkLines(ur5ePreview, ghx).ToList();
 if (previewLines.Count != origins.Count)
     Fail($"Preview line count {previewLines.Count} != origin chain {origins.Count}");
 var lastOrigin = origins[^1];
@@ -436,5 +463,46 @@ var fpMeshB = PlanInputFingerprint.Compute(urRobot, null, null, fpGoals, start,
     PlanningContext.Create(urRobot, new CollisionScene(new[] { meshB })));
 if (fpMeshA == fpMeshB) Fail("Mesh geometry edit should change fingerprint");
 Ok("Plan input fingerprint is stable and sensitive to edits");
+
+// Tool definition: TCP offset + collision parity + export metadata
+var customTool = new ToolDefinition(
+    "gripper",
+    new Frame(0, 0, 0.1, 1, 0, 0, 0),
+    CollisionObject.Box("gripper", Frame.Identity, 0.02, 0.02, 0.03));
+var sessionRobot = urRobot.WithTool(customTool);
+var fkSession = KinematicsResolver.CreateFkSolver(sessionRobot.Preset);
+var home = new JointState(new double[] { 0, -Math.PI / 2, Math.PI / 2, 0, Math.PI / 2, 0 });
+var presetTcp = motionFk.ComputeTcp(home, urPreset.BaseFrame, urPreset.ToolFrame).Tcp;
+var sessionTcp = fkSession.ComputeTcp(home, sessionRobot.Preset.BaseFrame, sessionRobot.Preset.ToolFrame).Tcp;
+var tcpDist = Math.Sqrt(
+    Math.Pow(sessionTcp.X - presetTcp.X, 2) +
+    Math.Pow(sessionTcp.Y - presetTcp.Y, 2) +
+    Math.Pow(sessionTcp.Z - presetTcp.Z, 2));
+if (tcpDist < 0.05) Fail("WithTool should offset TCP from flange preset");
+var toolObstacle = CollisionObject.Sphere("obs", sessionTcp, 0.015);
+var toolScene = new CollisionScene(new[] { toolObstacle });
+var toolChecker = CollisionCheckerFactory.Create(sessionRobot);
+if (toolChecker.IsCollisionFree(home, toolScene)) Fail("Session tool TCP should place gripper into obstacle sphere");
+var toolTraj = new Trajectory(sessionRobot, new[] { new TrajectoryPoint(0, home) });
+var toolJson = TrajectoryExport.ToJson(toolTraj, new TrajectoryExportOptions { SessionToolFrame = sessionRobot.Preset.ToolFrame });
+if (!toolJson.Contains("\"toolFrame\"") || !toolJson.Contains("gripper")) Fail("Export should include session toolFrame");
+var fpToolA = PlanInputFingerprint.Compute(urRobot, null, customTool, fpGoals, start, fpCtx);
+var fpToolB = PlanInputFingerprint.Compute(urRobot, null, customTool, fpGoals, start, fpCtx);
+if (fpToolA != fpToolB) Fail("Tool fingerprint should be stable");
+var fpToolChanged = PlanInputFingerprint.Compute(urRobot, null,
+    new ToolDefinition("other", new Frame(0, 0, 0.11, 1, 0, 0, 0)), fpGoals, start, fpCtx);
+if (fpToolA == fpToolChanged) Fail("Tool TCP change should change fingerprint");
+Ok("Tool definition offsets TCP, collision, export, and fingerprint");
+
+var robotiqStl = FindExampleUrdf(Path.Combine("resources", "tools", "robotiq_2f85_tcp_local.stl"));
+var (robotiqVerts, robotiqIndices) = ReadBinaryStl(robotiqStl);
+if (robotiqVerts.Count < 300 || robotiqIndices.Count < 300) Fail("Robotiq merged STL should have substantial triangle count");
+var robotiqGeom = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, robotiqVerts, robotiqIndices);
+var robotiqTcp = new Frame(0, 0, 0.1633, 0.7071067811865476, 0, 0.7071067811865476, 0);
+var robotiqTool = new ToolDefinition("robotiq_2f85", robotiqTcp, robotiqGeom);
+var robotiqSession = urRobot.WithTool(robotiqTool);
+if (robotiqSession.CollisionModel?.ToolGeometry?.MeshVertices is not { Count: > 0 })
+    Fail("Robotiq tool mesh should merge into session collision model");
+Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
 
 Console.WriteLine("\nAll automated QA checks passed.");

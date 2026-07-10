@@ -8,7 +8,7 @@ A single component handles all preview, with a built-in **Play / Stop** button f
 
 | Output | Geometry |
 |--------|----------|
-| Meshes | URDF visual geometry when available; otherwise simplified link meshes |
+| Meshes | URDF/tool triangle meshes only (no link-axis fallback) |
 | Links | FK link lines at the current frame |
 | TCP Path | TCP polyline along the whole trajectory |
 | State / Time / Index | Joint state, elapsed time, waypoint index at the playhead |
@@ -20,7 +20,8 @@ Click **Play** to animate; the frame outputs (`Meshes`, `Links`, `State`, `Time`
 
 ## Frames and units
 
-- Base and tool frames come from the robot preset.
+- Base frame from the robot preset or optional `Base` on **Motus Robot**. Tool from preset, or **Motus Tool** wired to `Robot.Tool`.
+- Trajectory preview/export uses the **tool snapshot** stored at plan time when present.
 - Keep Rhino document units in **meters**.
 - For production visualization, export trajectory data to VirtualRobot or Robots.
 

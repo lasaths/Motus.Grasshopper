@@ -19,7 +19,7 @@
       <chunks count="6">
         <chunk name="DocumentHeader">
           <items count="5">
-                        <item name="DocumentID" type_name="gh_guid" type_code="9">e22fcae5-9019-4992-a9f3-c1620e0965f1</item>
+                        <item name="DocumentID" type_name="gh_guid" type_code="9">5776892f-b4eb-4820-9331-37ee46b617c2</item>
                         <item name="Preview" type_name="gh_string" type_code="10">Shaded</item>
                         <item name="PreviewMeshType" type_name="gh_int32" type_code="3">1</item>
                         <item name="PreviewNormal" type_name="gh_drawing_color" type_code="36">
@@ -32,7 +32,7 @@
         </chunk>
         <chunk name="DefinitionProperties">
           <items count="4">
-                        <item name="Date" type_name="gh_date" type_code="8">639192331018030000</item>
+                        <item name="Date" type_name="gh_date" type_code="8">639192899045440000</item>
                         <item name="Description" type_name="gh_string" type_code="10">Cartesian TCP LIN: Joint State -> TCP Pose (FK plane) -> Plan. Click Plan, then Play on Preview.</item>
                         <item name="KeepOpen" type_name="gh_bool" type_code="1">true</item>
                         <item name="Name" type_name="gh_string" type_code="10">02_cartesian_planning.ghx</item>
@@ -94,7 +94,7 @@
                 <chunk name="Container">
                   <items count="4">
                                 <item name="Description" type_name="gh_string" type_code="10">Motus Robot</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">2ec60b7b-8adf-4f56-b44f-d9043c9c9dea</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">a7ac167c-fc98-4c6b-bbdc-b219b118be8f</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Motus Robot</item>
                                 <item name="NickName" type_name="gh_string" type_code="10">Robot</item>
                   </items>
@@ -117,11 +117,11 @@
                       <items count="7">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Preset model name (UR5e, KR 6 R900, …)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">f8bf6e54-0ba0-4d70-af82-bf357f8f8b14</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">853c6ed1-305d-4fa7-b68a-f21cf0d4c208</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Model</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">M</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">50752f6b-52bb-4607-8d7a-1ac5a5a04d39</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">a51f83a6-7e44-46f1-b85a-f5b99eecad98</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -145,7 +145,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Path to a preset JSON (overrides Model when set)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">03dc8644-311d-4d77-a5ab-6a306bc1cfd5</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">df26bc18-11cb-4d3a-b367-ae6dfb7a5160</item>
                                     <item name="Name" type_name="gh_string" type_code="10">JsonPath</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">J</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -173,7 +173,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Optional base frame override (TCP goals are in this frame)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">b7fc78ef-1fff-4c25-8ec6-be45b5cb14f6</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">96fd885f-1799-46e2-b761-1fb9599d8371</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Base</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">B</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -200,8 +200,8 @@
                     <chunk name="param_input" index="3">
                       <items count="6">
                         
-                                    <item name="Description" type_name="gh_string" type_code="10">Optional tool TCP frame override</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">76a1442b-dc84-42fc-af59-b36c337c5e0e</item>
+                                    <item name="Description" type_name="gh_string" type_code="10">Optional Motus Tool definition</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">b1db8d12-1994-4bc9-a89e-4e2e93f74b6b</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Tool</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">T</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -229,7 +229,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Robot model</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">d9bada79-b695-4119-bbbb-2906bb5f26c3</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">c889181a-4344-485a-8b14-200917963001</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Robot</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Rb</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -265,7 +265,7 @@
                 <chunk name="Container">
                   <items count="8">
                                 <item name="Description" type_name="gh_string" type_code="10">Provides a list of preset values to choose from</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">50752f6b-52bb-4607-8d7a-1ac5a5a04d39</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">a51f83a6-7e44-46f1-b85a-f5b99eecad98</item>
                                 <item name="ListCount" type_name="gh_int32" type_code="3">14</item>
                                 <item name="ListMode" type_name="gh_int32" type_code="3">1</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Value List</item>
@@ -334,7 +334,7 @@
                       <items count="3">
                                     <item name="Expression" type_name="gh_string" type_code="10">"UR10e"</item>
                                     <item name="Name" type_name="gh_string" type_code="10">UR10e</item>
-                                    <item name="Selected" type_name="gh_bool" type_code="1">false</item>
+                                    <item name="Selected" type_name="gh_bool" type_code="1">true</item>
                       </items>
                     </chunk>
                     <chunk name="ListItem" index="9">
@@ -369,7 +369,7 @@
                       <items count="3">
                                     <item name="Expression" type_name="gh_string" type_code="10">"UR5e"</item>
                                     <item name="Name" type_name="gh_string" type_code="10">UR5e</item>
-                                    <item name="Selected" type_name="gh_bool" type_code="1">true</item>
+                                    <item name="Selected" type_name="gh_bool" type_code="1">false</item>
                       </items>
                     </chunk>
                     <chunk name="Attributes">
@@ -400,7 +400,7 @@
                 <chunk name="Container">
                   <items count="4">
                                 <item name="Description" type_name="gh_string" type_code="10">Motus Joint State</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">0b0b9da7-e564-4d85-9a40-d69a09052a62</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">578c1694-9586-4c23-a0fb-acc30a243e87</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Motus Joint State</item>
                                 <item name="NickName" type_name="gh_string" type_code="10">Joints</item>
                   </items>
@@ -423,7 +423,7 @@
                       <items count="7">
                                     <item name="Access" type_name="gh_int32" type_code="3">1</item>
                                     <item name="Description" type_name="gh_string" type_code="10">Joint angles (right-click J input to toggle °)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">fef22d82-868b-4a02-90a2-4f610759eda7</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">44deb4d4-d89c-4f5e-b36b-24169c9e1557</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Joints</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">J</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -502,7 +502,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Joint state</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">85971724-a9ce-4676-9fae-9952511707d2</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">8d7d5a9e-3046-466f-849d-dc3ca8203561</item>
                                     <item name="Name" type_name="gh_string" type_code="10">State</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">S</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -539,7 +539,7 @@
                 <chunk name="Container">
                   <items count="4">
                                 <item name="Description" type_name="gh_string" type_code="10">Motus TCP Pose</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">042899b3-d52d-408b-84e2-fc80467bdade</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">d37853d6-5249-4fb9-843a-15a1b760c452</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Motus TCP Pose</item>
                                 <item name="NickName" type_name="gh_string" type_code="10">TCP</item>
                   </items>
@@ -562,11 +562,11 @@
                       <items count="7">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Robot model</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">e6015aee-e347-496f-b7ce-94f1afa0f3e7</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">6704ad46-1e5c-4c2c-9a56-9919d653b811</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Robot</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Rb</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">d9bada79-b695-4119-bbbb-2906bb5f26c3</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">c889181a-4344-485a-8b14-200917963001</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -590,11 +590,11 @@
                       <items count="7">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Joint state</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">5cf663b9-6ac6-4224-97ac-bcbc01cd05fd</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">16f25da2-5664-419d-85a2-0727a4265ea9</item>
                                     <item name="Name" type_name="gh_string" type_code="10">State</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">S</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">85971724-a9ce-4676-9fae-9952511707d2</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">8d7d5a9e-3046-466f-849d-dc3ca8203561</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -618,7 +618,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">TCP pose in robot base frame (position + orientation)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">f4b9f539-2aa1-474a-bcbc-068e1d3de0f8</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">51e9df62-b843-40ca-85a7-400797d91b23</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Plane</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">P</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -655,7 +655,7 @@
                 <chunk name="Container">
                   <items count="4">
                                 <item name="Description" type_name="gh_string" type_code="10">Plan to plane/joint goal; optional Collision, Group, and Attach inputs (click Plan)</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">3c1c72b4-e8ee-479a-a78d-18b5906a62a3</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">c74fb875-1d3d-4ac4-bbd6-fba68ac58884</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Motus Plan</item>
                                 <item name="NickName" type_name="gh_string" type_code="10">Plan</item>
                   </items>
@@ -678,11 +678,11 @@
                       <items count="7">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Robot model</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">6ffe5e16-030d-4635-b4e4-c82a28205806</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">b19a0bbe-511a-41ea-a9f7-0efb49a3ced3</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Robot</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Rb</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">d9bada79-b695-4119-bbbb-2906bb5f26c3</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">c889181a-4344-485a-8b14-200917963001</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -706,11 +706,11 @@
                       <items count="8">
                                     <item name="Access" type_name="gh_int32" type_code="3">1</item>
                                     <item name="Description" type_name="gh_string" type_code="10">Targets as Planes (TCP LIN) or Joint States</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">5fa7a5ba-88b3-498c-b5ba-84b444a5d206</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">5da5963f-0819-484d-b641-7461b75ac24b</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Goal</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">G</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">f4b9f539-2aa1-474a-bcbc-068e1d3de0f8</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">51e9df62-b843-40ca-85a7-400797d91b23</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -734,7 +734,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Optional start joint state (defaults to home)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">b860f504-9dde-45bf-8d6d-a80cdc1ecadf</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">a7027adf-d67c-43b1-b612-00f5db368775</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Start</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">S</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -762,7 +762,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Collision scene; when wired, joint goals plan with RRT-Connect</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">637c703f-ee45-475e-8a76-e60e07720c9c</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">af582e9d-5ed6-42f5-b1b7-4f0469364bec</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Collision</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">C</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -790,7 +790,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Optional planning group (locks non-group joints)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">3661844a-84aa-4aa5-90df-71594bee932f</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">3f8ddd66-5da8-424e-b4be-4501c2fc3058</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Group</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Gr</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -818,7 +818,7 @@
                       <items count="7">
                                     <item name="Access" type_name="gh_int32" type_code="3">1</item>
                                     <item name="Description" type_name="gh_string" type_code="10">Attached bodies for collision checks</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">62bb2265-3af4-461b-8ab0-c4e23be11eda</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">00fc374a-b872-45f0-97d8-88c4e4980395</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Attach</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">A</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -846,7 +846,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Planned trajectories</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">af366f89-92b9-431e-9b59-42ba3729b0c4</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">45e28207-e995-4c61-a89e-dfdb586b8ed2</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Trajectory</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">T</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -873,7 +873,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Planning status</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">bbcf2684-81e8-4f9c-aacf-a3e4686f2579</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">02950443-e0e3-4e12-aa79-2354b855b110</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Status</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">St</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -900,7 +900,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Capability / validation warnings</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">7ce43162-27a3-4983-82b2-2a8488fa6bbe</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">bb6ca5b9-f91c-47bb-8930-ab41bae76dbd</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Warnings</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">W</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -937,7 +937,7 @@
                 <chunk name="Container">
                   <items count="4">
                                 <item name="Description" type_name="gh_string" type_code="10">Motus Preview</item>
-                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">247e6886-476f-483f-afe2-f0edcf8ec4a7</item>
+                                <item name="InstanceGuid" type_name="gh_guid" type_code="9">a32d8a9b-ced8-43e1-8b9f-c30d3661ab32</item>
                                 <item name="Name" type_name="gh_string" type_code="10">Motus Preview</item>
                                 <item name="NickName" type_name="gh_string" type_code="10">Preview</item>
                   </items>
@@ -960,11 +960,11 @@
                       <items count="7">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Motus trajectory from Motus Plan</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">292c6c08-d10f-462f-a9f1-6d9e84ca3b80</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">2f8c50fb-ae07-4a28-a873-a508b4c7201f</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Trajectory</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">T</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">af366f89-92b9-431e-9b59-42ba3729b0c4</item>
+                                                <item name="Source" index="0" type_name="gh_guid" type_code="9">45e28207-e995-4c61-a89e-dfdb586b8ed2</item>
                                     <item name="SourceCount" type_name="gh_int32" type_code="3">1</item>
                       </items>
                       <chunks count="1">
@@ -988,7 +988,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Also preview the trajectory start pose as a ghost</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">4dd8887e-92b0-4fbf-9228-fc8e00467309</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">23d15bf2-7fac-4bd7-9e76-9d1693c39638</item>
                                     <item name="Name" type_name="gh_string" type_code="10">ShowStart</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">S</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1036,7 +1036,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Optional robot/context override for external trajectories</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">7b49ac28-c866-4a4b-84c2-3a75b4efaac9</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">36761d08-282a-44f5-9209-fedf9d266100</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Robot</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Rb</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">true</item>
@@ -1064,7 +1064,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Link meshes at the current frame</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">d5758812-8344-4292-999f-5db6efeae479</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">30bbc29f-bc91-4756-93bd-05616fc87900</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Meshes</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">M</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1091,7 +1091,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Link lines at the current frame</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">36f19db8-0559-4022-ad75-dd5308bd58d2</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">01ae9abb-20bd-4aa1-91e2-8b5406265776</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Links</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">L</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1118,7 +1118,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Full TCP polyline via FK</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">93f5a897-5f8b-49f3-92b2-5f34c668d98a</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">1960320b-571b-4c23-8eff-c9a791423e7e</item>
                                     <item name="Name" type_name="gh_string" type_code="10">TCP Path</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">P</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1145,7 +1145,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Joint state at the current frame</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">004875f0-bfe1-4def-a8cb-300317607b03</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">109dd5f6-c973-4321-b690-e7bd1ae3da2a</item>
                                     <item name="Name" type_name="gh_string" type_code="10">State</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">S</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1172,7 +1172,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Elapsed trajectory time at current frame (seconds)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">00752dc6-4105-425e-b3ed-fbc97fd4a342</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">2a1d51f2-c08b-4cd2-8137-94b61ac937f7</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Time</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">Tm</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1199,7 +1199,7 @@
                       <items count="6">
                         
                                     <item name="Description" type_name="gh_string" type_code="10">Current waypoint index (0-based)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">212b2685-c744-4918-b13a-4965cc588e21</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">acf70876-126f-4509-be7f-bbc8a008c63e</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Index</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">I</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>
@@ -1226,7 +1226,7 @@
                       <items count="7">
                                     <item name="Access" type_name="gh_int32" type_code="3">1</item>
                                     <item name="Description" type_name="gh_string" type_code="10">Invalid TCP segments (joint/velocity/acceleration limits)</item>
-                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">a659e8fd-33bc-4725-940e-c978d6ea4d56</item>
+                                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">912d0180-59f5-4397-8c2a-52f026ed26e1</item>
                                     <item name="Name" type_name="gh_string" type_code="10">Invalid</item>
                                     <item name="NickName" type_name="gh_string" type_code="10">X</item>
                                     <item name="Optional" type_name="gh_bool" type_code="1">false</item>

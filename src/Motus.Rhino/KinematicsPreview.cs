@@ -42,19 +42,8 @@ public static class KinematicsPreview
         RobotModel robot, JointState state, RobotCollisionModel? geometryOverride,
         SerialJointChain? chain = null, BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        if (geometryOverride?.Links.Count > 0)
-        {
-            foreach (var mesh in LinkGeometryMeshes(robot, state, geometryOverride, chain, baseFrame, toolFrame))
-                yield return mesh;
-            if (NeedsAxisLinkMeshes(geometryOverride))
-            {
-                foreach (var mesh in AxisLinkMeshes(robot, state, geometryOverride, chain, baseFrame, toolFrame))
-                    yield return mesh;
-            }
-            yield break;
-        }
-
-        foreach (var mesh in LinkMeshes(robot, state, chain, baseFrame, toolFrame))
+        if (geometryOverride is null) yield break;
+        foreach (var mesh in LinkGeometryMeshes(robot, state, geometryOverride, chain, baseFrame, toolFrame))
             yield return mesh;
     }
 
@@ -62,89 +51,8 @@ public static class KinematicsPreview
         RobotModel robot, JointState state, SerialJointChain? chain = null,
         BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
     {
-        if (TryFk(robot, chain) is not { } fk) yield break;
-
-        var baseF = baseFrame ?? robot.Preset.BaseFrame;
-        var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
-        var radii = fk.LinkRadiiMeters;
-
-        var prev = ToPoint(baseF.Frame);
-        for (var i = 0; i < origins.Count; i++)
-        {
-            var pt = ToPoint(origins[i]);
-            var mesh = CylinderMesh(prev, pt, radii[i] * 0.45);
-            if (mesh is not null) yield return mesh;
-            prev = pt;
-        }
-
-        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
-        if (prev.DistanceTo(tcp) > 1e-6)
-        {
-            var toolMesh = CylinderMesh(prev, tcp, radii[^1] * 0.35);
-            if (toolMesh is not null) yield return toolMesh;
-        }
-
-        for (var i = 0; i < origins.Count; i++)
-        {
-            var plane = FrameConversion.ToPlane(origins[i]);
-            var jointMesh = BarrelMesh(plane.Origin, plane.ZAxis, radii[i], radii[i] * 1.6);
-            if (jointMesh is not null) yield return jointMesh;
-        }
-    }
-
-    private static bool NeedsAxisLinkMeshes(RobotCollisionModel geometry) =>
-        geometry.Links.All(l => l.LocalGeometry.Shape != CollisionShape.Mesh);
-
-    private static IEnumerable<Mesh> AxisLinkMeshes(
-        RobotModel robot,
-        JointState state,
-        RobotCollisionModel geometry,
-        SerialJointChain? chain,
-        BaseFrame? baseFrame,
-        ToolFrame? toolFrame)
-    {
-        if (TryFk(robot, chain) is not { } fk) yield break;
-
-        var baseF = baseFrame ?? robot.Preset.BaseFrame;
-        var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
-        var radii = fk.LinkRadiiMeters;
-
-        var prev = ToPoint(baseF.Frame);
-        for (var i = 0; i < origins.Count; i++)
-        {
-            var pt = ToPoint(origins[i]);
-            var radius = LinkRadius(geometry, i, radii);
-            var mesh = CylinderMesh(prev, pt, radius);
-            if (mesh is not null) yield return mesh;
-            prev = pt;
-        }
-
-        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
-        if (prev.DistanceTo(tcp) > 1e-6)
-        {
-            var toolRadius = geometry.ToolGeometry?.ExtentX
-                ?? (origins.Count > 0 ? LinkRadius(geometry, origins.Count - 1, radii) : 0.04);
-            var toolMesh = CylinderMesh(prev, tcp, toolRadius * 0.85);
-            if (toolMesh is not null) yield return toolMesh;
-        }
-    }
-
-    private static double LinkRadius(RobotCollisionModel geometry, int linkIndex, IReadOnlyList<double> fallbackRadii)
-    {
-        foreach (var link in geometry.Links)
-        {
-            if (link.LinkIndex != linkIndex) continue;
-            return link.LocalGeometry.Shape switch
-            {
-                CollisionShape.Sphere => link.LocalGeometry.ExtentX,
-                CollisionShape.Capsule => link.LocalGeometry.ExtentX,
-                CollisionShape.Box => Math.Max(link.LocalGeometry.ExtentX, Math.Max(link.LocalGeometry.ExtentY, link.LocalGeometry.ExtentZ)),
-                _ => fallbackRadii[linkIndex]
-            };
-        }
-        return linkIndex < fallbackRadii.Count ? fallbackRadii[linkIndex] * 0.45 : 0.04;
+        foreach (var mesh in LinkMeshes(robot, state, robot.CollisionModel, chain, baseFrame, toolFrame))
+            yield return mesh;
     }
 
     private static IEnumerable<Mesh> LinkGeometryMeshes(
@@ -164,6 +72,7 @@ public static class KinematicsPreview
         foreach (var link in geometry.Links)
         {
             if (link.LinkIndex < 0 || link.LinkIndex >= linkTransforms.Count) continue;
+            if (link.LocalGeometry.Shape != CollisionShape.Mesh) continue;
             var world = TransformCollision(link.LocalGeometry, Transforms.Multiply(baseM, linkTransforms[link.LinkIndex]));
             if (ToRhinoMesh(world) is { } mesh) yield return mesh;
         }
@@ -238,13 +147,6 @@ public static class KinematicsPreview
         dir.Unitize();
         var plane = new Plane(from, dir);
         return Mesh.CreateFromCylinder(new Cylinder(new Circle(plane, radius), length), 12, 1);
-    }
-
-    private static Mesh? BarrelMesh(Point3d center, Vector3d axis, double radius, double halfLength)
-    {
-        if (radius <= 0 || halfLength <= 0 || !axis.Unitize()) return null;
-        var basePlane = new Plane(center - axis * halfLength, axis);
-        return Mesh.CreateFromCylinder(new Cylinder(new Circle(basePlane, radius), halfLength * 2), 16, 1);
     }
 
     private static CollisionObject TransformCollision(CollisionObject local, double[] linkWorldMatrix)

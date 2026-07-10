@@ -108,9 +108,9 @@ public sealed class MotusPlanComponent : MotusComponentBase
         new(trajectory)
         {
             Chain = robotGoo.Chain,
-            PreviewGeometry = robotGoo.PreviewGeometry,
+            PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             BaseFrameOverride = robotGoo.BaseFrameOverride,
-            ToolFrameOverride = robotGoo.ToolFrameOverride
+            ToolSnapshot = robotGoo.Tool
         };
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -143,11 +143,11 @@ public sealed class MotusPlanComponent : MotusComponentBase
             linStep = stepInput;
         }
 
-        var planningContext = GhExtract.BuildPlanningContext(ctx.Model, da, 4, 5, 6);
+        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 4, 5, 6);
         var fingerprint = PlanInputFingerprint.Compute(
             ctx.Model,
             robotGoo.BaseFrameOverride,
-            robotGoo.ToolFrameOverride,
+            robotGoo.Tool,
             goals,
             start,
             planningContext,
@@ -231,7 +231,7 @@ public sealed class MotusPlanComponent : MotusComponentBase
                 : (planningContext.Scene.Objects.Count > 0 || planningContext.Attached.Count > 0)
                     ? PlanRrt(ctx, planningContext, start, goal.joints!)
                     : new JointLinearPlanner().Plan(new PlanningRequest(
-                        ctx.Model,
+                        ctx.EffectiveModel,
                         start,
                         goal.joints!,
                         planningContext.ToPlanningOptions(new PlanningOptions { MaxJointStepRadians = MaxJointStep })));
@@ -256,18 +256,19 @@ public sealed class MotusPlanComponent : MotusComponentBase
         Plane plane,
         double linStepMeters)
     {
+        var session = ctx.EffectiveModel;
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
-        if (!KinematicsResolver.SupportsModel(ctx.Model.Preset, ctx.Chain))
+        if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
         {
             return PlanningResult.Failed(new[]
             {
-                $"No kinematics profile for '{ctx.Model.Preset.ModelName}'."
+                $"No kinematics profile for '{session.Preset.ModelName}'."
             });
         }
 
-        var fk = KinematicsResolver.CreateFkSolver(ctx.Model.Preset, ctx.Chain);
+        var fk = KinematicsResolver.CreateFkSolver(session.Preset, ctx.Chain);
         var startPose = fk.ComputeTcp(start, ctx.Base, ctx.Tool);
-        var workspace = CartesianWorkspace.CheckReach(ctx.Model.Preset, goal, startPose);
+        var workspace = CartesianWorkspace.CheckReach(session.Preset, goal, startPose);
         if (!workspace.IsWithinReach)
         {
             return PlanningResult.Failed(new[]
@@ -276,9 +277,9 @@ public sealed class MotusPlanComponent : MotusComponentBase
             });
         }
 
-        var seeds = CartesianGoalSolver.EnumerateDefaultSeeds(start, ctx.Model)
-            .Prepend(HomePoseLookup.HomeOrZeros(ctx.Model));
-        var reach = new CartesianGoalSolver().TryReach(ctx.Model, goal, seeds, ctx.Chain);
+        var seeds = CartesianGoalSolver.EnumerateDefaultSeeds(start, session)
+            .Prepend(HomePoseLookup.HomeOrZeros(session));
+        var reach = new CartesianGoalSolver().TryReach(session, goal, seeds, ctx.Chain);
         if (!reach.Success)
         {
             return PlanningResult.Failed(reach.Errors.Concat(new[]
@@ -290,20 +291,20 @@ public sealed class MotusPlanComponent : MotusComponentBase
         var goalJoints = reach.Solution!;
         var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
         ICollisionChecker? checker = needsCollision
-            ? GhExtract.TryCollisionChecker(ctx.Model, ctx.Chain, planningContext.Scene, planningContext.Attached)
+            ? GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached)
             : null;
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
             CollisionChecker = checker
         });
-        var req = new CartesianPlanningRequest(ctx.Model, start, goal, opts, planningContext.Scene);
+        var req = new CartesianPlanningRequest(session, start, goal, opts, planningContext.Scene);
         var linOptions = new CartesianLinOptions(StepMeters: linStepMeters);
 
-        var linResult = new CartesianLinearPathPlanner(ctx.Model.Preset, ctx.Chain).PlanToResult(req, linOptions);
+        var linResult = new CartesianLinearPathPlanner(session.Preset, ctx.Chain).PlanToResult(req, linOptions);
         if (linResult.Success) return linResult;
 
-        var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(ctx.Model, start, goalJoints, opts));
+        var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(session, start, goalJoints, opts));
         if (!jointResult.Success)
         {
             return PlanningResult.Failed(linResult.Errors
@@ -321,7 +322,8 @@ public sealed class MotusPlanComponent : MotusComponentBase
 
     private PlanningResult PlanRrt(RobotContext ctx, PlanningContext planningContext, JointState start, JointState goal)
     {
-        var checker = GhExtract.TryCollisionChecker(ctx.Model, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        var session = ctx.EffectiveModel;
+        var checker = GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached);
         if (checker is null)
             return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
 
@@ -333,7 +335,7 @@ public sealed class MotusPlanComponent : MotusComponentBase
         };
 
         var req = new PlanningRequest(
-            ctx.Model,
+            session,
             start,
             goal,
             planningContext.ToPlanningOptions(new PlanningOptions

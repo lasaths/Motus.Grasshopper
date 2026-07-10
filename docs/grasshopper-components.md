@@ -6,12 +6,16 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 | Component | Inputs | Outputs |
 |-----------|--------|---------|
-| Motus Robot | Model name (dropdown) or JsonPath; optional Base / Tool planes | Robot model |
+| Motus Robot | Model name (dropdown) or JsonPath; optional Base plane; optional **Tool** (`Motus Tool`, overrides bundled gripper) | Robot model |
+| Motus Tool | Name, TCP plane (flange frame), optional gripper Mesh/Brep | Tool definition |
+| Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
 | Motus Load URDF | Path; optional BaseLink / TipLink | Robot model with URDF kinematics chain |
 | Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
 | Motus TCP Pose | Robot, Joint state | TCP plane (FK position + orientation in base frame) |
 
-`Motus Robot` loads a bundled preset by name (dropdown attached automatically) or, when `JsonPath` is wired, from a JSON file. Optional `Base` and `Tool` planes override the preset frames for FK, planning, and preview (plane goals are **TCP** targets in the base frame).
+`Motus Robot` loads a bundled preset by name (dropdown attached automatically) or, when `JsonPath` is wired, from a JSON file. **UR10e** includes a bundled **Robotiq 2F-85** tool (TCP + mesh) unless you wire **Motus Tool** to override it. Optional `Base` overrides the robot base frame.
+
+`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates. Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
 
 `Motus Load URDF` loads a serial-chain URDF via `UrdfRobotLoader`. The output carries the URDF joint chain and joint names for FK/planning parity with the web viewer, and forwards URDF visual geometry for preview when available.
 
@@ -116,7 +120,7 @@ Exported trajectories include `motionType`, `segmentIndex`, and `blendRadiusMete
 
 Playback interpolates joint angles between waypoints by elapsed time (not discrete index stepping). FK uses `KinematicsResolver` (DH presets or URDF chain). Base and tool frames come from the trajectory context (preset or robot overrides).
 
-For URDF robots, preview uses URDF visuals first (`box`, `cylinder`, `sphere`, mesh `.stl`) and falls back to simplified FK meshes when visuals are missing or unsupported (for example `.dae` meshes).
+For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the URDF folder. Preset capsule collision is used for planning only, not drawn in the viewport.
 
 ## Export
 

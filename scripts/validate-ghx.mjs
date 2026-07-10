@@ -31,6 +31,8 @@ const MOTUS_COMPONENTS = new Map([
   ['c8e4a1b2-3f5d-4e6a-9b7c-1d2e3f4a5b6c', 'Motus Load URDF'],
   ['7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', 'Motus Motion Segment'],
   ['8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', 'Motus Program Plan'],
+  ['b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', 'Motus Tool'],
+  ['c3d4e5f6-a7b8-4901-c234-56789abcdef2', 'Motus Load Mesh'],
 ]);
 
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';

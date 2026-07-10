@@ -15,6 +15,14 @@ public abstract class MotusGooBase<T> : GH_Goo<T> where T : class
     public override IGH_Goo Duplicate() => MemberwiseClone() as IGH_Goo ?? this;
 }
 
+public sealed class ToolGoo : MotusGooBase<ToolDefinition>
+{
+    public ToolGoo() { }
+    public ToolGoo(ToolDefinition tool) : base(tool) { }
+
+    public override string ToString() => Value is null ? "Tool" : $"{Value.Name} ({Value.Tcp})";
+}
+
 public sealed class JointStateGoo : MotusGooBase<JointState>
 {
     public JointStateGoo() { }
@@ -27,19 +35,39 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public SerialJointChain? Chain { get; set; }
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Frame? BaseFrameOverride { get; set; }
-    public Frame? ToolFrameOverride { get; set; }
+    public ToolDefinition? ToolSnapshot { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
 
-    public RobotContext Context() =>
-        new(
-            Value!.Robot,
-            Chain,
-            BaseFrameOverride is { } bf ? new BaseFrame(bf) : Value.Robot.Preset.BaseFrame,
-            ToolFrameOverride is { } tf
-                ? new ToolFrame(tf, Value.Robot.Preset.ToolFrame.Name)
-                : Value.Robot.Preset.ToolFrame);
+    public RobotContext Context(RobotModelGoo? robotOverride = null)
+    {
+        var model = Value!.Robot;
+        ToolDefinition? tool = ToolSnapshot;
+        Frame? baseOverride = BaseFrameOverride;
+        SerialJointChain? chain = Chain;
+        RobotCollisionModel? preview = PreviewGeometry;
+
+        if (robotOverride?.Value is not null)
+        {
+            if (tool is null)
+                tool = robotOverride.Tool;
+            if (baseOverride is null && robotOverride.BaseFrameOverride is { } bf)
+                baseOverride = bf;
+            chain ??= robotOverride.Chain;
+            preview ??= robotOverride.PreviewGeometry;
+            model = robotOverride.Value;
+        }
+
+        var session = ApplyTool(model, tool, baseOverride);
+        return new RobotContext(session, session, chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview);
+    }
+
+    internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)
+    {
+        BaseFrame? baseFrame = baseOverride is { } bf ? new BaseFrame(bf) : null;
+        return model.WithTool(tool, baseFrame);
+    }
 
     public override string ToString() => $"Trajectory ({Value?.Points.Count} pts)";
 }

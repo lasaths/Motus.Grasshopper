@@ -43,7 +43,19 @@ public sealed class MotusLoadUrdfComponent : MotusComponentBase
                 ModelName = Path.GetFileNameWithoutExtension(path)
             });
             var previewGeometry = UrdfVisualPreviewLoader.TryLoad(path, baseLink, tipLink);
-            da.SetData(0, RobotModelGoo.FromUrdf(urdf, previewGeometry));
+            var goo = RobotModelGoo.FromUrdf(urdf, previewGeometry);
+            if (BundledToolLoader.TryDefaultForUrdfPath(path) is { } bundledTool)
+            {
+                goo.Tool = bundledTool;
+                if (previewGeometry?.Links.Count > 0)
+                {
+                    var armLinks = previewGeometry.Links
+                        .Where(l => !l.LinkName.Contains("robotiq", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    goo.PreviewGeometry = new RobotCollisionModel(armLinks);
+                }
+            }
+            da.SetData(0, goo);
         }
         catch (Exception ex)
         {
@@ -91,23 +103,12 @@ internal static class UrdfVisualPreviewLoader
 
         var geometries = new List<LinkCollisionGeometry>();
         for (var i = 0; i < chainLinkNames.Count; i++)
-        {
-            if (!linksByName.TryGetValue(chainLinkNames[i], out var linkEl)) continue;
-            var visualIdx = 0;
-            foreach (var visual in linkEl.Elements("visual"))
-            {
-                var origin = visual.Element("origin");
-                var xyz = ParseTriple(origin?.Attribute("xyz")?.Value);
-                var rpy = ParseTriple(origin?.Attribute("rpy")?.Value);
-                var pose = FrameFromRpy(xyz.x, xyz.y, xyz.z, rpy.x, rpy.y, rpy.z);
-                var geom = visual.Element("geometry");
-                if (geom is null) continue;
-                var name = $"{chainLinkNames[i]}_vis{visualIdx++}";
-                var obj = ParseVisualGeometry(name, pose, geom, urdfDirectory);
-                if (obj is not null)
-                    geometries.Add(new LinkCollisionGeometry(i, chainLinkNames[i], obj));
-            }
-        }
+            AppendLinkVisuals(linksByName, chainLinkNames[i], i, urdfDirectory, geometries);
+
+        AppendFixedDescendantVisuals(
+            robotRoot, linksByName, tipLink, chainLinkNames.Count - 1,
+            ComposeFixedForwardChain(robotRoot, chainLinkNames[^1], tipLink),
+            urdfDirectory, geometries);
 
         return geometries.Count > 0 ? new RobotCollisionModel(geometries) : null;
     }
@@ -142,7 +143,7 @@ internal static class UrdfVisualPreviewLoader
                 return null;
             var (vertices, indices) =
                 path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase)
-                    ? ReadStl(path, scale.x)
+                    ? MeshFileLoader.ReadStlBytes(path, scale.x)
                     : path.EndsWith(".dae", StringComparison.OrdinalIgnoreCase)
                         ? ReadDae(path, scale.x)
                         : (new List<double[]>(), new List<int>());
@@ -151,57 +152,6 @@ internal static class UrdfVisualPreviewLoader
             return CollisionObject.Mesh(name, pose, vertices, indices);
         }
         return null;
-    }
-
-    private static (List<double[]> vertices, List<int> indices) ReadStl(string path, double uniformScale)
-    {
-        var bytes = File.ReadAllBytes(path);
-        if (bytes.Length < 84) return (new List<double[]>(), new List<int>());
-        var triCount = BitConverter.ToUInt32(bytes, 80);
-        var expected = 84L + triCount * 50L;
-        return expected == bytes.LongLength
-            ? ReadBinaryStl(bytes, triCount, uniformScale)
-            : ReadAsciiStl(File.ReadAllLines(path), uniformScale);
-    }
-
-    private static (List<double[]> vertices, List<int> indices) ReadBinaryStl(byte[] bytes, uint triCount, double scale)
-    {
-        var vertices = new List<double[]>((int)triCount * 3);
-        var indices = new List<int>((int)triCount * 3);
-        var offset = 84;
-        for (var i = 0; i < triCount && offset + 50 <= bytes.Length; i++)
-        {
-            offset += 12; // normal
-            for (var v = 0; v < 3; v++)
-            {
-                var x = BitConverter.ToSingle(bytes, offset) * scale; offset += 4;
-                var y = BitConverter.ToSingle(bytes, offset) * scale; offset += 4;
-                var z = BitConverter.ToSingle(bytes, offset) * scale; offset += 4;
-                vertices.Add(new[] { (double)x, (double)y, (double)z });
-                indices.Add(vertices.Count - 1);
-            }
-            offset += 2; // attr byte count
-        }
-        return (vertices, indices);
-    }
-
-    private static (List<double[]> vertices, List<int> indices) ReadAsciiStl(string[] lines, double scale)
-    {
-        var vertices = new List<double[]>();
-        var indices = new List<int>();
-        foreach (var raw in lines)
-        {
-            var line = raw.Trim();
-            if (!line.StartsWith("vertex ", StringComparison.OrdinalIgnoreCase)) continue;
-            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 4) continue;
-            if (!double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)) continue;
-            if (!double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var y)) continue;
-            if (!double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var z)) continue;
-            vertices.Add(new[] { x * scale, y * scale, z * scale });
-            indices.Add(vertices.Count - 1);
-        }
-        return (vertices, indices);
     }
 
     private static (List<double[]> vertices, List<int> indices) ReadDae(string path, double uniformScale)
@@ -362,6 +312,120 @@ internal static class UrdfVisualPreviewLoader
     {
         if (string.IsNullOrWhiteSpace(source)) return null;
         return source.StartsWith("#", StringComparison.Ordinal) ? source[1..] : source;
+    }
+
+    private static void AppendLinkVisuals(
+        Dictionary<string, XElement> linksByName,
+        string linkName,
+        int linkIndex,
+        string urdfDirectory,
+        List<LinkCollisionGeometry> geometries)
+    {
+        if (!linksByName.TryGetValue(linkName, out var linkEl)) return;
+        var visualIdx = 0;
+        foreach (var visual in linkEl.Elements("visual"))
+        {
+            var origin = visual.Element("origin");
+            var xyz = ParseTriple(origin?.Attribute("xyz")?.Value);
+            var rpy = ParseTriple(origin?.Attribute("rpy")?.Value);
+            var pose = FrameFromRpy(xyz.x, xyz.y, xyz.z, rpy.x, rpy.y, rpy.z);
+            var geom = visual.Element("geometry");
+            if (geom is null) continue;
+            var name = $"{linkName}_vis{visualIdx++}";
+            var obj = ParseVisualGeometry(name, pose, geom, urdfDirectory);
+            if (obj is not null)
+                geometries.Add(new LinkCollisionGeometry(linkIndex, linkName, obj));
+        }
+    }
+
+    private static void AppendFixedDescendantVisuals(
+        XElement robotRoot,
+        Dictionary<string, XElement> linksByName,
+        string parentLink,
+        int attachLinkIndex,
+        Frame parentToWorld,
+        string urdfDirectory,
+        List<LinkCollisionGeometry> geometries)
+    {
+        foreach (var joint in robotRoot.Elements("joint"))
+        {
+            if (!string.Equals(joint.Attribute("type")?.Value, "fixed", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.Equals(joint.Element("parent")?.Attribute("link")?.Value, parentLink, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var child = joint.Element("child")?.Attribute("link")?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(child)) continue;
+
+            var origin = joint.Element("origin");
+            var xyz = ParseTriple(origin?.Attribute("xyz")?.Value);
+            var rpy = ParseTriple(origin?.Attribute("rpy")?.Value);
+            var jointPose = FrameFromRpy(xyz.x, xyz.y, xyz.z, rpy.x, rpy.y, rpy.z);
+            var childToWorld = ComposeFrames(parentToWorld, jointPose);
+
+            if (linksByName.TryGetValue(child, out var linkEl))
+            {
+                var visualIdx = 0;
+                foreach (var visual in linkEl.Elements("visual"))
+                {
+                    var visOrigin = visual.Element("origin");
+                    var visXyz = ParseTriple(visOrigin?.Attribute("xyz")?.Value);
+                    var visRpy = ParseTriple(visOrigin?.Attribute("rpy")?.Value);
+                    var visPose = FrameFromRpy(visXyz.x, visXyz.y, visXyz.z, visRpy.x, visRpy.y, visRpy.z);
+                    var geom = visual.Element("geometry");
+                    if (geom is null) continue;
+                    var name = $"{child}_vis{visualIdx++}";
+                    var obj = ParseVisualGeometry(name, ComposeFrames(childToWorld, visPose), geom, urdfDirectory);
+                    if (obj is not null)
+                        geometries.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj));
+                }
+            }
+
+            AppendFixedDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, geometries);
+        }
+    }
+
+    private static Frame ComposeFrames(Frame parent, Frame local) =>
+        Transforms.ToFrame(Transforms.Multiply(Transforms.FromFrame(parent), Transforms.FromFrame(local)));
+
+    private static Frame ComposeFixedForwardChain(XElement robotRoot, string fromLink, string toLink)
+    {
+        if (string.Equals(fromLink, toLink, StringComparison.OrdinalIgnoreCase))
+            return new Frame(0, 0, 0, 1, 0, 0, 0);
+
+        var joints = robotRoot.Elements("joint")
+            .Where(j => string.Equals(j.Attribute("type")?.Value, "fixed", StringComparison.OrdinalIgnoreCase))
+            .Select(j => new
+            {
+                Parent = j.Element("parent")?.Attribute("link")?.Value ?? "",
+                Child = j.Element("child")?.Attribute("link")?.Value ?? "",
+                Origin = j.Element("origin")
+            })
+            .Where(j => !string.IsNullOrWhiteSpace(j.Parent) && !string.IsNullOrWhiteSpace(j.Child))
+            .GroupBy(j => j.Parent, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var queue = new Queue<(string Link, Frame Pose)>();
+        queue.Enqueue((fromLink, new Frame(0, 0, 0, 1, 0, 0, 0)));
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { fromLink };
+
+        while (queue.Count > 0)
+        {
+            var (link, pose) = queue.Dequeue();
+            if (string.Equals(link, toLink, StringComparison.OrdinalIgnoreCase))
+                return pose;
+            if (!joints.TryGetValue(link, out var children)) continue;
+            foreach (var joint in children)
+            {
+                if (!visited.Add(joint.Child)) continue;
+                var xyz = ParseTriple(joint.Origin?.Attribute("xyz")?.Value);
+                var rpy = ParseTriple(joint.Origin?.Attribute("rpy")?.Value);
+                var step = FrameFromRpy(xyz.x, xyz.y, xyz.z, rpy.x, rpy.y, rpy.z);
+                queue.Enqueue((joint.Child, ComposeFrames(pose, step)));
+            }
+        }
+
+        return new Frame(0, 0, 0, 1, 0, 0, 0);
     }
 
     private static List<string> BuildActuatedChainLinkNames(XElement robotRoot, string baseLink, string tipLink)

@@ -11,7 +11,7 @@ public static class PlanInputFingerprint
     public static string Compute(
         RobotModel model,
         Frame? baseFrameOverride,
-        Frame? toolFrameOverride,
+        ToolDefinition? toolOverride,
         IReadOnlyList<(JointState? joints, Plane? plane)> goals,
         JointState start,
         PlanningContext context,
@@ -21,7 +21,13 @@ public static class PlanInputFingerprint
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
         sb.Append("linStep:").Append(linStepMeters.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         AppendFrame(sb, "base", baseFrameOverride);
-        AppendFrame(sb, "tool", toolFrameOverride);
+        if (toolOverride is not null)
+        {
+            sb.Append("toolName:").Append(toolOverride.Name).Append('|');
+            AppendFrame(sb, "toolTcp", toolOverride.Tcp);
+            if (toolOverride.Geometry is { } geom)
+                AppendCollisionObject(sb, geom);
+        }
         AppendJoints(sb, "start", start.Positions);
         for (var i = 0; i < goals.Count; i++)
         {

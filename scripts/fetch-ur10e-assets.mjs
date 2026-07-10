@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchRobotiqAssets } from './fetch-robotiq-2f85-assets.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, '../examples/ur10e');
@@ -34,3 +35,4 @@ for (const { subdir, files } of meshes) {
 }
 
 console.log(`Meshes in ${path.join(outDir, 'meshes', 'ur10e')}`);
+await fetchRobotiqAssets();

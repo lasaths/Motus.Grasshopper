@@ -37,7 +37,7 @@ Install to Grasshopper Libraries (Windows):
 
 Copies to `%APPDATA%\Grasshopper\Libraries\Motus` (e.g. `C:\Users\...\AppData\Roaming\Grasshopper\Libraries\Motus`).
 
-Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px).
+Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-subcategory colors (Model teal, Plan sky, Collision orange, Preview purple, Export amber).
 
 ### Environment
 

@@ -16,7 +16,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
             "Segment",
             "Build a PTP, LIN, or CIRC motion segment (Type dropdown). All inputs stay visible; only the active type is validated.",
             "Plan",
-            "list-plus-bold") { }
+            "line-segments") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -187,7 +187,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             "ProgPlan",
             "Plan a mixed PTP/LIN/CIRC motion program (click Plan). Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
             "Plan",
-            "flow-arrow") { }
+            "stack") { }
 
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, () => "Plan", () => false, RequestRun);
@@ -241,26 +241,26 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             return;
         }
 
-        var start = GhExtract.StartOrHome(da, 2, ctx.Model);
-        var planningContext = GhExtract.BuildPlanningContext(ctx.Model, da, 3, 4, 5);
-        var checker = GhExtract.TryCollisionChecker(ctx.Model, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel);
+        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5);
+        var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
             CollisionChecker = checker
         });
 
-        var request = new MotionProgramRequest(ctx.Model, start, segments, opts);
-        _cached = new IndustrialMotionPlanner(ctx.Model.Preset, ctx.Chain).Plan(request);
+        var request = new MotionProgramRequest(ctx.EffectiveModel, start, segments, opts);
+        _cached = new IndustrialMotionPlanner(ctx.EffectiveModel.Preset, ctx.Chain).Plan(request);
 
         if (_cached.Success && _cached.Trajectory is not null)
         {
             _cachedGoo = new TrajectoryGoo(_cached.Trajectory)
             {
                 Chain = robotGoo.Chain,
-                PreviewGeometry = robotGoo.PreviewGeometry,
+                PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
                 BaseFrameOverride = robotGoo.BaseFrameOverride,
-                ToolFrameOverride = robotGoo.ToolFrameOverride
+                ToolSnapshot = robotGoo.Tool
             };
             da.SetData(0, _cachedGoo);
         }

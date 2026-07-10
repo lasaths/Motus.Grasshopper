@@ -29,9 +29,23 @@ const MOTUS = {
       { name: 'Model', nick: 'M', desc: 'Preset model name (UR5e, KR 6 R900, …)', optional: false },
       { name: 'JsonPath', nick: 'J', desc: 'Path to a preset JSON (overrides Model when set)', optional: true },
       { name: 'Base', nick: 'B', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true },
-      { name: 'Tool', nick: 'T', desc: 'Optional tool TCP frame override', optional: true },
+      { name: 'Tool', nick: 'T', desc: 'Optional Motus Tool definition', optional: true },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model' }] },
+  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 84,
+    inputs: [
+      { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
+      { name: 'TCP', nick: 'P', desc: 'TCP in flange frame (Z = tool axis)', optional: false, plane: true },
+      { name: 'Geometry', nick: 'G', desc: 'Optional gripper mesh or brep (TCP-local)', optional: true },
+      { name: 'GeomPlane', nick: 'L', desc: 'Geometry pose in TCP-local frame', optional: true, plane: true },
+    ],
+    outputs: [{ name: 'Tool', nick: 'T', desc: 'Tool definition' }] },
+  loadMesh: { guid: 'c3d4e5f6-a7b8-4901-c234-56789abcdef2', name: 'Motus Load Mesh', nick: 'LoadMesh', w: 74, h: 54,
+    inputs: [
+      { name: 'Path', nick: 'P', desc: 'Path to .stl file', optional: false, text: '' },
+      { name: 'Plane', nick: 'L', desc: 'Mesh pose (origin = local origin)', optional: true, plane: true },
+    ],
+    outputs: [{ name: 'Mesh', nick: 'M', desc: 'Triangle mesh' }] },
   joints: { guid: '380f17c2-5d5f-4f77-a251-8309f25ef61e', name: 'Motus Joint State', nick: 'Joints', w: 65, h: 44,
     inputs: [
       { name: 'Joints', nick: 'J', desc: 'Joint angles (right-click J input to toggle °)', optional: false, list: true, access: 1, angle: true },
@@ -178,6 +192,7 @@ const NATIVE = {
   constructPoint: { guid: '2e78b80c-5c6e-4dcc-9b49-4a7cde34af52', name: 'Construct Point', nick: 'Pt', w: 44, h: 44,
     inputs: ['X', 'Y', 'Z'], outputs: ['Point'] },
   unitZ: { guid: '1bbd9fdd-9aea-4f6e-92af-2311b107d8c9', name: 'Unit Z', nick: 'Z', w: 44, h: 22, outputs: ['Vector'] },
+  unitX: { guid: '7e6bff32-67ee-4da3-b9ab-7c1921b5f1d4', name: 'Unit X', nick: 'X', w: 44, h: 22, outputs: ['Vector'] },
   plane: { guid: '35abd9fb-7453-458e-9c86-8bf9f94becc8', name: 'Plane', nick: 'Pln', w: 44, h: 44,
     inputs: ['Origin', 'Normal'], outputs: ['Plane'] },
   xyPlane: { guid: '1bbf3dec-0ddd-49b8-aba3-ddde6bb8de4e', name: 'XY Plane', nick: 'XY', w: 44, h: 22, outputs: ['Plane'] },
@@ -384,7 +399,7 @@ function motusComponent(key, x, y, wireMap, options = {}) {
             </chunk>`, node };
 }
 
-function valueList(x, y, selected = 'UR5e') {
+function valueList(x, y, selected = 'UR10e') {
   const instance = id();
   // Value List is a native GH_Param: InstanceGuid is the wire target (no param_output chunk).
   const items = MODELS.map((name, i) => `<chunk name="ListItem" index="${i}">
@@ -585,6 +600,43 @@ function nativeUnitZ(x, y) {
                         ${item('InstanceGuid', 'gh_guid', '9', outGuid)}
                         ${item('Name', 'gh_string', '10', 'Vector')}
                         ${item('NickName', 'gh_string', '10', 'Z')}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${item('SourceCount', 'gh_int32', '3', '0')}
+                      </items>
+                      <chunks count="1">${bounds(x + 28, y + 4, 14, 14)}</chunks>
+                    </chunk>
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`, node };
+}
+
+function nativeUnitX(x, y) {
+  const instance = id();
+  const outGuid = id();
+  const node = { key: 'unitX', instance, outputs: [{ name: 'Vector', _guid: outGuid }] };
+  return { xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', NATIVE.unitX.guid)}
+                ${item('Name', 'gh_string', '10', 'Unit X')}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="5">
+                    ${item('Description', 'gh_string', '10', 'Unit vector along the X-axis')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', 'Unit X')}
+                    ${item('NickName', 'gh_string', '10', 'X')}
+                    ${item('SourceCount', 'gh_int32', '3', '0')}
+                  </items>
+                  <chunks count="2">
+                    ${bounds(x, y, 44, 22)}
+                    <chunk name="param_output" index="0">
+                      <items count="6">
+                        ${item('Description', 'gh_string', '10', 'Unit X vector')}
+                        ${item('InstanceGuid', 'gh_guid', '9', outGuid)}
+                        ${item('Name', 'gh_string', '10', 'Vector')}
+                        ${item('NickName', 'gh_string', '10', 'X')}
                         ${item('Optional', 'gh_bool', '1', 'false')}
                         ${item('SourceCount', 'gh_int32', '3', '0')}
                       </items>
@@ -923,7 +975,7 @@ function graph05() {
 }
 
 function graph06() {
-  const urdfFile = nativeFilePath(40, 80, 'examples/ur10e/ur10e.urdf');
+  const urdfFile = nativeFilePath(40, 80, 'examples/ur10e/ur10e_robotiq.urdf');
   const loadUrdf = motusComponent('loadUrdf', 147, 80, {
     Path: [outRef(urdfFile.node, 'Path')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
@@ -947,7 +999,7 @@ function graph06() {
   const objs = [loadUrdf, plan, preview, urdfFile, startJoints, goalPanel, goalJoints, startPanel];
   objs._meta = {
     fileName: '06_urdf_load.ghx',
-    description: 'URDF import: Path → ur10e.urdf (run fetch-ur10e-assets.mjs for meshes), joint start/goal in °, Plan + Preview.',
+    description: 'URDF import: ur10e_robotiq.urdf (arm + gripper meshes, local paths). Run fetch-ur10e-assets.mjs. Bundled Robotiq tool applied automatically.',
   };
   return buildGraph(objs);
 }
@@ -955,26 +1007,27 @@ function graph06() {
 function graph07() {
   const vl = valueList(-180, 60);
   const basePl = nativeXYPlane(40, 200);
-  const toolPl = nativeXYPlane(40, 280);
-  const robot = motusComponent('robot', 160, 80, {
+  const tcpPl = nativeXYPlane(40, 280);
+  const tool = motusComponent('tool', 160, 200, { TCP: [outRef(tcpPl.node, 'Plane')] }, { text: { Name: 'offset' } });
+  const robot = motusComponent('robot', 340, 80, {
     Model: [outRef(vl.node, 'Value')],
     Base: [outRef(basePl.node, 'Plane')],
-    Tool: [outRef(toolPl.node, 'Plane')],
+    Tool: [outRef(tool.node, 'Tool')],
   });
-  const start = motusComponent('joints', 160, 220, {}, { jointValues: START_JOINTS });
-  const goal = motusComponent('joints', 160, 340, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 420, 200, {
+  const start = motusComponent('joints', 340, 220, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 340, 340, {}, { jointValues: GOAL_JOINTS });
+  const plan = motusComponent('plan', 560, 200, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goal.node, 'State')],
     Start: [outRef(start.node, 'State')],
   });
-  const preview = motusComponent('preview', 640, 180, {
+  const preview = motusComponent('preview', 760, 180, {
     Trajectory: [outRef(plan.node, 'Trajectory')],
   }, { bools: { ShowStart: true } });
-  const objs = [vl, basePl, toolPl, robot, start, goal, plan, preview];
+  const objs = [vl, basePl, tcpPl, tool, robot, start, goal, plan, preview];
   objs._meta = {
     fileName: '07_frames_and_start.ghx',
-    description: 'Base/Tool frame overrides on Robot, explicit Start on Plan, ShowStart ghost on Preview.',
+    description: 'Base override + Motus Tool TCP on Robot, explicit Start on Plan, ShowStart ghost on Preview.',
   };
   return buildGraph(objs);
 }
@@ -1023,7 +1076,74 @@ function graph08() {
   return buildGraph(flat);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08];
+function graph09() {
+  const vl = valueList(-180, 60);
+  const tcpPl = nativeXYPlane(40, 200);
+  const gripper = motusComponent('colBox', 40, 320, {}, {
+    numbers: { HalfX: 0.02, HalfY: 0.02, HalfZ: 0.04 },
+    text: { Name: 'gripper_geom' },
+  });
+  const tool = motusComponent('tool', 200, 260, {
+    TCP: [outRef(tcpPl.node, 'Plane')],
+    Geometry: [outRef(gripper.node, 'Object')],
+  }, { text: { Name: 'gripper' } });
+  const robot = motusComponent('robot', 380, 80, {
+    Model: [outRef(vl.node, 'Value')],
+    Tool: [outRef(tool.node, 'Tool')],
+  });
+  const goal = motusComponent('joints', 380, 220, {}, { jointValues: GOAL_JOINTS });
+  const plan = motusComponent('plan', 580, 160, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+  });
+  const preview = motusComponent('preview', 780, 140, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+  const exp = motusComponent('export', 780, 280, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+  const objs = [vl, tcpPl, gripper, tool, robot, goal, plan, preview, exp];
+  objs._meta = {
+    fileName: '09_tool_tcp.ghx',
+    description: 'Motus Tool (TCP + gripper box) -> Robot.Tool -> Plan -> Preview/Export. Mesh tools fall back from FCL.',
+  };
+  return buildGraph(objs);
+}
+
+function graph10() {
+  const vl = valueList(-180, 60);
+  const tcpPt = nativeConstructPoint(40, 200, [0, 0, 0.1633]);
+  const ux = nativeUnitX(40, 260);
+  const tcpPl = nativePlane(160, 200, tcpPt.node.outputs[0], ux.node.outputs[0]);
+  const meshPath = nativeFilePath(40, 340, 'examples/ur10e/meshes/robotiq_2f85/robotiq_2f85_tcp_local.stl', '*.stl|*.stl|All files|*.*');
+  const loadMesh = motusComponent('loadMesh', 200, 320, {
+    Path: [outRef(meshPath.node, 'Path')],
+  });
+  const tool = motusComponent('tool', 380, 260, {
+    TCP: [outRef(tcpPl.node, 'Plane')],
+    Geometry: [outRef(loadMesh.node, 'Mesh')],
+  }, { text: { Name: 'robotiq_2f85' } });
+  const robot = motusComponent('robot', 540, 80, {
+    Model: [outRef(vl.node, 'Value')],
+    Tool: [outRef(tool.node, 'Tool')],
+  });
+  const goal = motusComponent('joints', 540, 220, {}, { jointValues: GOAL_JOINTS });
+  const plan = motusComponent('plan', 740, 160, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+  });
+  const preview = motusComponent('preview', 940, 140, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+  const objs = [vl, tcpPt, ux, tcpPl, meshPath, loadMesh, tool, robot, goal, plan, preview];
+  objs._meta = {
+    fileName: '10_robotiq_tool.ghx',
+    description: 'Explicit Robotiq mesh path (Motus Robot already bundles gripper for UR10e by default).',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10];
 const legacy = ['01_basic_planning.ghx', '02_collision_planning.ghx'];
 
 for (const name of legacy) {
