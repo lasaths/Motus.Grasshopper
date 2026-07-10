@@ -10,11 +10,11 @@ namespace Motus.GH.Components;
 
 public sealed class MotusLoadUrdfComponent : MotusComponentBase
 {
-    public MotusLoadUrdfComponent() : base("Motus Load URDF", "URDF", "Load a serial-chain URDF into a robot model", "Model", "file") { }
+    public MotusLoadUrdfComponent() : base("Motus Load URDF", "URDF", "Load a serial-chain URDF or .xacro into a robot model", "Model", "file") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddTextParameter("Path", "P", "Path to .urdf file", GH_ParamAccess.item);
+        p.AddTextParameter("Path", "P", "Path to .urdf or .xacro file", GH_ParamAccess.item);
         p.AddTextParameter("BaseLink", "B", "Base link name", GH_ParamAccess.item, "base_link");
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("TipLink", "T", "Tip link name", GH_ParamAccess.item, "tool0");
@@ -36,13 +36,26 @@ public sealed class MotusLoadUrdfComponent : MotusComponentBase
         try
         {
             path = UrdfPathResolver.ResolveUrdfPath(path);
-            var urdf = UrdfRobotLoader.Load(path, new UrdfLoadOptions
+            var urdfDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+            var options = new UrdfLoadOptions
             {
                 BaseLink = baseLink,
                 TipLink = tipLink,
                 ModelName = Path.GetFileNameWithoutExtension(path)
-            });
-            var previewGeometry = UrdfVisualPreviewLoader.TryLoad(path, baseLink, tipLink);
+            };
+            UrdfRobot urdf;
+            RobotCollisionModel? previewGeometry;
+            if (path.EndsWith(".xacro", StringComparison.OrdinalIgnoreCase))
+            {
+                var xdoc = XacroPreprocessor.ExpandDocument(path);
+                urdf = UrdfRobotLoader.Load(xdoc, options, urdfDir);
+                previewGeometry = UrdfVisualPreviewLoader.TryLoad(xdoc, urdfDir, baseLink, tipLink);
+            }
+            else
+            {
+                urdf = UrdfRobotLoader.Load(path, options);
+                previewGeometry = UrdfVisualPreviewLoader.TryLoad(path, baseLink, tipLink);
+            }
             var goo = RobotModelGoo.FromUrdf(urdf, previewGeometry);
             if (BundledToolLoader.TryDefaultForUrdfPath(path) is { } bundledTool)
             {
@@ -89,8 +102,11 @@ internal static class UrdfVisualPreviewLoader
     public static RobotCollisionModel? TryLoad(string urdfPath, string baseLink, string tipLink)
     {
         var doc = XDocument.Load(urdfPath);
-        return TryLoad(doc.Root, Path.GetDirectoryName(Path.GetFullPath(urdfPath)) ?? ".", baseLink, tipLink);
+        return TryLoad(doc, Path.GetDirectoryName(Path.GetFullPath(urdfPath)) ?? ".", baseLink, tipLink);
     }
+
+    public static RobotCollisionModel? TryLoad(XDocument doc, string urdfDirectory, string baseLink, string tipLink) =>
+        TryLoad(doc.Root, urdfDirectory, baseLink, tipLink);
 
     private static RobotCollisionModel? TryLoad(XElement? robotRoot, string urdfDirectory, string baseLink, string tipLink)
     {

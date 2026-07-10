@@ -1,5 +1,6 @@
 using Motus.Core;
 using Motus.Geometry;
+using Motus.Presets;
 
 namespace Motus.GH;
 
@@ -11,9 +12,15 @@ internal static class BundledToolLoader
 
     public static ToolDefinition? TryDefaultForModel(string modelName)
     {
-        if (!string.Equals(modelName, "UR10e", StringComparison.OrdinalIgnoreCase))
+        try
+        {
+            var model = PresetLoader.LoadRobotModelByName(modelName);
+            return ToolDefinition.FromPreset(model);
+        }
+        catch (FileNotFoundException)
+        {
             return null;
-        return TryLoadRobotiq();
+        }
     }
 
     public static ToolDefinition? TryDefaultForUrdfPath(string urdfPath)
@@ -30,7 +37,7 @@ internal static class BundledToolLoader
         var path = ResolveBundledPath(RobotiqStl);
         if (!File.Exists(path)) return null;
 
-        var (vertices, indices) = MeshFileLoader.ReadStlBytes(path);
+        var (vertices, indices) = StlReader.Read(path);
         if (vertices.Count < 3 || indices.Count < 3) return null;
 
         var geometry = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, vertices, indices);
