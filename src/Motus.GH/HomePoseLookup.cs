@@ -5,16 +5,18 @@ namespace Motus.GH;
 
 internal static class HomePoseLookup
 {
-    private static Dictionary<string, Dictionary<string, double>>? _cache;
+    private static readonly Lazy<Task<Dictionary<string, Dictionary<string, double>>>> _cacheTask =
+        new(LoadAsync);
 
-    private static Dictionary<string, Dictionary<string, double>> Load()
+    public static Task PreloadAsync() => _cacheTask.Value;
+
+    private static async Task<Dictionary<string, Dictionary<string, double>>> LoadAsync()
     {
-        if (_cache is not null) return _cache;
         var path = Path.Combine(AppContext.BaseDirectory, "resources", "viewer_presets.json");
         if (!File.Exists(path))
-            return _cache = new Dictionary<string, Dictionary<string, double>>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, Dictionary<string, double>>(StringComparer.OrdinalIgnoreCase);
 
-        var json = File.ReadAllText(path);
+        var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
         var root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)
             ?? new Dictionary<string, JsonElement>();
         var map = new Dictionary<string, Dictionary<string, double>>(StringComparer.OrdinalIgnoreCase);
@@ -24,7 +26,7 @@ internal static class HomePoseLookup
             var pose = JsonSerializer.Deserialize<Dictionary<string, double>>(poseEl.GetRawText());
             if (pose is not null) map[key] = pose;
         }
-        return _cache = map;
+        return map;
     }
 
     private static string? PresetKey(RobotModel robot) =>
@@ -37,7 +39,7 @@ internal static class HomePoseLookup
 
     public static JointState HomeOrZeros(RobotModel robot)
     {
-        var presets = Load();
+        var presets = _cacheTask.Value.ConfigureAwait(false).GetAwaiter().GetResult();
         var key = PresetKey(robot);
         if (key is null || !presets.TryGetValue(key, out var named))
             return new JointState(new double[robot.Preset.AxisCount]);

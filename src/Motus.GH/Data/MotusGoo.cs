@@ -25,6 +25,7 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
+    public RobotCollisionModel? PreviewGeometry { get; set; }
     public Frame? BaseFrameOverride { get; set; }
     public Frame? ToolFrameOverride { get; set; }
 
@@ -55,4 +56,36 @@ public sealed class CollisionSceneGoo : MotusGooBase<CollisionScene>
     public CollisionSceneGoo() : base(new CollisionScene()) { }
     public CollisionSceneGoo(CollisionScene scene) : base(scene) { }
     public override string ToString() => $"CollisionScene ({Value.Objects.Count} objs)";
+}
+
+public sealed class PlanningGroupGoo : MotusGooBase<PlanningGroup>
+{
+    public PlanningGroupGoo() { }
+    public PlanningGroupGoo(PlanningGroup group) : base(group) { }
+    public override string ToString() => Value is null
+        ? "PlanningGroup"
+        : $"{Value.Name} ({Value.BaseLink}->{Value.TipLink})";
+}
+
+public sealed class AttachedBodyGoo : MotusGooBase<AttachedBody>
+{
+    public AttachedBodyGoo() { }
+    public AttachedBodyGoo(AttachedBody body) : base(body) { }
+    public override string ToString() => Value is null
+        ? "AttachedBody"
+        : $"{Value.Name} ({Value.Geometry.Shape})";
+}
+
+public sealed class MotionSegmentGoo : MotusGooBase<MotionSegment>
+{
+    public MotionSegmentGoo() { }
+    public MotionSegmentGoo(MotionSegment segment) : base(segment) { }
+
+    public override string ToString() => Value switch
+    {
+        PtpSegment ptp => $"PTP blend={ptp.BlendRadiusMeters:F3}m",
+        LinSegment lin => $"LIN step={lin.StepMeters:F3}m blend={lin.BlendRadiusMeters:F3}m",
+        CircSegment circ => $"CIRC samples={circ.ArcSamples} blend={circ.BlendRadiusMeters:F3}m",
+        _ => "Segment"
+    };
 }

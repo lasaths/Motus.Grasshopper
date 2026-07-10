@@ -1,5 +1,6 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
+using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
 using GH_IO.Serialization;
 using Motus.Core;
@@ -10,9 +11,11 @@ using Motus.GH.Resources;
 using Motus.GH.UI;
 using Motus.Presets;
 using Motus.Rhino;
+using Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
+using System.Globalization;
 
 namespace Motus.GH.Components;
 
@@ -76,31 +79,90 @@ public sealed class MotusRobotComponent : MotusComponentBase
 
 public sealed class MotusJointStateComponent : MotusComponentBase
 {
+    private bool _useDegrees;
+
     public MotusJointStateComponent() : base("Motus Joint State", "Joints", "Create joint state (radians)", "Model", "gear-six") { }
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddNumberParameter("Joints", "J", "Joint angles in radians", GH_ParamAccess.list);
-        p.AddBooleanParameter("UseDegrees", "D", "Interpret input as degrees", GH_ParamAccess.item, false);
-        p.AddGenericParameter("Robot", "Rb", "Optional robot for joint count validation", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
+        p.AddAngleParameter("Joints", "J", "Joint angles (right-click J input to toggle °)", GH_ParamAccess.list);
     }
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
+        p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+
+    protected override void BeforeSolveInstance()
+    {
+        _useDegrees = Params.Input[0] is Param_Number pn && pn.UseDegrees;
+    }
+
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var vals = new List<double>();
-        var deg = false;
-        if (!da.GetDataList(0, vals)) return;
-        da.GetData(1, ref deg);
-        if (GhExtract.TryRobot(da, 2, out var robot) && vals.Count != robot.Preset.AxisCount)
+        if (!da.GetDataList(0, vals) || vals.Count == 0)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                $"Expected {robot.Preset.AxisCount} joints, got {vals.Count}. Order matches URDF chain or preset axis list.");
-            return;
+            var text = "";
+            if (da.GetData(0, ref text) && !string.IsNullOrWhiteSpace(text))
+            {
+                vals = text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => double.Parse(s.Trim(), CultureInfo.InvariantCulture))
+                    .ToList();
+            }
         }
-        var arr = deg ? Units.ToRadians(vals.ToArray()) : vals.ToArray();
+        if (vals.Count == 0) return;
+
+        var arr = _useDegrees
+            ? vals.Select(RhinoMath.ToRadians).ToArray()
+            : vals.ToArray();
         da.SetData(0, new JointStateGoo(new JointState(arr)));
     }
+
     public override Guid ComponentGuid => new Guid("380f17c2-5d5f-4f77-a251-8309f25ef61e");
+}
+
+public sealed class MotusTcpPoseComponent : MotusComponentBase
+{
+    public MotusTcpPoseComponent()
+        : base("Motus TCP Pose", "TCP", "Forward kinematics: joint state to TCP plane in base frame", "Model", "crosshair") { }
+
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
+        p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+    }
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
+        p.AddPlaneParameter("Plane", "P", "TCP pose in robot base frame (position + orientation)", GH_ParamAccess.item);
+
+    protected override void SolveInstance(IGH_DataAccess da)
+    {
+        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo)) return;
+        JointStateGoo? stateGoo = null;
+        if (!da.GetData(1, ref stateGoo) || stateGoo?.Value is null)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "State must be a joint state.");
+            return;
+        }
+
+        var ctx = RobotContext.FromGoo(robotGoo);
+        if (stateGoo.Value.AxisCount != ctx.Model.Preset.AxisCount)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Expected {ctx.Model.Preset.AxisCount} joints, got {stateGoo.Value.AxisCount}.");
+            return;
+        }
+
+        if (KinematicsPreview.TryFk(ctx.Model, ctx.Chain) is null)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "FK is not available for this robot model.");
+            return;
+        }
+
+        var plane = KinematicsPreview.TcpPlane(ctx.Model, stateGoo.Value, ctx.Chain, ctx.Base, ctx.Tool);
+        da.SetData(0, plane);
+    }
+
+    public override Guid ComponentGuid => new Guid("f1a2b3c4-d5e6-4789-a123-4567890abcde");
 }
 
 public sealed class MotusPreviewComponent : MotusComponentBase
@@ -134,6 +196,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase
     {
         p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
         p.AddBooleanParameter("ShowStart", "S", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
+        p.AddGenericParameter("Robot", "Rb", "Optional robot/context override for external trajectories", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -232,40 +296,71 @@ public sealed class MotusPreviewComponent : MotusComponentBase
         if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
+        var previewGeometry = trajGoo.PreviewGeometry ?? ctx.Model.CollisionModel;
+        var hasRobotOverride = GhExtract.TryRobotGoo(da, 2, out var robotOverride);
+        if (hasRobotOverride)
+        {
+            ctx = RobotContext.FromGoo(robotOverride);
+            previewGeometry = robotOverride.PreviewGeometry ?? ctx.Model.CollisionModel ?? previewGeometry;
+        }
         _trajectory = t;
         if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
 
         da.GetData(1, ref _showStart);
+
+        if (t.Robot.Preset.AxisCount != ctx.Model.Preset.AxisCount)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                $"Trajectory axis count ({t.Robot.Preset.AxisCount}) differs from preview robot axis count ({ctx.Model.Preset.AxisCount}).");
+        }
+
+        var previewPoints = BuildPreviewPoints(t, ctx.Model, out var jointRemapUsed);
+        if (hasRobotOverride && !jointRemapUsed && !ReferenceEquals(t.Robot, ctx.Model))
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "Robot override joint-name remap not available; preview uses source joint order. " +
+                "Connect the trajectory's robot for exact geometry or align joint names.");
+        }
 
         JointState state;
         double timeSeconds;
         if (_playing)
         {
             var elapsed = (DateTime.UtcNow - _playStartUtc).TotalSeconds;
-            state = TrajectoryInterpolation.AtTime(t, elapsed, out _index);
+            state = TrajectoryInterpolation.AtTime(new Trajectory(ctx.Model, previewPoints), elapsed, out _index);
             timeSeconds = elapsed;
             if (elapsed >= t.DurationSeconds) _playing = false;
             else ScheduleTick();
         }
         else
         {
-            _index = Math.Clamp(_index, 0, t.Points.Count - 1);
-            state = t.Points[_index].JointState;
-            timeSeconds = t.Points[_index].TimeSeconds;
+            _index = Math.Clamp(_index, 0, previewPoints.Count - 1);
+            state = previewPoints[_index].JointState;
+            timeSeconds = previewPoints[_index].TimeSeconds;
         }
 
         if (!ReferenceEquals(_staticsFor, t))
         {
-            var pl = KinematicsPreview.TcpPath(ctx.Model, t.Points.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
+            var pl = KinematicsPreview.TcpPath(ctx.Model, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
             _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
-            KinematicsPreview.TrajectorySegments(ctx.Model, t, new TrajectoryValidationOptions(), out _, out var invalid, ctx.Chain, ctx.Base, ctx.Tool);
+            KinematicsPreview.TrajectorySegments(
+                ctx.Model,
+                new Trajectory(ctx.Model, previewPoints),
+                new TrajectoryValidationOptions(),
+                out _,
+                out var invalid,
+                ctx.Chain,
+                ctx.Base,
+                ctx.Tool);
             _invalidSegments = invalid;
             _staticsFor = t;
         }
 
-        _currentMeshes = KinematicsPreview.LinkMeshes(ctx.Model, state, ctx.Chain, ctx.Base, ctx.Tool).ToList();
+        _currentMeshes = KinematicsPreview.LinkMeshes(ctx.Model, state, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList();
         _startMeshes = _showStart
-            ? KinematicsPreview.LinkMeshes(ctx.Model, t.Points[0].JointState, ctx.Chain, ctx.Base, ctx.Tool).ToList()
+            ? KinematicsPreview.LinkMeshes(ctx.Model, previewPoints[0].JointState, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList()
             : new List<Mesh>();
 
         da.SetDataList(0, _currentMeshes);
@@ -276,6 +371,58 @@ public sealed class MotusPreviewComponent : MotusComponentBase
         da.SetData(5, _index);
         da.SetDataList(6, _invalidSegments);
         ExpirePreview(true);
+    }
+
+    private static List<TrajectoryPoint> BuildPreviewPoints(
+        Trajectory sourceTrajectory,
+        RobotModel previewRobot,
+        out bool remapApplied)
+    {
+        remapApplied = false;
+        if (sourceTrajectory.Points.Count == 0) return [];
+        var mappedStates = TryBuildJointRemap(sourceTrajectory.Robot, previewRobot, out var map)
+            ? sourceTrajectory.Points.Select(p => new JointState(RemapPositions(p.JointState.Positions, map))).ToList()
+            : sourceTrajectory.Points.Select(p => p.JointState).ToList();
+        remapApplied = map.Length > 0;
+
+        var points = new List<TrajectoryPoint>(sourceTrajectory.Points.Count);
+        for (var i = 0; i < sourceTrajectory.Points.Count; i++)
+            points.Add(new TrajectoryPoint(sourceTrajectory.Points[i].TimeSeconds, mappedStates[i]));
+        return points;
+    }
+
+    private static bool TryBuildJointRemap(RobotModel sourceRobot, RobotModel targetRobot, out int[] map)
+    {
+        map = [];
+        if (sourceRobot.Preset.AxisCount != targetRobot.Preset.AxisCount) return false;
+        var sourceNames = sourceRobot.JointNames;
+        var targetNames = targetRobot.JointNames;
+        if (sourceNames is null || targetNames is null) return false;
+        if (sourceNames.Count != sourceRobot.Preset.AxisCount || targetNames.Count != targetRobot.Preset.AxisCount) return false;
+
+        var sourceIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < sourceNames.Count; i++)
+            sourceIndex[sourceNames[i]] = i;
+
+        map = new int[targetNames.Count];
+        for (var i = 0; i < targetNames.Count; i++)
+        {
+            if (!sourceIndex.TryGetValue(targetNames[i], out var idx))
+            {
+                map = [];
+                return false;
+            }
+            map[i] = idx;
+        }
+        return true;
+    }
+
+    private static double[] RemapPositions(IReadOnlyList<double> sourcePositions, IReadOnlyList<int> map)
+    {
+        var remapped = new double[map.Count];
+        for (var i = 0; i < map.Count; i++)
+            remapped[i] = sourcePositions[map[i]];
+        return remapped;
     }
 
     public override Guid ComponentGuid => new Guid("d4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91");

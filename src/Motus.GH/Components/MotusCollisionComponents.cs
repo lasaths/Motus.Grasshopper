@@ -6,11 +6,15 @@ using Motus.GH.Data;
 using Motus.Presets;
 using Motus.Rhino;
 using Rhino.Geometry;
+using System;
+using System.Linq;
 
 namespace Motus.GH.Components;
 
 public sealed class MotusCollisionSphereComponent : MotusComponentBase
 {
+    private List<Mesh> _previewMeshes = new();
+
     public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision", "sphere") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -27,13 +31,25 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
         if (!da.GetData(0, ref pt) || !da.GetData(1, ref r)) return;
         da.GetData(2, ref name);
         var frame = new Frame(pt.X, pt.Y, pt.Z);
-        da.SetData(0, new CollisionObjectGoo(CollisionObject.Sphere(name, frame, r)));
+        var obj = CollisionObject.Sphere(name, frame, r);
+        _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        da.SetData(0, new CollisionObjectGoo(obj));
     }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
+
     public override Guid ComponentGuid => new Guid("c1a2b3c4-d5e6-4789-a012-3456789abcde");
 }
 
 public sealed class MotusCollisionBoxComponent : MotusComponentBase
 {
+    private List<Mesh> _previewMeshes = new();
+
     public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -51,21 +67,38 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
         var name = "box";
         if (!da.GetData(0, ref pl) || !da.GetData(1, ref hx) || !da.GetData(2, ref hy) || !da.GetData(3, ref hz)) return;
         da.GetData(4, ref name);
-        da.SetData(0, new CollisionObjectGoo(CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz)));
+        var obj = CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz);
+        _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        da.SetData(0, new CollisionObjectGoo(obj));
     }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
+
     public override Guid ComponentGuid => new Guid("d2b3c4d5-e6f7-4890-b123-456789abcdef");
 }
 
 public sealed class MotusCollisionSceneComponent : MotusComponentBase
 {
-    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs", "Collision", "circles-three-plus") { }
+    private List<Mesh> _previewMeshes = new();
+
+    public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs/groups", "Collision", "circles-three-plus") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
         p.AddTextParameter("Srdf", "S", "Optional SRDF file path (disable_collisions pairs)", GH_ParamAccess.item, "");
         p[p.ParamCount - 1].Optional = true;
     }
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Scene", "Sc", "Collision scene", GH_ParamAccess.item);
+    protected override void RegisterOutputParams(GH_OutputParamManager p)
+    {
+        p.AddGenericParameter("Scene", "Sc", "Collision scene", GH_ParamAccess.item);
+        p.AddGenericParameter("Groups", "G", "Planning groups from SRDF (optional)", GH_ParamAccess.list);
+        p.AddTextParameter("EndEffectors", "EE", "End-effector map from SRDF as name=parent_link entries", GH_ParamAccess.list);
+    }
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var goos = new List<IGH_Goo>();
@@ -79,8 +112,11 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
         var scene = new CollisionScene(objects);
         var srdfPath = "";
         da.GetData(1, ref srdfPath);
+        var groups = new List<PlanningGroup>();
+        var endEffectors = new List<string>();
         if (!string.IsNullOrWhiteSpace(srdfPath))
         {
+            srdfPath = UrdfPathResolver.ResolveUrdfPath(srdfPath);
             if (!File.Exists(srdfPath))
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"SRDF file not found: {srdfPath}");
@@ -89,8 +125,14 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
             {
                 try
                 {
-                    var pairs = SrdfLoader.LoadAllowedPairs(srdfPath);
+                    var doc = System.Xml.Linq.XDocument.Load(srdfPath);
+                    var pairs = SrdfLoader.LoadAllowedPairs(doc);
                     scene = SrdfLoader.MergeAllowedPairs(scene, pairs);
+                    groups = SrdfLoader.LoadGroups(doc).ToList();
+                    endEffectors = SrdfLoader.LoadEndEffectors(doc)
+                        .Select(kv => $"{kv.Key}={kv.Value}")
+                        .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
                 }
                 catch (Exception ex)
                 {
@@ -99,6 +141,17 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
             }
         }
         da.SetData(0, new CollisionSceneGoo(scene));
+        da.SetDataList(1, groups.Select(g => new PlanningGroupGoo(g)));
+        da.SetDataList(2, endEffectors);
+        _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
     }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
+
     public override Guid ComponentGuid => new Guid("e3c4d5e6-f7a8-4901-c234-56789abcdef0");
 }

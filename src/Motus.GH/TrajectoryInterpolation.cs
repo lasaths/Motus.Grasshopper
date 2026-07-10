@@ -42,7 +42,12 @@ internal static class TrajectoryInterpolation
         var n = a.AxisCount;
         var q = new double[n];
         for (var i = 0; i < n; i++)
-            q[i] = a.Positions[i] + alpha * (b.Positions[i] - a.Positions[i]);
+        {
+            var delta = b.Positions[i] - a.Positions[i];
+            while (delta > Math.PI) delta -= 2 * Math.PI;
+            while (delta < -Math.PI) delta += 2 * Math.PI;
+            q[i] = a.Positions[i] + alpha * delta;
+        }
         return new JointState(q);
     }
 }

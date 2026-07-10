@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.3.3**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.5.0**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,17 +44,26 @@ Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.3.3` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.5.0` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
 1. **Motus Robot** → pick a preset from the dropdown (e.g. `UR5e`)
 2. Drop a Rhino **Plane** for the target → wire to **Motus Plan** `Goal`
-3. **Motus Plan** → click the **Plan** button (`Start` defaults to home)
+3. **Motus Plan** → click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan** for reactive replanning on input edits.
 4. **Motus Preview** → click **Play** to animate
 5. **Motus Export** → `Json` / `Csv`, or **Motus Trajectory Data** for planes/times/joints
 
 That is three nodes for a working, animated plan. `Goal` also accepts a **Motus Joint State** for joint-space targets.
+For a full component reference, see [docs/grasshopper-components.md](docs/grasshopper-components.md).
+
+### Motion programs (0.6)
+
+1. **Motus Motion Segment** → build PTP / LIN / CIRC segments (Type dropdown)
+2. Wire segments into **Motus Program Plan** → click **Plan**
+3. **Motus Preview** / **Motus Export** — trajectories include `motionType`, `segmentIndex`, `blendRadiusMeters`
+
+Unlike **Motus Plan** plane goals, **Program Plan** does not fall back to joint-space paths when LIN fails.
 
 ### Collision-aware planning
 
@@ -64,17 +73,45 @@ That is three nodes for a working, animated plan. `Goal` also accepts a **Motus 
    - **Joint goal** → RRT-Connect with per-link capsules when the preset includes `collisionLinks`
 
 Optional: wire an SRDF file path into **ColScene** `Srdf` for allowed collision pairs (`examples/srdf/table_base.srdf`).
+`ColScene` also outputs SRDF groups (`Groups`) and end-effector map (`EndEffectors`) when present.
 
 Without a collision scene, joint goals use joint-linear interpolation (free space only).
+
+### Attach + planning groups (0.4)
+
+- **Motus Attach Body** creates an attached body from a collision object in TCP-local frame.
+- **Motus Planning Group** creates or forwards a `PlanningGroup` (manual joints or SRDF-derived).
+- Wire both into **Motus Plan**:
+  - `Attach` applies `PlanningContext.Attach(...)` behavior (hide source object while attached).
+  - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
+- Plan warnings include runtime capability probe text from `MotusCapabilities.Describe()` (managed/native OMPL/FCL status).
+
+Quick pattern with SRDF:
+
+1. `ColSphere/ColBox/ColMesh` → `ColScene.Objects`
+2. SRDF file path → `ColScene.Srdf`
+3. `ColScene.Scene` → `Plan.Collision`
+4. `ColScene.Groups` → `Planning Group` → `Plan.Group`
+5. `Attach Body` output(s) → `Plan.Attach`
 
 ### Cartesian vs joint goals
 
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.3.2** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.5.0** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
+
+### 0.6.0 — Motion programs
+
+- **Motus Motion Segment** — PTP / LIN / CIRC segment builder with Type dropdown
+- **Motus Program Plan** — mixed motion programs via `IndustrialMotionPlanner` (collision, group, attach parity with Motus Plan)
+- Example `08_motion_program.ghx`; export includes motion metadata per waypoint
+
+### 0.5.0 — Motus.NET 0.5.0 (UR analytic IK fix)
+
+Pins Motus.NET **0.5.0** from NuGet. Fixes UR TCP-linear (LIN) planning from viewer home poses where analytic IK previously disagreed with forward kinematics (~1.37 m error).
 
 ### 0.3.0 — breaking palette redesign
 
@@ -84,7 +121,11 @@ The component palette was consolidated from ~25 components to 10 for simplicity 
 
 Motus outputs neutral trajectories. Wire exports manually into UR.RTDE.Grasshopper, VirtualRobot, Robots, or custom scripts. Motus does not depend on those plugins.
 
-See [docs/external-plugin-workflows.md](docs/external-plugin-workflows.md) and [examples/README.md](examples/README.md).
+## Examples
+
+Eight Grasshopper definitions in `examples/` cover every Motus component — joint/Cartesian planning, collision shapes, SRDF/groups/attach, URDF load, frame overrides, and motion programs. See [examples/README.md](examples/README.md).
+
+Regenerate after component changes: `node scripts/generate-examples.mjs`
 
 Before release, run `./scripts/verify-qa.ps1 -Configuration Release -Install` and [docs/qa-checklist.md](docs/qa-checklist.md) in Rhino 8.
 

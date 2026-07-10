@@ -7,6 +7,7 @@ namespace Motus.GH.Data;
 public sealed class RobotModelGoo : MotusGooBase<RobotModel>
 {
     public SerialJointChain? Chain { get; set; }
+    public RobotCollisionModel? PreviewGeometry { get; set; }
     public Frame? BaseFrameOverride { get; set; }
     public Frame? ToolFrameOverride { get; set; }
 
@@ -21,11 +22,11 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
             ? new ToolFrame(f, Value!.Preset.ToolFrame.Name)
             : Value!.Preset.ToolFrame;
 
-    public static RobotModelGoo FromUrdf(UrdfRobot urdf) =>
-        new(urdf.ToModel()) { Chain = urdf.Chain };
+    public static RobotModelGoo FromUrdf(UrdfRobot urdf, RobotCollisionModel? previewGeometry = null) =>
+        new(urdf.ToModel()) { Chain = urdf.Chain, PreviewGeometry = previewGeometry };
 
     public RobotModelGoo WithFrames(Frame? baseFrame, Frame? toolFrame) =>
-        new(Value!) { Chain = Chain, BaseFrameOverride = baseFrame, ToolFrameOverride = toolFrame };
+        new(Value!) { Chain = Chain, PreviewGeometry = PreviewGeometry, BaseFrameOverride = baseFrame, ToolFrameOverride = toolFrame };
 
     public override string ToString() => Value?.DisplayName ?? "RobotModel";
 }

@@ -29,7 +29,8 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
     {
         var idle = GH_FontServer.StringWidth("\u25B6 Play", GH_FontServer.Standard);
         var active = GH_FontServer.StringWidth("\u25A0 Stop", GH_FontServer.Standard);
-        return Math.Max(idle, active) + 24;
+        var replan = GH_FontServer.StringWidth("Replan", GH_FontServer.Standard);
+        return Math.Max(Math.Max(idle, active), replan) + 24;
     }
 
     protected override void Layout()

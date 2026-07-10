@@ -1,6 +1,7 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
 using Motus.Core;
+using Motus.GH;
 using Motus.GH.Data;
 using Motus.Rhino;
 using Rhino.Geometry;
@@ -9,6 +10,8 @@ namespace Motus.GH.Components;
 
 public sealed class MotusCollisionMeshComponent : MotusComponentBase
 {
+    private List<Mesh> _previewMeshes = new();
+
     public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "mesh") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -38,11 +41,20 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
 
         if (obj is null)
         {
+            _previewMeshes = [];
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Geometry must be a valid Mesh or Brep.");
             return;
         }
 
+        _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
         da.SetData(0, new CollisionObjectGoo(obj));
+    }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
     }
 
     public override Guid ComponentGuid => new Guid("f4d5e6f7-a8b9-4012-d345-6789abcdef01");

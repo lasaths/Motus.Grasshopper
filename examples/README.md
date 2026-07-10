@@ -1,44 +1,235 @@
 # Example Grasshopper Definitions
 
-Two definitions cover the whole 0.3 palette. They ship pre-wired with sensible
-default values; open one in Rhino 8 / Grasshopper, press **Plan**, and (after a
-quick look) **Save** to re-bake them against your installed component version.
 
-| File | Workflow |
-|------|----------|
-| `01_basic_planning.ghx` | Robot + joint goal -> Plan -> Preview + Export |
-| `02_collision_planning.ghx` | Obstacle -> Scene -> Plan (RRT) -> Preview |
 
-## Minimal workflow (01)
+Eight focused `.ghx` files cover every Motus component and planner input. Regenerate them after component changes:
+
+
+
+```bash
+
+node scripts/generate-examples.mjs
+
+node scripts/validate-ghx.mjs
 
 ```
-Motus Robot (UR5e) ----\
-Motus Joint State -------> Motus Plan [Plan] --> Trajectory --> Motus Preview [Play]
-                                                            \--> Motus Export (Json / Csv)
+
+
+
+Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Motus Program Plan**, then **Play** on **Motus Preview**.
+
+
+
+## Example index
+
+
+
+| File | What it demonstrates |
+
+|------|----------------------|
+
+| `01_joint_planning.ghx` | Preset robot, joint goal, joint-linear plan, Preview, Export, Trajectory Data |
+
+| `02_cartesian_planning.ghx` | Joint State → TCP Pose (FK) → Cartesian LIN plan |
+
+| `03_collision_rrt.ghx` | ColSphere → ColScene → Plan.Collision (RRT-Connect) |
+
+| `04_collision_shapes.ghx` | ColSphere + ColBox merged in ColScene → RRT |
+
+| `05_srdf_group_attach.ghx` | SRDF path, Planning Group, Attach Body on Plan |
+
+| `06_urdf_load.ghx` | Motus Load URDF → plan + preview (set Path panel) |
+
+| `07_frames_and_start.ghx` | Robot Base/Tool overrides, Plan Start, Preview ShowStart |
+
+| `08_motion_program.ghx` | PTP + LIN + CIRC segments → Program Plan → Preview / Export |
+
+
+
+## Component coverage
+
+
+
+| Component / option | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 |
+
+|--------------------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+
+| Motus Robot (preset dropdown) | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ | ✓ |
+
+| Motus Load URDF | | | | | | ✓ | | |
+
+| Motus Joint State | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Motus TCP Pose | | ✓ | | | | | | |
+
+| Joint validation (Robot on Joints) | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+| Plane goal (Cartesian LIN) | | ✓ | | | | | | ✓ |
+
+| Motus Motion Segment | | | | | | | | ✓ |
+
+| Motus Program Plan | | | | | | | | ✓ |
+
+| Motus Plan — Start | | | | | | | ✓ | ✓ |
+
+| Motus Plan — Collision | | | ✓ | ✓ | ✓ | | | |
+
+| Motus Plan — Group | | | | | ✓ | | | |
+
+| Motus Plan — Attach | | | | | ✓ | | | |
+
+| Motus Collision Sphere | | | ✓ | ✓ | ✓ | | | |
+
+| Motus Collision Box | | | | ✓ | | | | |
+
+| Motus Collision Mesh | | | | *(note)* | | | | |
+
+| Motus Collision Scene | | | ✓ | ✓ | ✓ | | | |
+
+| ColScene SRDF | | | | | ✓ | | | |
+
+| Motus Planning Group | | | | | ✓ | | | |
+
+| Motus Attach Body | | | | | ✓ | | | |
+
+| Motus Preview | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+| Preview ShowStart | | | | | | | ✓ | |
+
+| Motus Export | ✓ | | | | | | | ✓ |
+
+| Motus Trajectory Data | ✓ | | | | | | | |
+
+| Robot Base / Tool override | | | | | | | ✓ | |
+
+| JsonPath on Robot | | | | | | | *(unwired)* | |
+
+
+
+**Col Mesh:** wire any Rhino mesh or Brep into **Motus Collision Mesh** the same way **04** wires sphere + box into **ColScene** `Objects` (list input accepts multiple sources).
+
+
+
+**JsonPath:** optional on **Motus Robot** — point at a custom preset JSON to override the dropdown model.
+
+
+
+**Degrees** on **Motus Joint State:** right-click the **J** input and toggle **Degrees**; examples use radians by default.
+
+
+
+## Typical flows
+
+
+
+### Cartesian LIN (02)
+
+
+
 ```
 
-1. **Motus Robot** — pick `UR5e` from the dropdown. (Or drop a Rhino **Plane** into `Goal` for a Cartesian target instead of a joint state.)
-2. **Motus Plan** — leave `Start` unwired (defaults to home), click **Plan**.
-3. **Motus Preview** — wire `Trajectory`, click **Play** to animate.
-4. **Motus Export** / **Motus Trajectory Data** — hang off the same `Trajectory`.
+Value List → Robot ─┬→ TCP Pose ← Joint State (goal joints)
 
-## Collision-aware (02)
+                    └→ Plan [Plan] ← TCP Pose.Plane
 
-Add **Motus Collision Sphere** / **Box** / **Mesh** → **Motus Collision Scene**, wire the scene
-into **Motus Plan** `Collision`. With a joint goal this plans with RRT-Connect.
+Plan → Preview [Play]
 
-Optional: wire an SRDF file path into **ColScene** `Srdf` to add allowed collision pairs
-(see `examples/srdf/table_base.srdf`). Use `link:0`…`link:5` for robot links or obstacle names from your scene.
+```
 
-**UR10e:** pick `UR10e` on **Motus Robot** (bundled preset includes link capsules). For URDF import demos see `examples/ur10e/` (minimal chain from [Universal Robots ROS2 description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)).
 
-## Editing / re-saving
 
-The `.ghx` are authored directly against the Grasshopper archive format, so they
-open with every node placed, wired, and seeded. If you tweak a graph, just
-**File → Save** from Grasshopper — re-saving guarantees the archive matches the
-installed component version.
+### Joint-linear (01)
 
-### External plugins (optional)
 
-See [docs/external-plugin-workflows.md](../docs/external-plugin-workflows.md) for UR.RTDE.Grasshopper, VirtualRobot, and other export paths. No bundled `.gh` examples for those plugins.
+
+```
+
+Value List → Robot ─┐
+
+Joint State (Rb) ───┼→ Plan [Plan] → Preview [Play]
+
+                    ├→ Export (Json / Csv)
+
+                    └→ Trajectory Data
+
+```
+
+
+
+### Motion program (08)
+
+
+
+```
+
+Robot + Joint States / Planes → Motion Segment (PTP/LIN/CIRC) ─┐
+
+                                                                ├→ Program Plan [Plan] → Preview / Export
+
+Start (optional) ───────────────────────────────────────────────┘
+
+```
+
+
+
+### Collision RRT (03–05)
+
+
+
+```
+
+ColSphere / ColBox / ColMesh → ColScene → Plan.Collision
+
+Joint State → Plan.Goal
+
+(optional) SRDF panel → ColScene → Group → Plan.Group
+
+(optional) ColObject → Attach → Plan.Attach
+
+```
+
+
+
+### URDF (06)
+
+
+
+URDF assets in `examples/ur10e/` — see that folder’s README. Use `ur10e_minimal.urdf` for CI/smoke, or `ur10e.urdf` with meshes from `node scripts/fetch-ur10e-assets.mjs`.
+
+
+
+### KR 210
+
+
+
+URDF assets in `examples/kr210_r3100_ultra/` — see that folder’s README and `node scripts/fetch-kr210-assets.mjs` for meshes.
+
+
+
+## SRDF
+
+
+
+`examples/srdf/table_base.srdf` disables checks between `link:0` and obstacle `table`, and defines a `manipulator` planning group. In **05**, edit the **Srdf** panel if the relative path does not resolve (ColScene walks up from the Grasshopper working directory, same as Load URDF).
+
+
+
+## URDF preview notes
+
+
+
+- `Motus Load URDF` feeds visual geometry into **Motus Preview** when supported (`box`, `cylinder`, `sphere`, `.stl`).
+
+- `.dae` visuals are skipped; use `*_minimal.urdf` for reliable in-app preview without external meshes.
+
+
+
+## Editing
+
+
+
+Re-save from Grasshopper after tweaks so the archive matches your installed component version. Prefer editing `scripts/generate-examples.mjs` for structural changes, then re-run the generator.
+
+
+
+External plugin workflows (UR RTDE, VirtualRobot, etc.): [docs/external-plugin-workflows.md](../docs/external-plugin-workflows.md).
+

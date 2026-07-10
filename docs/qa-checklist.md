@@ -15,14 +15,20 @@ Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke 
 - [x] UR5e: joint-linear plan produces trajectory — QA smoke + unit tests
 - [x] KUKA KR 6 R900 plans successfully — QA smoke
 - [x] Motus Robot loads a JSON preset (JsonPath input) — QA smoke (`UR/UR5e.json`)
+- [x] URDF load produces robot model — QA smoke (`examples/ur10e/ur10e_minimal.urdf`, `examples/ur10e/ur10e.urdf`, `examples/kr210_r3100_ultra/kr210_r3100_ultra_minimal.urdf`)
 - [ ] Motus Plan computes only on the Plan button; re-emits cached on input edits — confirm in GH
+- [ ] Motus Plan Auto Plan (right-click menu): input edit replans after debounce; Replan button is immediate; setting persists in saved `.gh`
 - [x] Cartesian goal (plane) reaches target via IK — QA smoke + `CartesianPlannerTests`
 - [x] RRT Connect (collision wired) avoids sphere obstacle — QA smoke uses `RobotMeshCollisionChecker` + `RrtConnectTests`
+- [x] PlanningContext attach path works with RRT (`Attach` input) — QA smoke attach scenario
+- [x] SRDF group-driven planning locks non-group joints (`Group` input) — QA smoke SRDF group scenario
+- [x] Mesh obstacle blocks robot link envelope — QA smoke (`MeshCollisionChecker`)
 - [x] Esc / solution cancel stops RRT mid-run — `ShouldCancel` verified in QA smoke; confirm Esc in GH canvas
 
 ## Export
 
 - [x] Out-of-limit joint reported in Motus Plan Status / Warnings — QA smoke (validator)
+- [x] Plan warnings include `MotusCapabilities.Describe()` runtime status — verify in GH status/warnings output
 - [x] Motus Export Json parses; Csv header is `time_seconds,joint_1_rad,...` — QA smoke
 - [x] Motus Trajectory Data planes move with joint angles (FK) — QA smoke (TCP path); confirm planes in GH preview
 
@@ -30,7 +36,7 @@ Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke 
 
 - [ ] Motus Preview shows link meshes + TCP path — place in Rhino (meshes need Rhino runtime)
 - [x] Motus Preview splits valid/invalid segments — QA smoke (segment split)
-- [x] UseDegrees=true on Joint State converts correctly — QA smoke (`Units.ToRadians`)
+- [x] Joint State degrees toggle converts correctly — QA smoke (`RhinoMath.ToRadians`)
 
 ## Units
 
