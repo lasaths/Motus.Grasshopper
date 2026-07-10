@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.5.0**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.5.1**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,7 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (teal `#00c49a`, bold, 24px)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.5.0` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.5.1` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -99,9 +99,13 @@ Quick pattern with SRDF:
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.5.0** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.5.1** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
+
+### 0.6.1 — Motus.NET 0.5.1 (faster obstacle RRT)
+
+Pins Motus.NET **0.5.1** from NuGet. Faster managed collision checks (`FastDhFk`, xyz sphere path) speed up RRT-Connect obstacle planning on Rhino Win/Mac without native OMPL.
 
 ### 0.6.0 — Motion programs
 
