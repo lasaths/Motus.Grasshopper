@@ -30,10 +30,11 @@ Source PNGs are black duotone; `MotusIcon.Recolor` maps alpha to the subcategory
 | Component | Subcategory | Phosphor icon |
 |-----------|-------------|---------------|
 | Motus (ribbon tab) | — | robot |
-| Motus Robot | Model | cube |
+| Motus Robot | Model | file |
+| Motus UR10e Robotiq | Model | robot |
 | Motus Tool | Model | wrench |
 | Motus Load Mesh | Model | download-simple |
-| Motus Load URDF | Model | file |
+| Motus UR10e Robotiq | Model | robot |
 | Motus Joint State | Model | gear-six |
 | Motus TCP Pose | Model | crosshair |
 | Motus Plan | Plan | flow-arrow |

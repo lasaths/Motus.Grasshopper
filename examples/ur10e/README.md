@@ -58,7 +58,7 @@ xacro urdf/ur.urdf.xacro ur_type:=ur10e name:=ur10e > ur10e.urdf
 
 | `ur10e.urdf` | Arm only — official visual (DAE) and collision (STL) meshes |
 
-| `ur10e_robotiq.urdf` | UR10e + Robotiq 2F-85 (`meshes/robotiq_2f85/robotiq_2f85_tool0.stl` on `tool0`) |
+| `ur10e_robotiq.urdf` | UR10e + Robotiq 2F-85 (per-link visual DAE on `tool0`) |
 
 | `ur10e_minimal.urdf` | Small serial chain + sample collision (planning/import demo) |
 
@@ -74,9 +74,9 @@ xacro urdf/ur.urdf.xacro ur_type:=ur10e name:=ur10e > ur10e.urdf
 
 **Meshes:** run `node scripts/fetch-ur10e-assets.mjs` from the repo root (~10 MB arm meshes + Robotiq collision STLs under `meshes/`).
 
-**Grasshopper:** pick **UR10e** on **Motus Robot** — includes bundled **Robotiq 2F-85** TCP and gripper mesh (`resources/tools/robotiq_2f85_tcp_local.stl`) unless you override with **Motus Tool**.
+**Robotiq URDF sources:** collision meshes are merged from [PickNik `ros2_robotiq_gripper`](https://github.com/PickNikRobotics/ros2_robotiq_gripper) (`robotiq_description`). Alternatives: [ros-industrial/robotiq](https://github.com/ros-industrial/robotiq), [a-price/robotiq_arg85_description](https://github.com/a-price/robotiq_arg85_description). Re-run the fetch script after cloning those repos if you replace part STLs.
 
-Wire `ur10e_robotiq.urdf` (recommended) or `ur10e.urdf` into **Motus Load URDF** (`BaseLink` = `base_link`, `TipLink` = `tool0`). Mesh paths are relative to this folder (`meshes/ur10e/...`, `meshes/robotiq_2f85/...`). `ur10e_robotiq` also receives the bundled Robotiq tool for planning TCP.
+**Grasshopper:** drop **Motus UR10e Robotiq** for the bundled arm + gripper, or wire any `.urdf` into **Motus Robot** (`Path`, optional `BaseLink` / `TipLink`, optional `Base` / `Tool`).
 
 
 

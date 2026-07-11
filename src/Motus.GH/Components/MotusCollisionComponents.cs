@@ -3,6 +3,7 @@ using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.GH;
 using Motus.GH.Data;
+using Motus.GH.Urdf;
 using Motus.Presets;
 using Motus.Rhino;
 using Rhino.Geometry;

@@ -18,6 +18,7 @@ internal static class GhExtract
         goo = null!;
         RobotModelGoo? g = null;
         if (!da.GetData(index, ref g) || g?.Value is null) return false;
+        g.EnsureChainFromPath();
         goo = g;
         return true;
     }

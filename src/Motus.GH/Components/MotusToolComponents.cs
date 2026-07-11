@@ -3,6 +3,7 @@ using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.GH;
 using Motus.GH.Data;
+using Motus.GH.Urdf;
 using Motus.Rhino;
 using Rhino.Geometry;
 using System;
@@ -61,10 +62,14 @@ public sealed class MotusToolComponent : MotusComponentBase
             }
         }
 
+        var caps = name.Contains("robotiq", StringComparison.OrdinalIgnoreCase)
+            ? ToolCapabilities.Robotiq2F85
+            : null;
         var tool = new ToolDefinition(
             string.IsNullOrWhiteSpace(name) ? "tool" : name.Trim(),
             FrameConversion.FromPlane(tcp),
-            geometry);
+            geometry,
+            caps);
         _previewMeshes = geometry is null
             ? []
             : CollisionViewportPreview.MeshesFor(geometry);

@@ -45,6 +45,7 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 | `08_motion_program.ghx` | PTP + LIN + CIRC segments → Program Plan → Preview / Export |
 | `09_tool_tcp.ghx` | Motus Tool (TCP + gripper box) → Robot.Tool → Plan → Preview / Export |
 | `10_robotiq_tool.ghx` | Robotiq 2F-85 STL → Load Mesh → Motus Tool → UR10e Plan + Preview |
+| `11_gripper_motion_program.ghx` | PTP + SET gripper close → Program Plan → Preview / Export (toolState on trajectory) |
 
 
 
@@ -196,15 +197,6 @@ Joint State → Plan.Goal
 
 
 URDF assets in `examples/ur10e/` — see that folder’s README. Run `node scripts/fetch-ur10e-assets.mjs` for arm + Robotiq meshes. Use `ur10e_minimal.urdf` for CI/smoke, `ur10e_robotiq.urdf` for arm+gripper with local mesh paths, or `ur10e.urdf` for arm only.
-
-
-
-### KR 210
-
-
-
-URDF assets in `examples/kr210_r3100_ultra/` — see that folder’s README and `node scripts/fetch-kr210-assets.mjs` for meshes.
-
 
 
 ## SRDF

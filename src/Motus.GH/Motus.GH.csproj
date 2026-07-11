@@ -32,7 +32,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\icons\*.png" />
-    <None Include="..\..\resources\viewer_presets.json" Link="resources\viewer_presets.json">
+    <None Include="..\..\resources\robots\ur10e_robotiq\**\*" Link="resources\robots\ur10e_robotiq\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\..\resources\tools\robotiq_2f85_tcp_local.stl" Link="resources\tools\robotiq_2f85_tcp_local.stl">
@@ -50,11 +50,18 @@
       <MotusDeployFiles Include="$(TargetDir)Motus*.gha" />
       <MotusDeployFiles Include="$(TargetDir)Motus*.dll" />
       <MotusDeployFiles Include="$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll" Condition="Exists('$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll')" />
-      <MotusDeployFiles Include="$(TargetDir)resources\**\*" />
+      <MotusDeployResources Include="$(TargetDir)resources\**\*" />
     </ItemGroup>
     <Copy
       SourceFiles="@(MotusDeployFiles)"
       DestinationFiles="@(MotusDeployFiles->'$(GrasshopperLibraryDir)\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Retries="3"
+      RetryDelayMilliseconds="500"
+      ContinueOnError="WarnAndContinue" />
+    <Copy
+      SourceFiles="@(MotusDeployResources)"
+      DestinationFiles="@(MotusDeployResources->'$(GrasshopperLibraryDir)\resources\%(RecursiveDir)%(Filename)%(Extension)')"
       SkipUnchangedFiles="true"
       Retries="3"
       RetryDelayMilliseconds="500"

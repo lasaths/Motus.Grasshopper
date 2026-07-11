@@ -9,7 +9,6 @@ using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Resources;
 using Motus.GH.UI;
-using Motus.Presets;
 using Motus.Rhino;
 using Rhino;
 using Rhino.Display;
@@ -35,60 +34,145 @@ public abstract class MotusComponentBase : GH_Component
         MotusIcon.Get(_iconName, MotusIcon.SubcategoryColor(_subcategory));
 }
 
-public sealed class MotusRobotComponent : MotusComponentBase
+public abstract class RobotSourceComponentBase : MotusComponentBase
 {
-    public MotusRobotComponent() : base("Motus Robot", "Robot", "Pick a bundled robot preset (dropdown) or load one from JSON", "Model", "cube") { }
+    protected List<Mesh> _previewMeshes = [];
+    protected List<Line> _previewWires = [];
+    private string? _previewKey;
+
+    protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName = "cube")
+        : base(name, nickname, desc, "Model", iconName) { }
+
+    protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)
+    {
+        var key = PreviewKey(goo, sourcePath);
+        if (key == _previewKey && _previewMeshes.Count > 0)
+            return;
+
+        _previewKey = key;
+        RobotViewportPreview.Build(goo, sourcePath, out _previewMeshes, out _previewWires);
+        ExpirePreview(true);
+    }
+
+    protected void ClearPreview()
+    {
+        _previewKey = null;
+        _previewMeshes = [];
+        _previewWires = [];
+        ExpirePreview(true);
+    }
+
+    private static string PreviewKey(RobotModelGoo goo, string? sourcePath) =>
+        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}";
+
+    public override BoundingBox ClippingBox =>
+        RobotViewportPreview.ComputeBounds(_previewMeshes, _previewWires);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (Locked) return;
+        RobotViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
+
+    public override void DrawViewportWires(IGH_PreviewArgs args)
+    {
+        if (Locked) return;
+        RobotViewportPreview.DrawWires(args, _previewWires, _previewMeshes.Count == 0);
+    }
+}
+
+public sealed class MotusRobotComponent : RobotSourceComponentBase
+{
+    public MotusRobotComponent()
+        : base("Motus Robot", "Robot", "Load a robot from URDF or .xacro; optional Base and Tool overrides", "file") { }
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddTextParameter("Model", "M", "Preset model name (UR5e, KR 6 R900, …)", GH_ParamAccess.item, "UR10e");
-        p.AddTextParameter("JsonPath", "J", "Path to a preset JSON (overrides Model when set)", GH_ParamAccess.item);
+        p.AddTextParameter("Path", "P", "Path to .urdf or .xacro file", GH_ParamAccess.item);
+        p.AddTextParameter("BaseLink", "B", "Base link name", GH_ParamAccess.item, "base_link");
         p[p.ParamCount - 1].Optional = true;
-        p.AddPlaneParameter("Base", "B", "Optional base frame override (TCP goals are in this frame)", GH_ParamAccess.item);
+        p.AddTextParameter("TipLink", "T", "Tip link name", GH_ParamAccess.item, "tool0");
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Tool", "T", "Optional Motus Tool definition", GH_ParamAccess.item);
+        p.AddPlaneParameter("Base", "Bf", "Optional base frame override (TCP goals are in this frame)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Tool", "Tl", "Optional Motus Tool definition", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
-    protected override void RegisterOutputParams(GH_OutputParamManager p) => p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
-    public override void AddedToDocument(GH_Document doc)
-    {
-        base.AddedToDocument(doc);
-        if (Params.Input[0].SourceCount > 0) return;
-        // Defer document mutation: adding the value list and wiring it as a source while
-        // GH is still placing this component blocks/hangs the canvas. Run it once the
-        // current document operation has finished.
-        doc.ScheduleSolution(1, _ => GhValueList.AttachDropdown(this, 0, PresetLoader.ListAvailableModels()));
-    }
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
+        p.AddGenericParameter("Robot", "Rb", "Robot model with URDF kinematics chain", GH_ParamAccess.item);
+
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        var name = "UR10e";
-        var jsonPath = "";
+        var path = "";
+        var baseLink = "base_link";
+        var tipLink = "tool0";
         var basePl = Plane.Unset;
-        da.GetData(0, ref name);
-        da.GetData(1, ref jsonPath);
-        da.GetData(2, ref basePl);
+        da.GetData(1, ref baseLink);
+        da.GetData(2, ref tipLink);
+        da.GetData(3, ref basePl);
         ToolGoo? toolGoo = null;
-        da.GetData(3, ref toolGoo);
+        da.GetData(4, ref toolGoo);
+
+        if (!da.GetData(0, ref path) || string.IsNullOrWhiteSpace(path))
+        {
+            ClearPreview();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Set Path to a .urdf or .xacro file.");
+            return;
+        }
+
         try
         {
-            var model = string.IsNullOrWhiteSpace(jsonPath)
-                ? PresetLoader.LoadRobotModelByName(name)
-                : PresetLoader.LoadRobotModelFromFile(jsonPath);
-            var goo = new RobotModelGoo(model);
+            var goo = UrdfRobotLoad.Load(path, baseLink, tipLink);
             if (basePl.IsValid) goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
-            if (toolGoo?.Value is null && string.IsNullOrWhiteSpace(jsonPath))
-            {
-                if (BundledToolLoader.TryDefaultForModel(name) is { } bundled)
-                    goo.Tool = bundled;
-            }
-            else if (toolGoo?.Value is not null)
-            {
-                goo.Tool = toolGoo.Value;
-            }
+            if (toolGoo?.Value is not null) goo.Tool = toolGoo.Value;
+            ApplyPreview(goo, path);
             da.SetData(0, goo);
         }
-        catch (Exception ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); }
+        catch (Exception ex)
+        {
+            ClearPreview();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+        }
     }
+
     public override Guid ComponentGuid => new Guid("aa3e8488-943e-426f-b205-e8db5f684998");
+}
+
+public sealed class MotusUr10eRobotiqComponent : RobotSourceComponentBase
+{
+    public MotusUr10eRobotiqComponent()
+        : base("Motus UR10e Robotiq", "UR10e", "Bundled UR10e arm with Robotiq 2F-85 gripper", "robot") { }
+
+    protected override void RegisterInputParams(GH_InputParamManager p) { }
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
+        p.AddGenericParameter("Robot", "Rb", "Robot model with URDF kinematics chain", GH_ParamAccess.item);
+
+    protected override void SolveInstance(IGH_DataAccess da)
+    {
+        try
+        {
+            var path = BundledToolLoader.ResolveBundledPath(BundledToolLoader.Ur10eRobotiqUrdf);
+            var goo = UrdfRobotLoad.Load(path, "base_link", "tool0");
+            goo.EnsureBundledTool();
+            if (goo.Tool?.Geometry is null)
+            {
+                var reason = BundledToolLoader.TryLoadRobotiqFailureReason(path)
+                    ?? "Robotiq gripper mesh could not be loaded.";
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, reason);
+            }
+            ApplyPreview(goo, path);
+            da.SetData(0, goo);
+        }
+        catch (Exception ex)
+        {
+            ClearPreview();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+        }
+    }
+
+    public override Guid ComponentGuid => new Guid("84b06a7d-8a3d-46ec-968f-25e74c249ad1");
 }
 
 public sealed class MotusJointStateComponent : MotusComponentBase
@@ -179,275 +263,6 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("f1a2b3c4-d5e6-4789-a123-4567890abcde");
 }
 
-public sealed class MotusPreviewComponent : MotusComponentBase
-{
-    private static readonly Color CurrentColor = Color.FromArgb(200, 0, 196, 154);
-    private static readonly Color StartColor = Color.FromArgb(90, 220, 220, 220);
-    private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
-    private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
-
-    private Trajectory? _trajectory;
-    private DateTime _playStartUtc;
-    private bool _playing;
-    private int _index;
-    private bool _showStart;
-
-    // Per-trajectory outputs (TCP path, invalid segments) don't change frame-to-frame,
-    // so cache them and only recompute when the trajectory reference changes. Recomputing
-    // them on every animation tick freezes the canvas for non-trivial trajectories.
-    private Trajectory? _staticsFor;
-    private global::Rhino.Geometry.Curve? _tcpCurve;
-    private List<global::Rhino.Geometry.Line> _invalidSegments = new();
-    private List<Mesh> _currentMeshes = new();
-    private List<Mesh> _startMeshes = new();
-
-    public MotusPreviewComponent() : base("Motus Preview", "Preview", "Animated FK preview; click Play/Stop on the component", "Preview", "eye") { }
-
-    public override void CreateAttributes() =>
-        m_attributes = new ButtonAttributes(this, () => _playing ? "\u25A0 Stop" : "\u25B6 Play", () => _playing, TogglePlayback);
-
-    protected override void RegisterInputParams(GH_InputParamManager p)
-    {
-        p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
-        p.AddBooleanParameter("ShowStart", "S", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
-        p.AddGenericParameter("Robot", "Rb", "Optional robot/context override for external trajectories", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-    }
-
-    protected override void RegisterOutputParams(GH_OutputParamManager p)
-    {
-        p.AddMeshParameter("Meshes", "M", "Link meshes at the current frame", GH_ParamAccess.list);
-        p.AddLineParameter("Links", "L", "Link lines at the current frame", GH_ParamAccess.list);
-        p.AddCurveParameter("TCP Path", "P", "Full TCP polyline via FK", GH_ParamAccess.item);
-        p.AddGenericParameter("State", "S", "Joint state at the current frame", GH_ParamAccess.item);
-        p.AddNumberParameter("Time", "Tm", "Elapsed trajectory time at current frame (seconds)", GH_ParamAccess.item);
-        p.AddIntegerParameter("Index", "I", "Current waypoint index (0-based)", GH_ParamAccess.item);
-        p.AddLineParameter("Invalid", "X", "Invalid TCP segments (joint/velocity/acceleration limits)", GH_ParamAccess.list);
-    }
-
-    public override BoundingBox ClippingBox
-    {
-        get
-        {
-            var bb = BoundingBox.Empty;
-            foreach (var mesh in _currentMeshes)
-                bb.Union(mesh.GetBoundingBox(false));
-            if (_showStart)
-            {
-                foreach (var mesh in _startMeshes)
-                    bb.Union(mesh.GetBoundingBox(false));
-            }
-            if (_tcpCurve is not null)
-                bb.Union(_tcpCurve.GetBoundingBox(false));
-            return bb.IsValid ? bb : BoundingBox.Unset;
-        }
-    }
-
-    public override void DrawViewportMeshes(IGH_PreviewArgs args)
-    {
-        if (Locked) return;
-
-        var currentMat = new DisplayMaterial(CurrentColor) { Transparency = 0.2 };
-        foreach (var mesh in _currentMeshes)
-            args.Display.DrawMeshShaded(mesh, currentMat);
-
-        if (!_showStart) return;
-        var startMat = new DisplayMaterial(StartColor) { Transparency = 0.55 };
-        foreach (var mesh in _startMeshes)
-            args.Display.DrawMeshShaded(mesh, startMat);
-    }
-
-    public override void DrawViewportWires(IGH_PreviewArgs args)
-    {
-        if (Locked) return;
-
-        if (_tcpCurve is not null)
-            args.Display.DrawCurve(_tcpCurve, PathColor, 2);
-
-        foreach (var line in _invalidSegments)
-            args.Display.DrawLine(line, InvalidColor, 3);
-    }
-
-    public override bool Write(GH_IWriter writer)
-    {
-        writer.SetBoolean("ShowStart", _showStart);
-        return base.Write(writer);
-    }
-
-    public override bool Read(GH_IReader reader)
-    {
-        if (reader.ItemExists("ShowStart"))
-            _showStart = reader.GetBoolean("ShowStart");
-        return base.Read(reader);
-    }
-
-    public override void RemovedFromDocument(GH_Document doc)
-    {
-        _playing = false;
-        base.RemovedFromDocument(doc);
-    }
-
-    private void TogglePlayback()
-    {
-        if (_playing) _playing = false;
-        else if (_trajectory?.Points.Count > 0)
-        {
-            _playing = true;
-            _playStartUtc = DateTime.UtcNow;
-            _index = 0;
-        }
-        ExpireSolution(true);
-    }
-
-    private void ScheduleTick()
-    {
-        if (!_playing || OnPingDocument() is not GH_Document doc) return;
-        doc.ScheduleSolution(33, _ => ExpireSolution(false));
-    }
-
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
-        var t = trajGoo.Value!;
-        GhExtract.TryRobotGoo(da, 2, out var robotOverride);
-        var ctx = trajGoo.Context(robotOverride);
-        var previewGeometry = ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel;
-        if (robotOverride?.Tool is { } overrideTool &&
-            trajGoo.ToolSnapshot is { } snapshot &&
-            !ToolsEquivalent(snapshot, overrideTool))
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Trajectory tool snapshot overrides Robot tool for preview.");
-        }
-        _trajectory = t;
-        if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
-
-        da.GetData(1, ref _showStart);
-
-        if (t.Robot.Preset.AxisCount != ctx.Model.Preset.AxisCount)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                $"Trajectory axis count ({t.Robot.Preset.AxisCount}) differs from preview robot axis count ({ctx.Model.Preset.AxisCount}).");
-        }
-
-        var previewPoints = BuildPreviewPoints(t, ctx.Model, out var jointRemapUsed);
-        var hasRobotOverride = robotOverride?.Value is not null;
-        if (hasRobotOverride && !jointRemapUsed && !ReferenceEquals(t.Robot, ctx.Model))
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "Robot override joint-name remap not available; preview uses source joint order. " +
-                "Connect the trajectory's robot for exact geometry or align joint names.");
-        }
-
-        JointState state;
-        double timeSeconds;
-        if (_playing)
-        {
-            var elapsed = (DateTime.UtcNow - _playStartUtc).TotalSeconds;
-            state = TrajectoryInterpolation.AtTime(new Trajectory(ctx.Model, previewPoints), elapsed, out _index);
-            timeSeconds = elapsed;
-            if (elapsed >= t.DurationSeconds) _playing = false;
-            else ScheduleTick();
-        }
-        else
-        {
-            _index = Math.Clamp(_index, 0, previewPoints.Count - 1);
-            state = previewPoints[_index].JointState;
-            timeSeconds = previewPoints[_index].TimeSeconds;
-        }
-
-        if (!ReferenceEquals(_staticsFor, t))
-        {
-            var pl = KinematicsPreview.TcpPath(ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
-            _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
-            KinematicsPreview.TrajectorySegments(
-                ctx.EffectiveModel,
-                new Trajectory(ctx.EffectiveModel, previewPoints),
-                new TrajectoryValidationOptions(),
-                out _,
-                out var invalid,
-                ctx.Chain,
-                ctx.Base,
-                ctx.Tool);
-            _invalidSegments = invalid;
-            _staticsFor = t;
-        }
-
-        _currentMeshes = KinematicsPreview.LinkMeshes(ctx.EffectiveModel, state, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList();
-        _startMeshes = _showStart
-            ? KinematicsPreview.LinkMeshes(ctx.EffectiveModel, previewPoints[0].JointState, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList()
-            : new List<Mesh>();
-
-        da.SetDataList(0, _currentMeshes);
-        da.SetDataList(1, KinematicsPreview.LinkLines(ctx.EffectiveModel, state, ctx.Chain, ctx.Base, ctx.Tool).ToList());
-        da.SetData(2, _tcpCurve);
-        da.SetData(3, new JointStateGoo(state));
-        da.SetData(4, timeSeconds);
-        da.SetData(5, _index);
-        da.SetDataList(6, _invalidSegments);
-        ExpirePreview(true);
-    }
-
-    private static bool ToolsEquivalent(ToolDefinition a, ToolDefinition b) =>
-        string.Equals(a.Name, b.Name, StringComparison.Ordinal) && a.Tcp.Equals(b.Tcp);
-
-    private static List<TrajectoryPoint> BuildPreviewPoints(
-        Trajectory sourceTrajectory,
-        RobotModel previewRobot,
-        out bool remapApplied)
-    {
-        remapApplied = false;
-        if (sourceTrajectory.Points.Count == 0) return [];
-        var mappedStates = TryBuildJointRemap(sourceTrajectory.Robot, previewRobot, out var map)
-            ? sourceTrajectory.Points.Select(p => new JointState(RemapPositions(p.JointState.Positions, map))).ToList()
-            : sourceTrajectory.Points.Select(p => p.JointState).ToList();
-        remapApplied = map.Length > 0;
-
-        var points = new List<TrajectoryPoint>(sourceTrajectory.Points.Count);
-        for (var i = 0; i < sourceTrajectory.Points.Count; i++)
-            points.Add(new TrajectoryPoint(sourceTrajectory.Points[i].TimeSeconds, mappedStates[i]));
-        return points;
-    }
-
-    private static bool TryBuildJointRemap(RobotModel sourceRobot, RobotModel targetRobot, out int[] map)
-    {
-        map = [];
-        if (sourceRobot.Preset.AxisCount != targetRobot.Preset.AxisCount) return false;
-        var sourceNames = sourceRobot.JointNames;
-        var targetNames = targetRobot.JointNames;
-        if (sourceNames is null || targetNames is null) return false;
-        if (sourceNames.Count != sourceRobot.Preset.AxisCount || targetNames.Count != targetRobot.Preset.AxisCount) return false;
-
-        var sourceIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < sourceNames.Count; i++)
-            sourceIndex[sourceNames[i]] = i;
-
-        map = new int[targetNames.Count];
-        for (var i = 0; i < targetNames.Count; i++)
-        {
-            if (!sourceIndex.TryGetValue(targetNames[i], out var idx))
-            {
-                map = [];
-                return false;
-            }
-            map[i] = idx;
-        }
-        return true;
-    }
-
-    private static double[] RemapPositions(IReadOnlyList<double> sourcePositions, IReadOnlyList<int> map)
-    {
-        var remapped = new double[map.Count];
-        for (var i = 0; i < map.Count; i++)
-            remapped[i] = sourcePositions[map[i]];
-        return remapped;
-    }
-
-    public override Guid ComponentGuid => new Guid("d4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91");
-}
-
 public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 {
     public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
@@ -457,6 +272,8 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         p.AddPlaneParameter("Planes", "P", "TCP planes via FK", GH_ParamAccess.list);
         p.AddNumberParameter("Times", "Tm", "Elapsed time at each waypoint (seconds)", GH_ParamAccess.list);
         p.AddNumberParameter("Joints", "J", "Joint angles (rad); branch {i} = axis i, items = waypoints", GH_ParamAccess.tree);
+        p.AddTextParameter("ToolStates", "Ts", "Tool state JSON per waypoint", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -478,6 +295,14 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         da.SetDataList(0, planes);
         da.SetDataList(1, times);
         da.SetDataTree(2, tree);
+        if (t.Points.Any(p => p.ToolState is not null))
+        {
+            var toolStates = t.Points.Select(p =>
+                p.ToolState is null
+                    ? string.Empty
+                    : System.Text.Json.JsonSerializer.Serialize(p.ToolState.Values)).ToList();
+            da.SetDataList(3, toolStates);
+        }
     }
     public override Guid ComponentGuid => new Guid("a72b5cfa-5cf5-4e54-a5cd-943e2aae82da");
 }
@@ -514,7 +339,8 @@ public sealed class MotusExportComponent : MotusComponentBase
         {
             Retime = retime,
             Validate = validate,
-            SessionToolFrame = ctx.Tool
+            SessionToolFrame = ctx.Tool,
+            ToolCapabilities = trajGoo.ToolCapabilitiesSnapshot
         });
         da.SetData(0, result.Json);
         da.SetData(1, result.Csv);

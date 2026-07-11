@@ -40,11 +40,11 @@ public sealed class MotusPlanComponent : MotusComponentBase
     {
         p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
         p.AddGenericParameter("Goal", "G", "Targets as Planes (TCP LIN) or Joint States", GH_ParamAccess.list);
-        p.AddGenericParameter("Start", "S", "Start joint state (defaults to home from viewer_presets or zeros)", GH_ParamAccess.item);
+        p.AddGenericParameter("Start", "S", "Start joint state (defaults to UR10e home or zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Collision", "C", "Collision scene; joint goals use RRT-Connect; plane goals validate LIN against scene", GH_ParamAccess.item);
+        p.AddGenericParameter("Collision", "C", "Required for obstacle-aware planning. Without this, red obstacle previews are display-only. Joint goals → RRT-Connect; plane goals → LIN validate", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Group", "Gr", "Optional planning group (locks non-group joints)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
@@ -104,14 +104,34 @@ public sealed class MotusPlanComponent : MotusComponentBase
         ExpireSolution(true);
     }
 
-    private static TrajectoryGoo TrajectoryFrom(RobotModelGoo robotGoo, Trajectory trajectory) =>
-        new(trajectory)
+    private static TrajectoryGoo TrajectoryFrom(RobotModelGoo robotGoo, Trajectory trajectory)
+    {
+        robotGoo.EnsureBundledTool();
+        return new TrajectoryGoo(trajectory)
         {
             Chain = robotGoo.Chain,
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
+            PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,
             ToolSnapshot = robotGoo.Tool
         };
+    }
+
+    private static Trajectory? AppendTrajectory(Trajectory? acc, Trajectory segment, RobotModel robot)
+    {
+        if (segment.Points.Count == 0) return acc;
+        if (acc is null)
+            return new Trajectory(robot, segment.Points.ToList());
+
+        var points = acc.Points.ToList();
+        var timeOffset = points[^1].TimeSeconds;
+        for (var i = 1; i < segment.Points.Count; i++)
+        {
+            var pt = segment.Points[i];
+            points.Add(new TrajectoryPoint(timeOffset + pt.TimeSeconds, pt.JointState));
+        }
+        return new Trajectory(robot, points);
+    }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -224,37 +244,63 @@ public sealed class MotusPlanComponent : MotusComponentBase
     {
         _cached = new List<PlanningResult>(goals.Count);
         _cachedGoos = new List<TrajectoryGoo>(goals.Count);
+        var session = ctx.EffectiveModel;
+        var currentStart = start;
+        Trajectory? chained = null;
+
+        var collisionInputWired = HasCollisionInputsWired();
         foreach (var goal in goals)
         {
             var result = goal.plane is { } plane
-                ? PlanCartesianLin(ctx, planningContext, start, plane, linStep)
+                ? PlanCartesianLin(ctx, planningContext, currentStart, plane, linStep, collisionInputWired)
                 : (planningContext.Scene.Objects.Count > 0 || planningContext.Attached.Count > 0)
-                    ? PlanRrt(ctx, planningContext, start, goal.joints!)
+                    ? PlanRrt(ctx, planningContext, currentStart, goal.joints!)
                     : new JointLinearPlanner().Plan(new PlanningRequest(
-                        ctx.EffectiveModel,
-                        start,
+                        session,
+                        currentStart,
                         goal.joints!,
                         planningContext.ToPlanningOptions(new PlanningOptions { MaxJointStepRadians = MaxJointStep })));
             _cached.Add(result);
             if (result.Success && result.Trajectory is not null)
-                _cachedGoos.Add(TrajectoryFrom(robotGoo, result.Trajectory));
+            {
+                chained = AppendTrajectory(chained, result.Trajectory, session);
+                currentStart = result.Trajectory.Points[^1].JointState;
+            }
         }
 
         _lastPlannedFingerprint = fingerprint;
+        if (chained is not null)
+            _cachedGoos.Add(TrajectoryFrom(robotGoo, chained));
+        else if (_cached.Any(r => r.Success))
+        {
+            foreach (var result in _cached)
+            {
+                if (result.Success && result.Trajectory is not null)
+                    _cachedGoos.Add(TrajectoryFrom(robotGoo, result.Trajectory));
+            }
+        }
+
         if (_cachedGoos.Count > 0)
             da.SetDataList(0, _cachedGoos);
+
+        if (!collisionInputWired && _cached.Any(r => r.Success))
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                "Obstacle previews are visual only until ColScene is wired to Collision.");
+        }
 
         var statusKind = _autoPlan ? GhExtract.PlanStatusKind.Auto : GhExtract.PlanStatusKind.Manual;
         da.SetData(1, GhExtract.BuildStatusMessage(_cached, statusKind));
         da.SetDataList(2, GhExtract.BuildWarnings(_cached));
     }
 
-    private static PlanningResult PlanCartesianLin(
+    private PlanningResult PlanCartesianLin(
         RobotContext ctx,
         PlanningContext planningContext,
         JointState start,
         Plane plane,
-        double linStepMeters)
+        double linStepMeters,
+        bool collisionInputWired)
     {
         var session = ctx.EffectiveModel;
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
@@ -266,29 +312,6 @@ public sealed class MotusPlanComponent : MotusComponentBase
             });
         }
 
-        var fk = KinematicsResolver.CreateFkSolver(session.Preset, ctx.Chain);
-        var startPose = fk.ComputeTcp(start, ctx.Base, ctx.Tool);
-        var workspace = CartesianWorkspace.CheckReach(session.Preset, goal, startPose);
-        if (!workspace.IsWithinReach)
-        {
-            return PlanningResult.Failed(new[]
-            {
-                workspace.Reason ?? "Goal TCP is outside robot reach."
-            });
-        }
-
-        var seeds = CartesianGoalSolver.EnumerateDefaultSeeds(start, session)
-            .Prepend(HomePoseLookup.HomeOrZeros(session));
-        var reach = new CartesianGoalSolver().TryReach(session, goal, seeds, ctx.Chain);
-        if (!reach.Success)
-        {
-            return PlanningResult.Failed(reach.Errors.Concat(new[]
-            {
-                "For large moves use a Joint State goal or wire Start near the target."
-            }).ToArray());
-        }
-
-        var goalJoints = reach.Solution!;
         var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
         ICollisionChecker? checker = needsCollision
             ? GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached)
@@ -296,27 +319,52 @@ public sealed class MotusPlanComponent : MotusComponentBase
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
-            CollisionChecker = checker
+            CollisionChecker = checker,
+            CollisionScene = planningContext.Scene
         });
-        var req = new CartesianPlanningRequest(session, start, goal, opts, planningContext.Scene);
-        var linOptions = new CartesianLinOptions(StepMeters: linStepMeters);
 
-        var linResult = new CartesianLinearPathPlanner(session.Preset, ctx.Chain).PlanToResult(req, linOptions);
-        if (linResult.Success) return linResult;
+        var linOptions = new CartesianLinOptions(StepMeters: linStepMeters, ContinueOnIkFailure: false);
+        var linRequest = new CartesianPlanningRequest(session, start, goal, opts, planningContext.Scene);
+        var linResult = new CartesianLinearPathPlanner(session.Preset, ctx.Chain).PlanToResult(linRequest, linOptions);
+        if (linResult.Success)
+        {
+            var linWarnings = linResult.Warnings.ToList();
+            if (!collisionInputWired)
+                linWarnings.Add("Collision input unwired — plane goal planned in free space (LIN only).");
+            else if (needsCollision)
+                linWarnings.Add("Collision validated on link envelopes; TCP line may still intersect obstacles that do not hit link geometry.");
+            return PlanningResult.Succeeded(linResult.Trajectory!, linWarnings);
+        }
 
+        if (linResult.Errors.Any(e => e.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
+            return linResult;
+
+        var reach = new CartesianGoalSolver().TryReach(
+            session,
+            goal,
+            CartesianGoalSolver.EnumerateDefaultSeeds(start, session),
+            ctx.Chain);
+        if (!reach.Success)
+        {
+            return PlanningResult.Failed(reach.Errors.Concat(new[]
+            {
+                "TCP-LIN failed at intermediate poses. For large moves use a Joint State goal or wire Start near the target."
+            }).ToArray());
+        }
+
+        var goalJoints = reach.Solution!;
         var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(session, start, goalJoints, opts));
         if (!jointResult.Success)
         {
-            return PlanningResult.Failed(linResult.Errors
-                .Concat(jointResult.Errors)
+            return PlanningResult.Failed(jointResult.Errors
                 .DefaultIfEmpty("Cartesian planning failed.")
                 .ToArray());
         }
 
+        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+            "TCP-LIN failed; joint-space fallback used — TCP path is not straight.");
         var warnings = jointResult.Warnings.ToList();
         warnings.Add("TCP-LIN failed; used joint-space path to the Cartesian goal instead (not a straight TCP line).");
-        foreach (var err in linResult.Errors)
-            warnings.Add(err);
         return PlanningResult.Succeeded(jointResult.Trajectory!, warnings);
     }
 

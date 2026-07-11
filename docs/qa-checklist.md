@@ -13,9 +13,7 @@ Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke 
 ## Planning
 
 - [x] UR5e: joint-linear plan produces trajectory — QA smoke + unit tests
-- [x] KUKA KR 6 R900 plans successfully — QA smoke
-- [x] Motus Robot loads a JSON preset (JsonPath input) — QA smoke (`UR/UR5e.json`)
-- [x] URDF load produces robot model — QA smoke (`examples/ur10e/ur10e_minimal.urdf`, `examples/ur10e/ur10e.urdf`, `examples/kr210_r3100_ultra/kr210_r3100_ultra_minimal.urdf`)
+- [x] URDF load produces robot model — QA smoke (`examples/ur10e/ur10e_minimal.urdf`, `examples/ur10e/ur10e.urdf`, `examples/ur10e/ur10e_robotiq.urdf`)
 - [ ] Motus Plan computes only on the Plan button; re-emits cached on input edits — confirm in GH
 - [ ] Motus Plan Auto Plan (right-click menu): input edit replans after debounce; Replan button is immediate; setting persists in saved `.gh`
 - [x] Cartesian goal (plane) reaches target via IK — QA smoke + `CartesianPlannerTests`

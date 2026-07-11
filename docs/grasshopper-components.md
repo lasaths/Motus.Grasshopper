@@ -6,18 +6,23 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 | Component | Inputs | Outputs |
 |-----------|--------|---------|
-| Motus Robot | Model name (dropdown) or JsonPath; optional Base plane; optional **Tool** (`Motus Tool`, overrides bundled gripper) | Robot model |
+| Motus UR10e Robotiq | *(none)* | Bundled UR10e + Robotiq 2F-85 robot |
+| Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
 | Motus Tool | Name, TCP plane (flange frame), optional gripper Mesh/Brep | Tool definition |
+| Motus Tool State | Optional Tool; Preset (Open/Closed/Custom); Width, Speed, Force | End-effector state (`EndEffectorStateGoo`) |
 | Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
-| Motus Load URDF | Path; optional BaseLink / TipLink | Robot model with URDF kinematics chain |
 | Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
 | Motus TCP Pose | Robot, Joint state | TCP plane (FK position + orientation in base frame) |
 
-`Motus Robot` loads a bundled preset by name (dropdown attached automatically) or, when `JsonPath` is wired, from a JSON file. **UR10e** includes a bundled **Robotiq 2F-85** tool (TCP + mesh) unless you wire **Motus Tool** to override it. Optional `Base` overrides the robot base frame.
+`Motus UR10e Robotiq` is the zero-config bundled robot (`resources/robots/ur10e_robotiq/`). It previews at the UR10e home pose on placement.
 
-`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates. Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
+`Motus Robot` loads any serial-chain URDF via `UrdfRobotLoader`. Optional `Base` overrides the robot base frame; optional `Tool` overrides the end-effector. Previews at home when the path resolves (UR10e heuristic or zeros).
 
-`Motus Load URDF` loads a serial-chain URDF via `UrdfRobotLoader`. The output carries the URDF joint chain and joint names for FK/planning parity with the web viewer, and forwards URDF visual geometry for preview when available.
+`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates. Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
+
+`Motus Tool State` builds an `EndEffectorState` for motion program segments. Wire **Preset** Open/Closed for Robotiq jaw width, or Custom + **Width**. Optional **Tool** validates parameter names against the tool schema.
+
+`Motus Load URDF` was removed; use **Motus Robot** instead.
 
 `Motus Joint State` expects joint values in **URDF chain order** when the robot has `JointNames` metadata (bundled UR presets and URDF loads).
 
@@ -33,7 +38,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 ### Home pose
 
-`Motus Plan` optional `Start` defaults to home from `resources/viewer_presets.json` (keyed by model name), then all zeros. Same poses as the URDF web viewer.
+`Motus Plan` optional `Start` defaults to UR10e home (hardcoded) when the robot matches UR10e, otherwise all zeros.
 
 ## Plan
 
@@ -51,7 +56,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - `Goal` (**Plane** or **Joint State**)
 - optional `Start`
 - optional `Step` (m, plane goals only; default 0.005 — TCP LIN discretization)
-- optional `Collision` (scene)
+- optional `Collision` (scene — **required** for obstacle-aware planning; without it, red obstacle previews are display-only)
 - optional `Group` (`PlanningGroup`)
 - optional `Attach` (list of attached bodies)
 
@@ -70,6 +75,30 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - **Auto Plan** (right-click menu): replans when inputs change, debounced ~400 ms. Button shows **Replan** (amber) and skips debounce when clicked. Locked components never auto-replan. Status suffixes: `(auto)`, `(auto, cached)`, or `Planning…`. A remark appears while stale trajectories are still on the output.
 - `Status` reports success, errors, or validation warnings.
 - `Warnings` includes runtime capability text from `MotusCapabilities.Describe()` (managed/native OMPL/FCL status).
+- When `Collision` is unwired, a component remark notes that obstacle previews are visual only.
+- Plane goals with collision wired validate **link envelopes** along the LIN path; the TCP polyline may still pass through obstacles that do not intersect link geometry.
+
+### Troubleshooting: TCP path through a sphere
+
+The white **TCP Path** in **Motus Preview** is an FK polyline between trajectory waypoints. It is not a collision-safe Cartesian sweep, and Preview does not flag obstacle hits unless you wire the same **ColScene** into Preview **Collision** (orange segments).
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Red sphere visible, plan ignores it | `ColScene` not wired to **Motus Plan** `Collision` | `ColSphere` → `ColScene` → `Plan.Collision` |
+| Plane goal, Status Success, TCP pierces sphere | LIN validates **link capsules**, not the TCP point | Expected for plane goals; use **Joint State** goals + `Collision` for RRT avoidance (`examples/03_collision_rrt.ghx`) |
+| Warning: joint-space fallback | LIN failed; path is not a straight TCP line | Use a nearer `Start`, a **Joint State** goal, or accept the joint-linear path |
+| Joint goal, no avoidance | No collision scene on `Plan` | Wire `ColScene`; without it joint goals use joint-linear interpolation only |
+
+**Goal type vs collision behavior**
+
+| Goal | `Collision` wired | Planner behavior |
+|------|-------------------|------------------|
+| Plane | Yes | TCP-linear (LIN) + validate against obstacles (no rerouting) |
+| Plane | No | TCP-linear in free space |
+| Joint State | Yes | RRT-Connect (tries to avoid obstacles) |
+| Joint State | No | Joint-linear interpolation |
+
+Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments that fail link-envelope checks (orange viewport lines). Red `Invalid` output remains joint/velocity/acceleration limits only.
 
 ### Motion programs (0.6)
 
@@ -78,22 +107,25 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Motus Motion Segment | `7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31` |
 | Motus Program Plan | `8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42` |
 
-`Motus Motion Segment` has a **Type** dropdown (`PTP` / `LIN` / `CIRC`). All inputs stay visible; only the active type is validated:
+`Motus Motion Segment` has a **Type** dropdown (`PTP` / `LIN` / `CIRC` / `SET` / `WAIT`). All inputs stay visible; only the active type is validated:
 
 | Type | Required | Optional |
 |------|----------|----------|
-| PTP | `Goal` (Joint State) | `Robot` (joint count), `Blend` (m) |
-| LIN | `Goal` (Plane, TCP pose) | `Step` (m, default 0.005), `Blend` |
-| CIRC | `Via` + `Goal` (Planes) | `Samples` (default 16), `Blend` |
+| PTP | `Goal` (Joint State) | `Blend` (m), `ToolState`, `ToolMode` |
+| LIN | `Goal` (Plane, TCP pose) | `Step` (m, default 0.005), `Blend`, `ToolState`, `ToolMode` |
+| CIRC | `Via` + `Goal` (Planes) | `Samples` (default 16), `Blend`, `ToolState`, `ToolMode` |
+| SET | `ToolState` | `Duration` (s ramp; 0 = instant) |
+| WAIT | `Duration` (s) | — |
 
-`Motus Program Plan` inputs match `Motus Plan` collision/group/attach semantics:
+**ToolMode** on arm segments: `Hold` (unchanged), `Ramp` (interpolate to `ToolState` over segment), `Instant` (step at segment start).
 
-- `Robot`, `Segments` (list of `MotionSegmentGoo`), optional `Start`
-- optional `Collision`, `Group`, `Attach`
+Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/11_gripper_motion_program.ghx`).
 
-Unlike `Motus Plan` plane goals, **LIN failures do not fall back to joint-space paths** — errors surface in `Status`.
+`Motus Program Plan` inputs match `Motus Plan` collision/group/attach semantics. Tool state on segments is validated against the robot's wired **Tool** capabilities when present.
 
-Exported trajectories include `motionType`, `segmentIndex`, and `blendRadiusMeters` per waypoint (see `examples/08_motion_program.ghx`).
+`Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Gripper mesh preview morphs with jaw width when tool capabilities are present.
+
+`Motus Trajectory Data` adds **ToolStates** (JSON per waypoint) when present. **Motus Export** JSON includes `toolState` and `toolCapabilities` header fields.
 
 ## Collision
 
@@ -112,13 +144,16 @@ Exported trajectories include `motionType`, `segmentIndex`, and `blendRadiusMete
 
 ## Preview
 
-| Component | Notes |
-|-----------|-------|
-| Motus Preview | Animated FK preview with a built-in **Play / Stop** button |
+| Component / parameter | Notes |
+|-----------------------|-------|
+| Motus Preview | Animated FK preview with a built-in **Play / Stop** button; right-click for **Override / URDF / Custom** mesh colours |
+| Motus Scrub | Resizable **0–1** canvas slider; wire to Preview **Position** for manual scrubbing |
 
-`Motus Preview` takes a `Trajectory` and outputs link `Meshes` and `Links` at the current playback frame, the full `TCP Path` polyline, the `State` / `Time` / `Index` at the playhead, and `Invalid` TCP segments (joint/velocity/acceleration limits).
+`Motus Preview` takes a `Trajectory`, optional `ShowStart`, optional **Position** (0–1), and optional **Collision** (same `ColScene` as Plan). Right-click to choose **Override**, **URDF**, or **Custom** viewport mesh colours; expose the hidden **Custom Colours** list input from the menu when using Custom mode (one colour per **Meshes** slot). It outputs link `Meshes` and `Links` at the current playback frame, the full `TCP Path` polyline (FK between waypoints — not a collision-safe sweep), the `State` / `Time` / `Index` at the playhead, and `Invalid` TCP segments (joint/velocity/acceleration limits only). When **Collision** is wired, obstacle hits along the TCP polyline draw in **orange** in the viewport.
 
-Playback interpolates joint angles between waypoints by elapsed time (not discrete index stepping). FK uses `KinematicsResolver` (DH presets or URDF chain). Base and tool frames come from the trajectory context (preset or robot overrides).
+`Motus Scrub` is a floating parameter (no inputs) with a single numeric output locked to 0–1. Resize the control horizontally for finer scrub precision on long trajectories. Dragging scrubs preview-only until release; manual scrub **pauses** Play. During Play, the scrub thumb syncs to the current position.
+
+Playback interpolates joint angles between waypoints by elapsed time via `AtTime` (not discrete index stepping). FK uses `KinematicsResolver` (DH presets or URDF chain). Base and tool frames come from the trajectory context (preset or robot overrides).
 
 For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the URDF folder. Preset capsule collision is used for planning only, not drawn in the viewport.
 

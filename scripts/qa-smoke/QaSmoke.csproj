@@ -9,4 +9,9 @@
     <ProjectReference Include="..\..\src\Motus.Rhino\Motus.Rhino.csproj" />
     <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\resources\robots\ur10e_robotiq\**\*" Link="resources\robots\ur10e_robotiq\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

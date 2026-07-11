@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.5.1**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.1**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,7 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-sub
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.5.1` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.6.1` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -75,7 +75,15 @@ Unlike **Motus Plan** plane goals, **Program Plan** does not fall back to joint-
 Optional: wire an SRDF file path into **ColScene** `Srdf` for allowed collision pairs (`examples/srdf/table_base.srdf`).
 `ColScene` also outputs SRDF groups (`Groups`) and end-effector map (`EndEffectors`) when present.
 
-Without a collision scene, joint goals use joint-linear interpolation (free space only).
+Without a collision scene, joint goals use joint-linear interpolation (free space only). Red obstacle previews from **Motus Collision Sphere** are **display-only** until `ColScene` is wired into **Motus Plan** `Collision`.
+
+### Troubleshooting: TCP path through a sphere
+
+See [docs/grasshopper-components.md](docs/grasshopper-components.md#troubleshooting-tcp-path-through-a-sphere) for the full checklist. Short version:
+
+1. Wire `ColSphere` → `ColScene` → `Plan.Collision` (and optionally `Preview.Collision` for orange hit highlights).
+2. **Plane goals** → LIN + validate (no obstacle avoidance). Use **Joint State** goals + collision for RRT path deformation (`examples/03_collision_rrt.ghx`).
+3. **Motus Preview** TCP path is FK only; it does not imply the planner swept the TCP volume against obstacles.
 
 ### Attach + planning groups (0.4)
 
@@ -99,13 +107,13 @@ Quick pattern with SRDF:
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.5.1** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.6.1** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
 
-### 0.6.1 — Motus.NET 0.5.1 (faster obstacle RRT)
+### 0.6.1 — Motus.NET 0.6.1 (collision UX + tool state)
 
-Pins Motus.NET **0.5.1** from NuGet. Faster managed collision checks (`FastDhFk`, xyz sphere path) speed up RRT-Connect obstacle planning on Rhino Win/Mac without native OMPL.
+Pins Motus.NET **0.6.1** from NuGet. Collision planning UX: Plan warnings when `Collision` is unwired, LIN link-envelope disclaimer, joint-fallback viewport remarks. Preview optional `Collision` input with orange TCP hit segments. Troubleshooting docs for TCP-through-sphere behavior.
 
 ### 0.6.0 — Motion programs
 

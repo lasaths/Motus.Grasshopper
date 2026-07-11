@@ -14,16 +14,15 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         : base(
             "Motus Motion Segment",
             "Segment",
-            "Build a PTP, LIN, or CIRC motion segment (Type dropdown). All inputs stay visible; only the active type is validated.",
+            "Build PTP, LIN, CIRC, SET, or WAIT motion segments. Optional ToolState on arm segments.",
             "Plan",
             "line-segments") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddTextParameter("Type", "T", "PTP, LIN, or CIRC", GH_ParamAccess.item, "PTP");
-        p.AddGenericParameter("Robot", "Rb", "Optional robot for PTP joint count validation", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Type", "T", "PTP, LIN, CIRC, SET, or WAIT", GH_ParamAccess.item, "PTP");
         p.AddGenericParameter("Goal", "G", "PTP: Joint State; LIN/CIRC: Plane (TCP pose)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Via", "V", "CIRC only: arc via point (TCP plane)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "LIN only: TCP step size (m)", GH_ParamAccess.item, 0.005);
@@ -31,6 +30,12 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         p.AddIntegerParameter("Samples", "N", "CIRC only: arc samples (>= 4)", GH_ParamAccess.item, 16);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Blend", "B", "Blend radius (m, default 0)", GH_ParamAccess.item, 0);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("ToolMode", "Tm", "Hold, Ramp, or Instant (arm segments)", GH_ParamAccess.item, "Hold");
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("Duration", "D", "SET/WAIT duration (s); SET ramp time when > 0", GH_ParamAccess.item, 0);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -41,7 +46,11 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
     {
         base.AddedToDocument(doc);
         if (Params.Input[0].SourceCount > 0) return;
-        doc.ScheduleSolution(1, _ => GhValueList.AttachDropdown(this, 0, new[] { "PTP", "LIN", "CIRC" }, "Type"));
+        doc.ScheduleSolution(1, _ =>
+        {
+            GhValueList.AttachDropdown(this, 0, new[] { "PTP", "LIN", "CIRC", "SET", "WAIT" }, "Type");
+            GhValueList.AttachDropdown(this, 7, new[] { "Hold", "Ramp", "Instant" }, "ToolMode");
+        });
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -49,94 +58,168 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         var typeText = "PTP";
         if (!da.GetData(0, ref typeText) || !TryParseSegmentType(typeText, out var segmentType))
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Type must be PTP, LIN, or CIRC.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Type must be PTP, LIN, CIRC, SET, or WAIT.");
             return;
         }
 
         var blend = 0.0;
-        da.GetData(6, ref blend);
+        da.GetData(5, ref blend);
         if (blend < 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Blend must be >= 0.");
             return;
         }
 
+        TryReadToolState(da, 6, out var toolState);
+        var toolMode = ToolStateMode.Hold;
+        if (!TryReadToolMode(da, 7, ref toolMode)) return;
+
+        var duration = 0.0;
+        da.GetData(8, ref duration);
+        if (duration < 0)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Duration must be >= 0.");
+            return;
+        }
+
         switch (segmentType)
         {
             case MotionPrimitiveType.Ptp:
-                if (!TryBuildPtp(da, blend, out var ptp)) return;
+                if (!TryBuildPtp(da, blend, toolState, toolMode, out var ptp)) return;
                 da.SetData(0, new MotionSegmentGoo(ptp));
                 break;
             case MotionPrimitiveType.Lin:
-                if (!TryBuildLin(da, blend, out var lin)) return;
+                if (!TryBuildLin(da, blend, toolState, toolMode, out var lin)) return;
                 da.SetData(0, new MotionSegmentGoo(lin));
                 break;
             case MotionPrimitiveType.Circ:
-                if (!TryBuildCirc(da, blend, out var circ)) return;
+                if (!TryBuildCirc(da, blend, toolState, toolMode, out var circ)) return;
                 da.SetData(0, new MotionSegmentGoo(circ));
+                break;
+            case MotionPrimitiveType.Set:
+                if (toolState is null)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "SET requires a ToolState goal.");
+                    return;
+                }
+                da.SetData(0, new MotionSegmentGoo(new SetToolStateSegment(toolState, duration)));
+                break;
+            case MotionPrimitiveType.Wait:
+                if (duration <= 0)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "WAIT requires Duration > 0.");
+                    return;
+                }
+                da.SetData(0, new MotionSegmentGoo(new WaitSegment(duration)));
                 break;
         }
     }
 
-    private bool TryBuildPtp(IGH_DataAccess da, double blend, out PtpSegment segment)
+    private static bool TryReadToolState(IGH_DataAccess da, int index, out EndEffectorState? state)
+    {
+        state = null;
+        EndEffectorStateGoo? goo = null;
+        if (!da.GetData(index, ref goo) || goo?.Value is null) return true;
+        state = goo.Value;
+        return true;
+    }
+
+    private bool TryReadToolMode(IGH_DataAccess da, int index, ref ToolStateMode mode)
+    {
+        var text = "Hold";
+        if (!da.GetData(index, ref text)) return true;
+        switch (text.Trim().ToUpperInvariant())
+        {
+            case "HOLD":
+                mode = ToolStateMode.Hold;
+                return true;
+            case "RAMP":
+                mode = ToolStateMode.Ramp;
+                return true;
+            case "INSTANT":
+                mode = ToolStateMode.Instant;
+                return true;
+            default:
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "ToolMode must be Hold, Ramp, or Instant.");
+                return false;
+        }
+    }
+
+    private bool TryBuildPtp(
+        IGH_DataAccess da,
+        double blend,
+        EndEffectorState? toolState,
+        ToolStateMode toolMode,
+        out PtpSegment segment)
     {
         segment = null!;
-        if (!GhExtract.TryGoal(da, 2, out var joints, out _) || joints is null)
+        if (!GhExtract.TryGoal(da, 1, out var joints, out _) || joints is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "PTP requires a Joint State goal.");
             return false;
         }
 
-        if (GhExtract.TryRobot(da, 1, out var robot) && joints.AxisCount != robot.Preset.AxisCount)
+        segment = new PtpSegment(joints, blend)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                $"Expected {robot.Preset.AxisCount} joints, got {joints.AxisCount}.");
-            return false;
-        }
-
-        segment = new PtpSegment(joints, blend);
+            TargetState = toolState,
+            ToolStateMode = toolMode
+        };
         return true;
     }
 
-    private bool TryBuildLin(IGH_DataAccess da, double blend, out LinSegment segment)
+    private bool TryBuildLin(
+        IGH_DataAccess da,
+        double blend,
+        EndEffectorState? toolState,
+        ToolStateMode toolMode,
+        out LinSegment segment)
     {
         segment = null!;
-        if (!GhExtract.TryGoal(da, 2, out _, out var plane) || plane is null)
+        if (!GhExtract.TryGoal(da, 1, out _, out var plane) || plane is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "LIN requires a Plane goal (TCP pose).");
             return false;
         }
 
         var step = 0.005;
-        da.GetData(4, ref step);
+        da.GetData(3, ref step);
         if (step <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be > 0.");
             return false;
         }
 
-        segment = new LinSegment(new CartesianPose(FrameConversion.FromPlane(plane.Value)), step, blend);
+        segment = new LinSegment(new CartesianPose(FrameConversion.FromPlane(plane.Value)), step, blend)
+        {
+            TargetState = toolState,
+            ToolStateMode = toolMode
+        };
         return true;
     }
 
-    private bool TryBuildCirc(IGH_DataAccess da, double blend, out CircSegment segment)
+    private bool TryBuildCirc(
+        IGH_DataAccess da,
+        double blend,
+        EndEffectorState? toolState,
+        ToolStateMode toolMode,
+        out CircSegment segment)
     {
         segment = null!;
         var via = Plane.Unset;
-        if (!da.GetData(3, ref via) || !via.IsValid)
+        if (!da.GetData(2, ref via) || !via.IsValid)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "CIRC requires Via and Goal planes.");
             return false;
         }
 
-        if (!GhExtract.TryGoal(da, 2, out _, out var goalPlane) || goalPlane is null)
+        if (!GhExtract.TryGoal(da, 1, out _, out var goalPlane) || goalPlane is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "CIRC requires Via and Goal planes.");
             return false;
         }
 
         var samples = 16;
-        da.GetData(5, ref samples);
+        da.GetData(4, ref samples);
         if (samples < 4)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Samples must be >= 4.");
@@ -147,7 +230,11 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
             new CartesianPose(FrameConversion.FromPlane(via)),
             new CartesianPose(FrameConversion.FromPlane(goalPlane.Value)),
             samples,
-            blend);
+            blend)
+        {
+            TargetState = toolState,
+            ToolStateMode = toolMode
+        };
         return true;
     }
 
@@ -163,6 +250,12 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
                 return true;
             case "CIRC":
                 type = MotionPrimitiveType.Circ;
+                return true;
+            case "SET":
+                type = MotionPrimitiveType.Set;
+                return true;
+            case "WAIT":
+                type = MotionPrimitiveType.Wait;
                 return true;
             default:
                 type = default;
@@ -241,6 +334,10 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             return;
         }
 
+        var toolCaps = robotGoo.Tool?.Capabilities;
+        foreach (var err in MotionProgramValidation.ValidateToolStates(segments, toolCaps))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
+
         var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel);
         var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5);
         var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
@@ -250,7 +347,12 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             CollisionChecker = checker
         });
 
-        var request = new MotionProgramRequest(ctx.EffectiveModel, start, segments, opts);
+        var request = new MotionProgramRequest(ctx.EffectiveModel, start, segments, opts)
+        {
+            InitialToolState = toolCaps?.DefaultState(),
+            ToolCapabilities = toolCaps,
+            SessionTool = robotGoo.Tool
+        };
         _cached = new IndustrialMotionPlanner(ctx.EffectiveModel.Preset, ctx.Chain).Plan(request);
 
         if (_cached.Success && _cached.Trajectory is not null)
@@ -259,8 +361,10 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             {
                 Chain = robotGoo.Chain,
                 PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
+                PreviewMeshColors = robotGoo.PreviewMeshColors,
                 BaseFrameOverride = robotGoo.BaseFrameOverride,
-                ToolSnapshot = robotGoo.Tool
+                ToolSnapshot = robotGoo.Tool,
+                ToolCapabilitiesSnapshot = toolCaps
             };
             da.SetData(0, _cachedGoo);
         }

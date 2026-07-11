@@ -12,26 +12,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, '../examples');
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';
 
-const MODELS = [
-  'KR 10 R1100', 'KR 120 R2700', 'KR 16 R2010', 'KR 22 R1610', 'KR 6 R900', 'KR 60 R2100',
-  'LBR iiwa 14 R820', 'LBR iiwa 7 R800', 'UR10e', 'UR16e', 'UR20', 'UR30', 'UR3e', 'UR5e',
-];
-
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
 const UR10E_START_DEG = '0\n-90\n0\n-90\n0\n0';
 const UR10E_GOAL_DEG = '0\n-80\n0\n-90\n0\n0';
+const BUNDLED_URDF = 'resources/robots/ur10e_robotiq/ur10e_robotiq.urdf';
 
 const MOTUS = {
-  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 84,
+  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 104,
     inputs: [
-      { name: 'Model', nick: 'M', desc: 'Preset model name (UR5e, KR 6 R900, …)', optional: false },
-      { name: 'JsonPath', nick: 'J', desc: 'Path to a preset JSON (overrides Model when set)', optional: true },
-      { name: 'Base', nick: 'B', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true },
-      { name: 'Tool', nick: 'T', desc: 'Optional Motus Tool definition', optional: true },
+      { name: 'Path', nick: 'P', desc: 'Path to .urdf or .xacro file', optional: false, text: '' },
+      { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
+      { name: 'TipLink', nick: 'T', desc: 'Tip link name', optional: true, text: 'tool0' },
+      { name: 'Base', nick: 'Bf', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true, plane: true },
+      { name: 'Tool', nick: 'Tl', desc: 'Optional Motus Tool definition', optional: true },
     ],
-    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model' }] },
+    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
+  ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
+    inputs: [],
+    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
   tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 84,
     inputs: [
       { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
@@ -63,7 +63,8 @@ const MOTUS = {
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
       { name: 'Start', nick: 'S', desc: 'Optional start joint state (defaults to home)', optional: true },
-      { name: 'Collision', nick: 'C', desc: 'Collision scene; when wired, joint goals plan with RRT-Connect', optional: true },
+      { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005 },
+      { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT-Connect; plane goals validate LIN against scene', optional: true },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
       { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1 },
     ],
@@ -72,11 +73,11 @@ const MOTUS = {
       { name: 'Status', nick: 'St', desc: 'Planning status' },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
-  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
+  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 64,
     inputs: [
       { name: 'Trajectory', nick: 'T', desc: 'Motus trajectory from Motus Plan', optional: false },
       { name: 'ShowStart', nick: 'S', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false },
-      { name: 'Robot', nick: 'Rb', desc: 'Optional robot/context override for external trajectories', optional: true },
+      { name: 'Position', nick: 'P', desc: 'Optional normalized playback position 0–1 (Motus Scrub)', optional: true },
     ],
     outputs: [
       { name: 'Meshes', nick: 'M', desc: 'Link meshes at the current frame' },
@@ -150,23 +151,27 @@ const MOTUS = {
       { name: 'SourceName', nick: 'S', desc: 'Optional scene object name to hide while attached', optional: true, text: '' },
     ],
     outputs: [{ name: 'Attach', nick: 'A', desc: 'Attached body' }] },
-  loadUrdf: { guid: 'c8e4a1b2-3f5d-4e6a-9b7c-1d2e3f4a5b6c', name: 'Motus Load URDF', nick: 'URDF', w: 74, h: 64,
+  toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 74, h: 84,
     inputs: [
-      { name: 'Path', nick: 'P', desc: 'Path to .urdf file', optional: false, text: '' },
-      { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
-      { name: 'TipLink', nick: 'T', desc: 'Tip link name', optional: true, text: 'tool0' },
+      { name: 'Tool', nick: 'T', desc: 'Optional tool for validation and presets', optional: true },
+      { name: 'Preset', nick: 'P', desc: 'Open, Closed, or Custom', optional: false, text: 'Open' },
+      { name: 'Width', nick: 'W', desc: 'Jaw width (m) when Preset=Custom', optional: true, number: 0.085 },
+      { name: 'Speed', nick: 'Sp', desc: 'Grip speed ratio 0–1', optional: true, number: 0.5 },
+      { name: 'Force', nick: 'F', desc: 'Grip force ratio 0–1', optional: true, number: 0.5 },
     ],
-    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
-  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Motion Segment', nick: 'Segment', w: 74, h: 164,
-    desc: 'Build PTP/LIN/CIRC motion segment (Type dropdown)',
+    outputs: [{ name: 'State', nick: 'S', desc: 'End-effector state' }] },
+  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Motion Segment', nick: 'Segment', w: 74, h: 144,
+    desc: 'Build PTP/LIN/CIRC/SET/WAIT motion segment (Type dropdown)',
     inputs: [
-      { name: 'Type', nick: 'T', desc: 'PTP, LIN, or CIRC', optional: false, text: 'PTP' },
-      { name: 'Robot', nick: 'Rb', desc: 'Optional robot for PTP joint count validation', optional: true },
-      { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: false },
+      { name: 'Type', nick: 'T', desc: 'PTP, LIN, CIRC, SET, or WAIT', optional: false, text: 'PTP' },
+      { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: true },
       { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true },
       { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005 },
       { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16 },
       { name: 'Blend', nick: 'B', desc: 'Blend radius (m, default 0)', optional: true, number: 0 },
+      { name: 'ToolState', nick: 'Ts', desc: 'Optional tool state goal', optional: true },
+      { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
+      { name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 },
     ],
     outputs: [{ name: 'Segment', nick: 'S', desc: 'Motion segment' }] },
   progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program Plan', nick: 'ProgPlan', w: 74, h: 144,
@@ -184,6 +189,7 @@ const MOTUS = {
       { name: 'Status', nick: 'St', desc: 'Planning status' },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
+  scrub: { guid: 'e1f2a3b4-c5d6-4789-a012-3456789abc01', name: 'Motus Scrub', nick: 'Scrub', w: 220, h: 44 },
 };
 
 const NATIVE = {
@@ -434,6 +440,57 @@ function valueList(x, y, selected = 'UR10e') {
                 </chunk>
               </chunks>
             </chunk>`, node };
+}
+
+function motusScrub(x, y, value = 0, w = MOTUS.scrub.w) {
+  const spec = MOTUS.scrub;
+  const instance = id();
+  const h = spec.h;
+  const node = { key: 'scrub', instance, outputs: [{ name: 'Number', _guid: instance }] };
+  return { xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="3">
+                ${item('GUID', 'gh_guid', '9', spec.guid)}
+                ${item('Lib', 'gh_guid', '9', MOTUS_LIB)}
+                ${item('Name', 'gh_string', '10', spec.name)}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="6">
+                    ${item('Description', 'gh_string', '10', 'Normalized playback position (0–1) for Motus Preview; resize wider for finer control')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', spec.name)}
+                    ${item('NickName', 'gh_string', '10', spec.nick)}
+                    ${item('Optional', 'gh_bool', '1', 'false')}
+                    ${item('SourceCount', 'gh_int32', '3', '0')}
+                  </items>
+                  <chunks count="2">
+                    ${bounds(x, y, w, h)}
+                    <chunk name="Slider">
+                      <items count="7">
+                        ${item('Digits', 'gh_int32', '3', '3')}
+                        ${item('GripDisplay', 'gh_int32', '3', '1')}
+                        ${item('Interval', 'gh_int32', '3', '1')}
+                        ${item('Max', 'gh_double', '6', '1')}
+                        ${item('Min', 'gh_double', '6', '0')}
+                        ${item('SnapCount', 'gh_int32', '3', '0')}
+                        ${item('Value', 'gh_double', '6', String(value))}
+                      </items>
+                    </chunk>
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`, node };
+}
+
+function previewWithScrub(x, y, trajectoryRef, options = {}) {
+  const scrub = motusScrub(x - 260, y + 10, options.scrubValue ?? 0, options.scrubWidth ?? 280);
+  const previewInputs = {
+    Trajectory: [trajectoryRef],
+    Position: [outRef(scrub.node, 'Number')],
+    ...(options.inputs ?? {}),
+  };
+  const preview = motusComponent('preview', x, y, previewInputs, options.preview ?? {});
+  return { scrub, preview };
 }
 
 function nativePanel(x, y, text, nick = '', w = NATIVE.panel.w, h = NATIVE.panel.h) {
@@ -852,28 +909,30 @@ function outRef(node, outputName) {
   return out;
 }
 
+function ur10eRobot(x, y) {
+  return motusComponent('ur10e', x, y, {});
+}
+
 function graph01() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
   const plan = motusComponent('plan', 420, 140, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(joints.node, 'State')],
   });
-  const preview = motusComponent('preview', 620, 120, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(620, 120, outRef(plan.node, 'Trajectory'));
   const trajData = motusComponent('trajData', 620, 260, { Trajectory: [outRef(plan.node, 'Trajectory')] });
   const exp = motusComponent('export', 620, 380, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, vl, joints, plan, preview, trajData, exp];
+  const objs = [robot, joints, plan, scrub, preview, trajData, exp];
   objs._meta = {
     fileName: '01_joint_planning.ghx',
-    description: 'Joint-linear planning: Robot + Joint State -> Plan -> Preview / Export / Trajectory Data. Click Plan, then Play.',
+    description: 'Joint-linear planning: UR10e Robotiq + Joint State -> Plan -> Preview / Export / Trajectory Data. Click Plan, then drag Motus Scrub or Play.',
   };
   return buildGraph(objs);
 }
 
 function graph02() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 220, { Robot: [outRef(robot.node, 'Robot')] }, { jointValues: GOAL_JOINTS });
   const tcp = motusComponent('tcpPose', 300, 140, {
     Robot: [outRef(robot.node, 'Robot')],
@@ -883,18 +942,17 @@ function graph02() {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(tcp.node, 'Plane')],
   });
-  const preview = motusComponent('preview', 680, 140, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, vl, joints, tcp, plan, preview];
+  const { scrub, preview } = previewWithScrub(680, 140, outRef(plan.node, 'Trajectory'));
+  const objs = [robot, joints, tcp, plan, scrub, preview];
   objs._meta = {
     fileName: '02_cartesian_planning.ghx',
-    description: 'Cartesian TCP LIN: Joint State -> TCP Pose (FK plane) -> Plan. Click Plan, then Play on Preview.',
+    description: 'Cartesian TCP LIN: Joint State -> TCP Pose (FK plane) -> Plan. Click Plan, then drag Motus Scrub or Play on Preview.',
   };
   return buildGraph(objs);
 }
 
 function graph03() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
   const sphere = motusComponent('colSphere', 140, 380, {});
   const scene = motusComponent('colScene', 300, 380, { Objects: [outRef(sphere.node, 'Object')] });
@@ -903,18 +961,17 @@ function graph03() {
     Goal: [outRef(joints.node, 'State')],
     Collision: [outRef(scene.node, 'Scene')],
   });
-  const preview = motusComponent('preview', 680, 160, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, vl, joints, sphere, scene, plan, preview];
+  const { scrub, preview } = previewWithScrub(680, 160, outRef(plan.node, 'Trajectory'));
+  const objs = [robot, joints, sphere, scene, plan, scrub, preview];
   objs._meta = {
     fileName: '03_collision_rrt.ghx',
-    description: 'Collision-aware RRT: ColSphere -> ColScene -> Plan.Collision with joint goal. Click Plan, then Play.',
+    description: 'Collision-aware RRT: ColSphere -> ColScene -> Plan.Collision with joint goal. Click Plan, then drag Motus Scrub or Play.',
   };
   return buildGraph(objs);
 }
 
 function graph04() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 200, {}, { jointValues: GOAL_JOINTS });
   const sphere = motusComponent('colSphere', 140, 360, {}, { text: { Name: 'sphere' } });
   const xy = nativeXYPlane(140, 480);
@@ -927,8 +984,8 @@ function graph04() {
     Goal: [outRef(joints.node, 'State')],
     Collision: [outRef(scene.node, 'Scene')],
   });
-  const preview = motusComponent('preview', 820, 160, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, vl, joints, sphere, xy, box, scene, plan, preview];
+  const { scrub, preview } = previewWithScrub(820, 160, outRef(plan.node, 'Trajectory'));
+  const objs = [robot, joints, sphere, xy, box, scene, plan, scrub, preview];
   objs._meta = {
     fileName: '04_collision_shapes.ghx',
     description: 'Multiple obstacle shapes: ColSphere + ColBox -> ColScene -> Plan (RRT). Wire your own mesh into ColMesh the same way.',
@@ -937,8 +994,7 @@ function graph04() {
 }
 
 function graph05() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 200, {}, { jointValues: GOAL_JOINTS });
   const tableCenter = nativeConstructPoint(140, 340, [0.35, 0.15, 0.35]);
   const sphere = motusComponent('colSphere', 140, 360, {
@@ -965,8 +1021,8 @@ function graph05() {
     Group: [outRef(group.node, 'Group')],
     Attach: [outRef(attach.node, 'Attach')],
   });
-  const preview = motusComponent('preview', 820, 180, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, vl, joints, { xml: tableCenter.xml }, sphere, srdfPanel, scene, group, { xml: graspCenter.xml }, grasp, attach, plan, preview];
+  const { scrub, preview } = previewWithScrub(820, 180, outRef(plan.node, 'Trajectory'));
+  const objs = [robot, joints, { xml: tableCenter.xml }, sphere, srdfPanel, scene, group, { xml: graspCenter.xml }, grasp, attach, plan, scrub, preview];
   objs._meta = {
     fileName: '05_srdf_group_attach.ghx',
     description: 'SRDF allowed pairs + Planning Group + Attach Body on Plan. Set Srdf panel to your absolute path if needed.',
@@ -975,8 +1031,8 @@ function graph05() {
 }
 
 function graph06() {
-  const urdfFile = nativeFilePath(40, 80, 'examples/ur10e/ur10e_robotiq.urdf');
-  const loadUrdf = motusComponent('loadUrdf', 147, 80, {
+  const urdfFile = nativeFilePath(40, 80, BUNDLED_URDF);
+  const robot = motusComponent('robot', 147, 80, {
     Path: [outRef(urdfFile.node, 'Path')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
   const goalPanel = nativePanel(35, 246, UR10E_GOAL_DEG, 'Goal°', 160, 100);
@@ -988,32 +1044,31 @@ function graph06() {
     Joints: [outRef(startPanel.node, 'Text')],
   }, { useDegrees: { Joints: true } });
   const plan = motusComponent('plan', 416, 174, {
-    Robot: [outRef(loadUrdf.node, 'Robot')],
+    Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goalJoints.node, 'State')],
     Start: [outRef(startJoints.node, 'State')],
   });
-  const preview = motusComponent('preview', 618, 110, {
-    Trajectory: [outRef(plan.node, 'Trajectory')],
-    Robot: [outRef(loadUrdf.node, 'Robot')],
+  const { scrub, preview } = previewWithScrub(618, 110, outRef(plan.node, 'Trajectory'), {
+    inputs: { Robot: [outRef(robot.node, 'Robot')] },
   });
-  const objs = [loadUrdf, plan, preview, urdfFile, startJoints, goalPanel, goalJoints, startPanel];
+  const objs = [robot, plan, scrub, preview, urdfFile, startJoints, goalPanel, goalJoints, startPanel];
   objs._meta = {
     fileName: '06_urdf_load.ghx',
-    description: 'URDF import: ur10e_robotiq.urdf (arm + gripper meshes, local paths). Run fetch-ur10e-assets.mjs. Bundled Robotiq tool applied automatically.',
+    description: 'Motus Robot URDF load: bundled ur10e_robotiq.urdf path + explicit Start on Plan.',
   };
   return buildGraph(objs);
 }
 
 function graph07() {
-  const vl = valueList(-180, 60);
+  const urdfFile = nativeFilePath(-180, 60, BUNDLED_URDF);
   const basePl = nativeXYPlane(40, 200);
   const tcpPl = nativeXYPlane(40, 280);
   const tool = motusComponent('tool', 160, 200, { TCP: [outRef(tcpPl.node, 'Plane')] }, { text: { Name: 'offset' } });
   const robot = motusComponent('robot', 340, 80, {
-    Model: [outRef(vl.node, 'Value')],
+    Path: [outRef(urdfFile.node, 'Path')],
     Base: [outRef(basePl.node, 'Plane')],
     Tool: [outRef(tool.node, 'Tool')],
-  });
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
   const start = motusComponent('joints', 340, 220, {}, { jointValues: START_JOINTS });
   const goal = motusComponent('joints', 340, 340, {}, { jointValues: GOAL_JOINTS });
   const plan = motusComponent('plan', 560, 200, {
@@ -1021,24 +1076,22 @@ function graph07() {
     Goal: [outRef(goal.node, 'State')],
     Start: [outRef(start.node, 'State')],
   });
-  const preview = motusComponent('preview', 760, 180, {
-    Trajectory: [outRef(plan.node, 'Trajectory')],
-  }, { bools: { ShowStart: true } });
-  const objs = [vl, basePl, tcpPl, tool, robot, start, goal, plan, preview];
+  const { scrub, preview } = previewWithScrub(760, 180, outRef(plan.node, 'Trajectory'), {
+    preview: { bools: { ShowStart: true } },
+  });
+  const objs = [urdfFile, basePl, tcpPl, tool, robot, start, goal, plan, scrub, preview];
   objs._meta = {
     fileName: '07_frames_and_start.ghx',
-    description: 'Base override + Motus Tool TCP on Robot, explicit Start on Plan, ShowStart ghost on Preview.',
+    description: 'Motus Robot: URDF path + Base override + Motus Tool, explicit Start on Plan, ShowStart ghost on Preview.',
   };
   return buildGraph(objs);
 }
 
 function graph08() {
-  const vl = valueList(-180, 60);
-  const robot = motusComponent('robot', 140, 60, { Model: [outRef(vl.node, 'Value')] });
+  const robot = ur10eRobot(140, 60);
   const start = motusComponent('joints', 140, 200, {}, { jointValues: MOTION_START });
   const ptpGoal = motusComponent('joints', 140, 320, {}, { jointValues: GOAL_JOINTS });
   const segPtp = motusComponent('segment', 340, 60, {
-    Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(ptpGoal.node, 'State')],
   }, { text: { Type: 'PTP' } });
   const ptLin = nativeConstructPoint(140, 480, [0.45, 0.15, 0.45]);
@@ -1060,24 +1113,24 @@ function graph08() {
     Segments: [outRef(segPtp.node, 'Segment'), outRef(segLin.node, 'Segment'), outRef(segCirc.node, 'Segment')],
     Start: [outRef(start.node, 'State')],
   });
-  const preview = motusComponent('preview', 720, 180, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(720, 180, outRef(progPlan.node, 'Trajectory'));
   const exp = motusComponent('export', 720, 320, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
   const flat = [
-    robot, vl, start, ptpGoal, segPtp,
+    robot, start, ptpGoal, segPtp,
     { xml: ptLin.xml }, { xml: uz.xml }, { xml: plLin.xml },
     segLin,
     { xml: ptVia.xml }, { xml: ptGoal.xml }, { xml: plVia.xml }, { xml: plGoal.xml },
-    segCirc, progPlan, preview, exp,
+    segCirc, progPlan, scrub, preview, exp,
   ];
   flat._meta = {
     fileName: '08_motion_program.ghx',
-    description: 'Motion program: PTP + LIN + CIRC segments -> Program Plan -> Preview / Export. Click Plan, then Play.',
+    description: 'Motion program: PTP + LIN + CIRC segments -> Program Plan -> Preview / Export. Click Plan, then drag Motus Scrub or Play.',
   };
   return buildGraph(flat);
 }
 
 function graph09() {
-  const vl = valueList(-180, 60);
+  const urdfFile = nativeFilePath(-180, 60, 'examples/ur10e/ur10e.urdf');
   const tcpPl = nativeXYPlane(40, 200);
   const gripper = motusComponent('colBox', 40, 320, {}, {
     numbers: { HalfX: 0.02, HalfY: 0.02, HalfZ: 0.04 },
@@ -1088,30 +1141,28 @@ function graph09() {
     Geometry: [outRef(gripper.node, 'Object')],
   }, { text: { Name: 'gripper' } });
   const robot = motusComponent('robot', 380, 80, {
-    Model: [outRef(vl.node, 'Value')],
+    Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
-  });
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
   const goal = motusComponent('joints', 380, 220, {}, { jointValues: GOAL_JOINTS });
   const plan = motusComponent('plan', 580, 160, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goal.node, 'State')],
   });
-  const preview = motusComponent('preview', 780, 140, {
-    Trajectory: [outRef(plan.node, 'Trajectory')],
-  });
+  const { scrub, preview } = previewWithScrub(780, 140, outRef(plan.node, 'Trajectory'));
   const exp = motusComponent('export', 780, 280, {
     Trajectory: [outRef(plan.node, 'Trajectory')],
   });
-  const objs = [vl, tcpPl, gripper, tool, robot, goal, plan, preview, exp];
+  const objs = [urdfFile, tcpPl, gripper, tool, robot, goal, plan, scrub, preview, exp];
   objs._meta = {
     fileName: '09_tool_tcp.ghx',
-    description: 'Motus Tool (TCP + gripper box) -> Robot.Tool -> Plan -> Preview/Export. Mesh tools fall back from FCL.',
+    description: 'Motus Robot (ur10e.urdf) + Motus Tool (TCP + gripper box) -> Plan -> Preview/Export.',
   };
   return buildGraph(objs);
 }
 
 function graph10() {
-  const vl = valueList(-180, 60);
+  const urdfFile = nativeFilePath(-180, 60, 'examples/ur10e/ur10e.urdf');
   const tcpPt = nativeConstructPoint(40, 200, [0, 0, 0.1633]);
   const ux = nativeUnitX(40, 260);
   const tcpPl = nativePlane(160, 200, tcpPt.node.outputs[0], ux.node.outputs[0]);
@@ -1124,26 +1175,52 @@ function graph10() {
     Geometry: [outRef(loadMesh.node, 'Mesh')],
   }, { text: { Name: 'robotiq_2f85' } });
   const robot = motusComponent('robot', 540, 80, {
-    Model: [outRef(vl.node, 'Value')],
+    Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
-  });
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
   const goal = motusComponent('joints', 540, 220, {}, { jointValues: GOAL_JOINTS });
   const plan = motusComponent('plan', 740, 160, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goal.node, 'State')],
   });
-  const preview = motusComponent('preview', 940, 140, {
-    Trajectory: [outRef(plan.node, 'Trajectory')],
-  });
-  const objs = [vl, tcpPt, ux, tcpPl, meshPath, loadMesh, tool, robot, goal, plan, preview];
+  const { scrub, preview } = previewWithScrub(940, 140, outRef(plan.node, 'Trajectory'));
+  const objs = [urdfFile, tcpPt, ux, tcpPl, meshPath, loadMesh, tool, robot, goal, plan, scrub, preview];
   objs._meta = {
     fileName: '10_robotiq_tool.ghx',
-    description: 'Explicit Robotiq mesh path (Motus Robot already bundles gripper for UR10e by default).',
+    description: 'Motus Robot (ur10e.urdf) + Robotiq mesh via Motus Tool -> Plan + Preview.',
   };
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10];
+function graph11() {
+  const robot = motusComponent('ur10e', 40, 120);
+  const start = motusComponent('joints', 40, 260, {}, { jointValues: MOTION_START });
+  const ptpGoal = motusComponent('joints', 40, 360, {}, { jointValues: MOTION_START });
+  const stateOpen = motusComponent('toolState', 200, 420, {}, { text: { Preset: 'Open' } });
+  const stateClosed = motusComponent('toolState', 200, 520, {}, { text: { Preset: 'Closed' } });
+  const segPtp = motusComponent('segment', 360, 280, {
+    Goal: [outRef(ptpGoal.node, 'State')],
+    ToolState: [outRef(stateOpen.node, 'State')],
+  }, { text: { Type: 'PTP', ToolMode: 'Hold' } });
+  const segSet = motusComponent('segment', 360, 420, {
+    ToolState: [outRef(stateClosed.node, 'State')],
+  }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
+  const progPlan = motusComponent('progPlan', 540, 200, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Segments: [outRef(segPtp.node, 'Segment'), outRef(segSet.node, 'Segment')],
+    Start: [outRef(start.node, 'State')],
+  });
+  const { scrub, preview } = previewWithScrub(740, 180, outRef(progPlan.node, 'Trajectory'));
+  const exp = motusComponent('export', 740, 320, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
+  const objs = [robot, start, ptpGoal, stateOpen, stateClosed, segPtp, segSet, progPlan, scrub, preview, exp];
+  objs._meta = {
+    fileName: '11_gripper_motion_program.ghx',
+    description: 'Motion program with SET gripper close: UR10e Robotiq -> Program Plan -> Preview/Export (toolState on trajectory).',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10, graph11];
 const legacy = ['01_basic_planning.ghx', '02_collision_planning.ghx'];
 
 for (const name of legacy) {

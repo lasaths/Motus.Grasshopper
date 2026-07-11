@@ -2,6 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
+using System.Drawing;
 
 namespace Motus.GH.Data;
 
@@ -23,6 +24,14 @@ public sealed class ToolGoo : MotusGooBase<ToolDefinition>
     public override string ToString() => Value is null ? "Tool" : $"{Value.Name} ({Value.Tcp})";
 }
 
+public sealed class EndEffectorStateGoo : MotusGooBase<EndEffectorState>
+{
+    public EndEffectorStateGoo() { }
+    public EndEffectorStateGoo(EndEffectorState state) : base(state) { }
+
+    public override string ToString() => Value?.ToString() ?? "ToolState";
+}
+
 public sealed class JointStateGoo : MotusGooBase<JointState>
 {
     public JointStateGoo() { }
@@ -34,33 +43,22 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
     public RobotCollisionModel? PreviewGeometry { get; set; }
+    public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
     public ToolDefinition? ToolSnapshot { get; set; }
+    public ToolCapabilities? ToolCapabilitiesSnapshot { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
 
-    public RobotContext Context(RobotModelGoo? robotOverride = null)
+    public RobotContext Context()
     {
         var model = Value!.Robot;
-        ToolDefinition? tool = ToolSnapshot;
-        Frame? baseOverride = BaseFrameOverride;
-        SerialJointChain? chain = Chain;
-        RobotCollisionModel? preview = PreviewGeometry;
-
-        if (robotOverride?.Value is not null)
-        {
-            if (tool is null)
-                tool = robotOverride.Tool;
-            if (baseOverride is null && robotOverride.BaseFrameOverride is { } bf)
-                baseOverride = bf;
-            chain ??= robotOverride.Chain;
-            preview ??= robotOverride.PreviewGeometry;
-            model = robotOverride.Value;
-        }
-
-        var session = ApplyTool(model, tool, baseOverride);
-        return new RobotContext(session, session, chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview);
+        var session = ApplyTool(model, ToolSnapshot, BaseFrameOverride);
+        var preview = PreviewGeometry;
+        if (preview is not null && ToolSnapshot?.Geometry is { } toolGeom && preview.ToolGeometry is null)
+            preview = new RobotCollisionModel(preview.Links, toolGeom);
+        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)
@@ -114,6 +112,8 @@ public sealed class MotionSegmentGoo : MotusGooBase<MotionSegment>
         PtpSegment ptp => $"PTP blend={ptp.BlendRadiusMeters:F3}m",
         LinSegment lin => $"LIN step={lin.StepMeters:F3}m blend={lin.BlendRadiusMeters:F3}m",
         CircSegment circ => $"CIRC samples={circ.ArcSamples} blend={circ.BlendRadiusMeters:F3}m",
+        SetToolStateSegment set => $"SET dur={set.DurationSeconds:F2}s",
+        WaitSegment wait => $"WAIT dur={wait.DurationSeconds:F2}s",
         _ => "Segment"
     };
 }

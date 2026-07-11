@@ -1,132 +1,70 @@
-using Grasshopper.Kernel;
 using Motus.Core;
-using Motus.GH.Data;
 using Motus.Geometry;
-using Motus.Presets;
+using System.Collections.Concurrent;
+using System.Drawing;
 using System.Globalization;
 using System.Xml.Linq;
 
-namespace Motus.GH.Components;
-
-public sealed class MotusLoadUrdfComponent : MotusComponentBase
-{
-    public MotusLoadUrdfComponent() : base("Motus Load URDF", "URDF", "Load a serial-chain URDF or .xacro into a robot model", "Model", "file") { }
-
-    protected override void RegisterInputParams(GH_InputParamManager p)
-    {
-        p.AddTextParameter("Path", "P", "Path to .urdf or .xacro file", GH_ParamAccess.item);
-        p.AddTextParameter("BaseLink", "B", "Base link name", GH_ParamAccess.item, "base_link");
-        p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("TipLink", "T", "Tip link name", GH_ParamAccess.item, "tool0");
-        p[p.ParamCount - 1].Optional = true;
-    }
-
-    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("Robot", "Rb", "Robot model with URDF kinematics chain", GH_ParamAccess.item);
-
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        var path = "";
-        var baseLink = "base_link";
-        var tipLink = "tool0";
-        if (!da.GetData(0, ref path) || string.IsNullOrWhiteSpace(path)) return;
-        da.GetData(1, ref baseLink);
-        da.GetData(2, ref tipLink);
-
-        try
-        {
-            path = UrdfPathResolver.ResolveUrdfPath(path);
-            var urdfDir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
-            var options = new UrdfLoadOptions
-            {
-                BaseLink = baseLink,
-                TipLink = tipLink,
-                ModelName = Path.GetFileNameWithoutExtension(path)
-            };
-            UrdfRobot urdf;
-            RobotCollisionModel? previewGeometry;
-            if (path.EndsWith(".xacro", StringComparison.OrdinalIgnoreCase))
-            {
-                var xdoc = XacroPreprocessor.ExpandDocument(path);
-                urdf = UrdfRobotLoader.Load(xdoc, options, urdfDir);
-                previewGeometry = UrdfVisualPreviewLoader.TryLoad(xdoc, urdfDir, baseLink, tipLink);
-            }
-            else
-            {
-                urdf = UrdfRobotLoader.Load(path, options);
-                previewGeometry = UrdfVisualPreviewLoader.TryLoad(path, baseLink, tipLink);
-            }
-            var goo = RobotModelGoo.FromUrdf(urdf, previewGeometry);
-            if (BundledToolLoader.TryDefaultForUrdfPath(path) is { } bundledTool)
-            {
-                goo.Tool = bundledTool;
-                if (previewGeometry?.Links.Count > 0)
-                {
-                    var armLinks = previewGeometry.Links
-                        .Where(l => !l.LinkName.Contains("robotiq", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                    goo.PreviewGeometry = new RobotCollisionModel(armLinks);
-                }
-            }
-            da.SetData(0, goo);
-        }
-        catch (Exception ex)
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
-        }
-    }
-
-    public override Guid ComponentGuid => new Guid("c8e4a1b2-3f5d-4e6a-9b7c-1d2e3f4a5b6c");
-}
-
-internal static class UrdfPathResolver
-{
-    public static string ResolveUrdfPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return path;
-        if (File.Exists(path)) return Path.GetFullPath(path);
-        var normalized = path.Replace('/', Path.DirectorySeparatorChar);
-        var dir = Directory.GetCurrentDirectory();
-        for (var i = 0; i < 10 && dir is not null; i++)
-        {
-            var candidate = Path.Combine(dir, normalized);
-            if (File.Exists(candidate)) return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        return path;
-    }
-}
+namespace Motus.GH.Urdf;
 
 internal static class UrdfVisualPreviewLoader
 {
-    public static RobotCollisionModel? TryLoad(string urdfPath, string baseLink, string tipLink)
+    private const int MaxDaeNodeDepth = 64;
+
+    private static readonly ConcurrentDictionary<string, RobotPreviewVisuals?> VisualCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static RobotPreviewVisuals? TryLoad(string urdfPath, string baseLink, string tipLink)
     {
+        var full = Path.GetFullPath(urdfPath);
+        var key = $"{full}|{baseLink}|{tipLink}|{UrdfWriteTimeCache.GetTicks(full)}";
+        if (VisualCache.TryGetValue(key, out var cached))
+            return cached;
+
         var doc = XDocument.Load(urdfPath);
-        return TryLoad(doc, Path.GetDirectoryName(Path.GetFullPath(urdfPath)) ?? ".", baseLink, tipLink);
+        var result = TryLoad(doc, Path.GetDirectoryName(full) ?? ".", baseLink, tipLink);
+        VisualCache[key] = result;
+        return result;
     }
 
-    public static RobotCollisionModel? TryLoad(XDocument doc, string urdfDirectory, string baseLink, string tipLink) =>
+    public static RobotPreviewVisuals? TryLoad(XDocument doc, string urdfDirectory, string baseLink, string tipLink) =>
         TryLoad(doc.Root, urdfDirectory, baseLink, tipLink);
 
-    private static RobotCollisionModel? TryLoad(XElement? robotRoot, string urdfDirectory, string baseLink, string tipLink)
+    private static RobotPreviewVisuals? TryLoad(XElement? robotRoot, string urdfDirectory, string baseLink, string tipLink)
     {
         if (robotRoot is null) return null;
         var chainLinkNames = BuildActuatedChainLinkNames(robotRoot, baseLink, tipLink);
         if (chainLinkNames.Count == 0) return null;
 
+        var materials = UrdfMaterialParser.ParseRobotMaterials(robotRoot);
         var linksByName = robotRoot.Elements("link")
             .ToDictionary(l => l.Attribute("name")?.Value ?? "", l => l, StringComparer.OrdinalIgnoreCase);
 
-        var geometries = new List<LinkCollisionGeometry>();
+        var build = new VisualBuild();
         for (var i = 0; i < chainLinkNames.Count; i++)
-            AppendLinkVisuals(linksByName, chainLinkNames[i], i, urdfDirectory, geometries);
+            AppendLinkVisuals(linksByName, chainLinkNames[i], i, urdfDirectory, materials, build);
+
+        AppendBasePedestalVisual(linksByName, urdfDirectory, materials, build);
 
         AppendFixedDescendantVisuals(
             robotRoot, linksByName, tipLink, chainLinkNames.Count - 1,
             ComposeFixedForwardChain(robotRoot, chainLinkNames[^1], tipLink),
-            urdfDirectory, geometries);
+            urdfDirectory, materials, build);
 
-        return geometries.Count > 0 ? new RobotCollisionModel(geometries) : null;
+        return build.Geometries.Count > 0
+            ? new RobotPreviewVisuals(new RobotCollisionModel(build.Geometries), build.Colors.ToArray())
+            : null;
+    }
+
+    private sealed class VisualBuild
+    {
+        public List<LinkCollisionGeometry> Geometries { get; } = [];
+        public List<Color?> Colors { get; } = [];
+
+        public void Add(LinkCollisionGeometry geometry, Color? color)
+        {
+            Geometries.Add(geometry);
+            Colors.Add(color);
+        }
     }
 
     private static CollisionObject? ParseVisualGeometry(string name, Frame pose, XElement geom, string urdfDirectory)
@@ -155,19 +93,30 @@ internal static class UrdfVisualPreviewLoader
             if (Math.Abs(scale.x - scale.y) > 1e-9 || Math.Abs(scale.y - scale.z) > 1e-9)
                 return null; // ponytail: skip non-uniform mesh scales for now.
             var path = ResolveMeshPath(filename, urdfDirectory);
-            if (!File.Exists(path))
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 return null;
             var (vertices, indices) =
                 path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase)
                     ? MeshFileLoader.ReadStlBytes(path, scale.x)
                     : path.EndsWith(".dae", StringComparison.OrdinalIgnoreCase)
-                        ? ReadDae(path, scale.x)
+                        ? MeshFileLoader.ReadCachedDae(path, scale.x, () => ReadDae(path, scale.x))
                         : (new List<double[]>(), new List<int>());
             if (vertices.Count == 0 || indices.Count < 3)
                 return null;
             return CollisionObject.Mesh(name, pose, vertices, indices);
         }
         return null;
+    }
+
+    // UR ROS Collada exports often store mm coordinates while <unit meter="1"/>.
+    private static List<double[]> ScaleVerticesIfMillimeters(List<double[]> vertices)
+    {
+        var max = 0.0;
+        foreach (var v in vertices)
+            max = Math.Max(max, Math.Max(Math.Abs(v[0]), Math.Max(Math.Abs(v[1]), Math.Abs(v[2]))));
+        if (max <= 10) return vertices;
+        const double mmToM = 0.001;
+        return vertices.Select(v => new[] { v[0] * mmToM, v[1] * mmToM, v[2] * mmToM }).ToList();
     }
 
     private static (List<double[]> vertices, List<int> indices) ReadDae(string path, double uniformScale)
@@ -177,25 +126,132 @@ internal static class UrdfVisualPreviewLoader
         if (root is null) return (new List<double[]>(), new List<int>());
         var ns = root.Name.Namespace;
 
+        var library = BuildDaeGeometryLibrary(root, ns, uniformScale);
         var vertices = new List<double[]>();
         var indices = new List<int>();
 
+        foreach (var scene in root.Descendants(ns + "visual_scene"))
+        {
+            foreach (var node in scene.Elements(ns + "node"))
+                CollectDaeSceneNode(node, ns, library, Transforms.Identity(), vertices, indices);
+        }
+
+        if (vertices.Count == 0)
+        {
+            foreach (var geom in root.Descendants(ns + "geometry"))
+            {
+                var mesh = geom.Element(ns + "mesh");
+                if (mesh is null) continue;
+                var id = geom.Attribute("id")?.Value ?? "";
+                if (library.TryGetValue(id, out var part))
+                    AppendDaeMesh(part.vertices, part.indices, Transforms.Identity(), vertices, indices);
+            }
+        }
+
+        if (vertices.Count > 0 && Math.Abs(uniformScale - 1) < 1e-9)
+            vertices = ScaleVerticesIfMillimeters(vertices);
+
+        return (vertices, indices);
+    }
+
+    private static Dictionary<string, (List<double[]> vertices, List<int> indices)> BuildDaeGeometryLibrary(
+        XElement root, XNamespace ns, double uniformScale)
+    {
+        var library = new Dictionary<string, (List<double[]>, List<int>)>(StringComparer.OrdinalIgnoreCase);
         foreach (var geom in root.Descendants(ns + "geometry"))
         {
+            var id = geom.Attribute("id")?.Value;
+            if (string.IsNullOrWhiteSpace(id)) continue;
             var mesh = geom.Element(ns + "mesh");
             if (mesh is null) continue;
 
             var localVertices = ParseDaePositions(mesh, ns, uniformScale);
             if (localVertices.Count == 0) continue;
 
+            var partVerts = new List<double[]>();
+            var partIndices = new List<int>();
             var vertMap = BuildVerticesMap(mesh, ns);
             foreach (var tri in mesh.Elements(ns + "triangles"))
-                AppendDaeTriangles(tri, ns, localVertices, vertMap, vertices, indices);
+                AppendDaeTriangles(tri, ns, localVertices, vertMap, partVerts, partIndices);
             foreach (var poly in mesh.Elements(ns + "polylist"))
-                AppendDaePolylist(poly, ns, localVertices, vertMap, vertices, indices);
+                AppendDaePolylist(poly, ns, localVertices, vertMap, partVerts, partIndices);
+
+            if (partVerts.Count > 0 && partIndices.Count >= 3)
+                library[id] = (partVerts, partIndices);
+        }
+        return library;
+    }
+
+    private static void CollectDaeSceneNode(
+        XElement node,
+        XNamespace ns,
+        Dictionary<string, (List<double[]> vertices, List<int> indices)> library,
+        double[] parentMatrix,
+        List<double[]> outVertices,
+        List<int> outIndices,
+        int depth = 0)
+    {
+        if (depth > MaxDaeNodeDepth) return;
+
+        var local = ParseDaeMatrix(node.Element(ns + "matrix")) ?? Transforms.Identity();
+        var world = Transforms.Multiply(parentMatrix, local);
+
+        foreach (var instance in node.Elements(ns + "instance_geometry"))
+        {
+            var id = NormalizeRef(instance.Attribute("url")?.Value);
+            if (id is null || !library.TryGetValue(id, out var part)) continue;
+            AppendDaeMesh(part.vertices, part.indices, world, outVertices, outIndices);
         }
 
-        return (vertices, indices);
+        foreach (var child in node.Elements(ns + "node"))
+            CollectDaeSceneNode(child, ns, library, world, outVertices, outIndices, depth + 1);
+    }
+
+    private static void AppendDaeMesh(
+        List<double[]> localVertices,
+        List<int> localIndices,
+        double[] worldMatrix,
+        List<double[]> outVertices,
+        List<int> outIndices)
+    {
+        var baseIndex = outVertices.Count;
+        foreach (var v in localVertices)
+        {
+            var p = Transforms.TransformPoint(worldMatrix, v[0], v[1], v[2]);
+            outVertices.Add(new[] { p[0], p[1], p[2] });
+        }
+        for (var i = 0; i + 2 < localIndices.Count; i += 3)
+        {
+            outIndices.Add(baseIndex + localIndices[i]);
+            outIndices.Add(baseIndex + localIndices[i + 1]);
+            outIndices.Add(baseIndex + localIndices[i + 2]);
+        }
+    }
+
+    private static double[]? ParseDaeMatrix(XElement? matrixEl)
+    {
+        if (matrixEl is null) return null;
+        var vals = ParseDoubles(matrixEl.Value);
+        if (vals.Count != 16) return null;
+        // Collada stores column-major; Motus uses row-major.
+        return
+        [
+            vals[0], vals[4], vals[8], vals[12],
+            vals[1], vals[5], vals[9], vals[13],
+            vals[2], vals[6], vals[10], vals[14],
+            vals[3], vals[7], vals[11], vals[15]
+        ];
+    }
+
+    private static void AppendBasePedestalVisual(
+        Dictionary<string, XElement> linksByName,
+        string urdfDirectory,
+        IReadOnlyDictionary<string, Color> materials,
+        VisualBuild build)
+    {
+        if (build.Geometries.Any(g => g.LinkName.Contains("base_link_inertia", StringComparison.OrdinalIgnoreCase)))
+            return;
+        AppendLinkVisuals(linksByName, "base_link_inertia", -1, urdfDirectory, materials, build);
     }
 
     private static Dictionary<string, List<double[]>> ParseDaePositions(XElement mesh, XNamespace ns, double scale)
@@ -313,14 +369,18 @@ internal static class UrdfVisualPreviewLoader
         }
     }
 
-    private static string ResolveMeshPath(string filename, string urdfDirectory)
+    private static string? ResolveMeshPath(string filename, string urdfDirectory)
     {
         var cleaned = filename.Replace("package://", "").Replace("file://", "");
         var path = Path.IsPathRooted(cleaned)
             ? Path.GetFullPath(cleaned)
             : Path.GetFullPath(Path.Combine(urdfDirectory, cleaned));
-        if (!File.Exists(path))
+        if (!UrdfPaths.IsUnderDirectory(path, urdfDirectory))
             path = Path.GetFullPath(Path.Combine(urdfDirectory, Path.GetFileName(cleaned)));
+        if (!UrdfPaths.IsUnderDirectory(path, urdfDirectory))
+            return null;
+        if (!File.Exists(path))
+            return null;
         return path;
     }
 
@@ -335,7 +395,8 @@ internal static class UrdfVisualPreviewLoader
         string linkName,
         int linkIndex,
         string urdfDirectory,
-        List<LinkCollisionGeometry> geometries)
+        IReadOnlyDictionary<string, Color> materials,
+        VisualBuild build)
     {
         if (!linksByName.TryGetValue(linkName, out var linkEl)) return;
         var visualIdx = 0;
@@ -350,7 +411,7 @@ internal static class UrdfVisualPreviewLoader
             var name = $"{linkName}_vis{visualIdx++}";
             var obj = ParseVisualGeometry(name, pose, geom, urdfDirectory);
             if (obj is not null)
-                geometries.Add(new LinkCollisionGeometry(linkIndex, linkName, obj));
+                build.Add(new LinkCollisionGeometry(linkIndex, linkName, obj), UrdfMaterialParser.ResolveVisualColor(visual, materials));
         }
     }
 
@@ -361,7 +422,8 @@ internal static class UrdfVisualPreviewLoader
         int attachLinkIndex,
         Frame parentToWorld,
         string urdfDirectory,
-        List<LinkCollisionGeometry> geometries)
+        IReadOnlyDictionary<string, Color> materials,
+        VisualBuild build)
     {
         foreach (var joint in robotRoot.Elements("joint"))
         {
@@ -393,11 +455,11 @@ internal static class UrdfVisualPreviewLoader
                     var name = $"{child}_vis{visualIdx++}";
                     var obj = ParseVisualGeometry(name, ComposeFrames(childToWorld, visPose), geom, urdfDirectory);
                     if (obj is not null)
-                        geometries.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj));
+                        build.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj), UrdfMaterialParser.ResolveVisualColor(visual, materials));
                 }
             }
 
-            AppendFixedDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, geometries);
+            AppendFixedDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, materials, build);
         }
     }
 
