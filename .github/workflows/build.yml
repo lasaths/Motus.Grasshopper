@@ -17,6 +17,9 @@ jobs:
           dotnet-version: "8.0.x"
 
       # Grasshopper .gha build requires Rhino 8 on the machine — run ./build.ps1 locally.
+      - name: Fetch UR10e example meshes
+        run: node scripts/fetch-ur10e-assets.mjs
+
       - name: Validate example GHX files
         run: node scripts/validate-ghx.mjs
 
