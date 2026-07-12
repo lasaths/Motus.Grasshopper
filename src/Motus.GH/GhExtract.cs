@@ -459,6 +459,14 @@ internal static class GhExtract
             return RrtPlanSettings.Defaults;
         }
 
-        return goo.Value;
+        var settings = goo.Value.CoerceAvailable(out var fallbackReason);
+        if (fallbackReason is not null)
+        {
+            owner?.AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                $"{fallbackReason} Using RRT-Connect.");
+        }
+
+        return settings;
     }
 }

@@ -241,7 +241,7 @@ internal static class PlanExecutor
                 CollisionChecker = checker
             }));
 
-        var result = new RrtConnectPlanner(checker, opts).Plan(req);
+        var result = SamplingPlanner.Create(checker, opts).Plan(req);
         if (result.Success)
             goalProgress?.Invoke(1.0);
         return result;

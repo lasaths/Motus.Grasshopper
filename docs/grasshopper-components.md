@@ -45,7 +45,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Component | Notes |
 |-----------|-------|
 | Motus Plan | One planner for all goals. Click **Plan** to compute, or enable **Auto Plan** from the right-click menu. |
-| Motus RRT Settings | Tune RRT-Connect / RRT* (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. |
+| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). |
 | Motus Motion Segment | Build a single PTP, LIN, or CIRC segment (`MotionSegmentGoo`). |
 | Motus Program Plan | Plan a mixed segment list via `IndustrialMotionPlanner` (click **Plan**). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
@@ -69,8 +69,8 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.
 - The planner is inferred from the inputs:
   - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). Falls back to joint-space path if LIN fails but goal IK succeeded.
-  - `Goal` is joints + `Collision` wired → RRT-Connect (or RRT* via **Motus RRT Settings** → `Plan.RrtSettings`).
-  - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (`RrtConnect` / `RrtStar`), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
+  - `Goal` is joints + `Collision` wired → sampling planner via **Motus RRT Settings** → `Plan.RrtSettings` (default RRT-Connect).
+  - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (registry `ShortName`, e.g. `RrtConnect`; unavailable planners hidden), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
   - `Goal` is joints, no collision → joint-linear plan.
 - Plane goal **Status** errors distinguish: outside reach, goal IK failed, or LIN path failed at intermediate poses.
 - Trajectory output preserves robot chain and frame overrides for preview/export.

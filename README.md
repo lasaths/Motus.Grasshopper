@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.1**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.3**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,7 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-sub
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.6.1` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.6.3` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -70,7 +70,7 @@ Unlike **Motus Plan** plane goals, **Program Plan** does not fall back to joint-
 1. **Motus Collision Sphere** / **Box** / **Mesh** → **Motus Collision Scene**
 2. Wire the scene into **Motus Plan** `Collision`:
    - **Plane goal** → true TCP-linear (LIN) planning with collision validation on the path
-   - **Joint goal** → RRT-Connect with per-link capsules when the preset includes `collisionLinks`
+   - **Joint goal** → sampling planner (default RRT-Connect) via **Motus RRT Settings** when collision is wired
 
 Optional: wire an SRDF file path into **ColScene** `Srdf` for allowed collision pairs (`examples/srdf/table_base.srdf`).
 `ColScene` also outputs SRDF groups (`Groups`) and end-effector map (`EndEffectors`) when present.
@@ -107,9 +107,13 @@ Quick pattern with SRDF:
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.6.1** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.6.3** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
+
+### 0.6.3 — Motus.NET 0.6.3 (sampling planner registry)
+
+Pins Motus.NET **0.6.3**. Registry-driven planner selection: **Motus RRT Settings** dropdown from `SamplingPlannerRegistry.ListAvailable()`; **Motus Plan** uses `SamplingPlanner`. Unavailable planners hidden on stub builds; wired settings fall back to managed RRT-Connect with warning.
 
 ### 0.6.1 — Motus.NET 0.6.1 (collision UX + tool state)
 

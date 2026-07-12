@@ -1,6 +1,7 @@
 using Grasshopper.Kernel;
 using Motus.OMPL.NET;
 using System;
+using System.Linq;
 using System.Threading;
 
 namespace Motus.GH.Planning;
@@ -8,11 +9,11 @@ namespace Motus.GH.Planning;
 public readonly record struct RrtPlanSettings(
     int MaxIterations,
     double MaxPlanTimeSeconds,
-    OmplPlannerId PlannerId,
+    SamplingPlannerId PlannerId,
     double GoalBias,
     double StepRadians)
 {
-    public static RrtPlanSettings Defaults => new(4000, 0, OmplPlannerId.RrtConnect, 0.08, 0.12);
+    public static RrtPlanSettings Defaults => new(4000, 0, SamplingPlannerId.RrtConnect, 0.08, 0.12);
 
     public static bool TryBuild(IGH_DataAccess da, out RrtPlanSettings settings, out string? error) =>
         TryRead(da, 0, 1, 2, 3, 4, out settings, out error);
@@ -56,7 +57,22 @@ public readonly record struct RrtPlanSettings(
 
         var plannerText = "RrtConnect";
         if (da.GetData(plannerIndex, ref plannerText))
-            settings = settings with { PlannerId = ParsePlannerId(plannerText) };
+        {
+            if (!SamplingPlannerRegistry.TryParse(plannerText, out var plannerId))
+            {
+                error = $"Unknown planner '{plannerText.Trim()}'. Available: {string.Join(", ", SamplingPlannerRegistry.ListAvailable().Select(d => d.ShortName))}.";
+                return false;
+            }
+
+            var desc = SamplingPlannerRegistry.Resolve(plannerId);
+            if (desc is null || (!desc.NativeSupported && !desc.ManagedSupported))
+            {
+                error = desc?.UnavailableReason ?? $"Planner '{plannerText.Trim()}' is not available in this build.";
+                return false;
+            }
+
+            settings = settings with { PlannerId = plannerId };
+        }
 
         var goalBias = settings.GoalBias;
         if (da.GetData(goalBiasIndex, ref goalBias))
@@ -85,7 +101,7 @@ public readonly record struct RrtPlanSettings(
         return true;
     }
 
-    public RrtConnectOptions ToOptions(CancellationToken cancellationToken, Action<double>? goalProgress) => new()
+    public SamplingPlannerOptions ToOptions(CancellationToken cancellationToken, Action<double>? goalProgress) => new()
     {
         MaxIterations = MaxIterations,
         MaxPlanTimeSeconds = MaxPlanTimeSeconds,
@@ -99,16 +115,19 @@ public readonly record struct RrtPlanSettings(
             : (iter, max) => goalProgress((double)iter / max)
     };
 
-    public string PlannerLabel => PlannerId == OmplPlannerId.RrtStar ? "RRT*" : "RRT-Connect";
+    public string PlannerLabel => SamplingPlannerRegistry.Resolve(PlannerId)?.Label ?? PlannerId.ToString();
 
-    private static OmplPlannerId ParsePlannerId(string text)
+    /// <summary>Maps unavailable planner IDs to managed RRT-Connect (stub-build compatibility).</summary>
+    public RrtPlanSettings CoerceAvailable(out string? fallbackReason)
     {
-        var normalized = text.Trim();
-        if (normalized.Equals("RrtStar", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals("RRT*", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals("Star", StringComparison.OrdinalIgnoreCase))
-            return OmplPlannerId.RrtStar;
+        var desc = SamplingPlannerRegistry.Resolve(PlannerId);
+        if (desc is not null && (desc.NativeSupported || desc.ManagedSupported))
+        {
+            fallbackReason = null;
+            return this;
+        }
 
-        return OmplPlannerId.RrtConnect;
+        fallbackReason = desc?.UnavailableReason ?? $"Planner '{PlannerLabel}' is not available in this build.";
+        return this with { PlannerId = SamplingPlannerId.RrtConnect };
     }
 }
