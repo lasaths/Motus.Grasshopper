@@ -1220,7 +1220,39 @@ function graph11() {
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10, graph11];
+function graph12() {
+  const robot = ur10eRobot(140, 60);
+  const start = motusComponent('joints', 140, 200, {}, { jointValues: MOTION_START });
+  const goalJoint = motusComponent('joints', 140, 320, {}, { jointValues: GOAL_JOINTS });
+  const uz = nativeUnitZ(140, 420);
+  const ptLin1 = nativeConstructPoint(140, 480, [0.45, 0.15, 0.45]);
+  const ptLin2 = nativeConstructPoint(140, 560, [0.48, 0.18, 0.48]);
+  const plLin1 = nativePlane(260, 480, ptLin1.node.outputs[0], uz.node.outputs[0]);
+  const plLin2 = nativePlane(260, 560, ptLin2.node.outputs[0], uz.node.outputs[0]);
+  const plan = motusComponent('plan', 480, 180, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [
+      outRef(goalJoint.node, 'State'),
+      outRef(plLin1.node, 'Plane'),
+      outRef(plLin2.node, 'Plane'),
+    ],
+    Start: [outRef(start.node, 'State')],
+  });
+  const { scrub, preview } = previewWithScrub(680, 160, outRef(plan.node, 'Trajectory'));
+  const exp = motusComponent('export', 680, 300, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const objs = [
+    robot, start, goalJoint,
+    { xml: uz.xml }, { xml: ptLin1.xml }, { xml: ptLin2.xml }, { xml: plLin1.xml }, { xml: plLin2.xml },
+    plan, scrub, preview, exp,
+  ];
+  objs._meta = {
+    fileName: '12_sequential_goals.ghx',
+    description: 'Sequential goals: Joint State + two Plane goals wired to Plan.Goal (list) -> one chained trajectory. Click Plan, then drag Motus Scrub or Play.',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10, graph11, graph12];
 const legacy = ['01_basic_planning.ghx', '02_collision_planning.ghx'];
 
 for (const name of legacy) {

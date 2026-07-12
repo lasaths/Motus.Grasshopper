@@ -24,7 +24,7 @@ Output: `src/Motus.GH/bin/Release/net8.0-windows/`
 Copy to `%APPDATA%\Grasshopper\Libraries\Motus`:
 
 - `Motus.GH.gha`
-- `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`, `Motus.Rhino.dll`
+- `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`
 - `resources/robots/`
 
 Verify: `./scripts/verify-install.ps1`

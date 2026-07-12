@@ -2,7 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.OMPL.NET;
 using Motus.Presets;
-using Motus.Rhino;
+using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System.Xml.Linq;
 
@@ -209,6 +209,21 @@ var rrtOpts = new PlanningOptions { CollisionScene = scene, MaxJointStepRadians 
 var rrtResult = new RrtConnectPlanner(meshChecker, new RrtConnectOptions { MaxIterations = 10000, RandomSeed = 11 })
     .Plan(new PlanningRequest(urRobot, start, rrtGoal, rrtOpts));
 if (!rrtResult.Success) Fail($"RRT: {string.Join("; ", rrtResult.Errors)}");
+static bool JointsNear(JointState a, JointState b, double tol = 1e-3)
+{
+    if (a.AxisCount != b.AxisCount) return false;
+    for (var i = 0; i < a.AxisCount; i++)
+        if (Math.Abs(a.Positions[i] - b.Positions[i]) > tol) return false;
+    return true;
+}
+var rrtPts = rrtResult.Trajectory!.Points;
+if (!JointsNear(rrtPts[0].JointState, start)) Fail("RRT trajectory first point must match planning start");
+if (!JointsNear(rrtPts[^1].JointState, rrtGoal)) Fail("RRT trajectory last point must match planning goal");
+for (var i = 1; i < rrtPts.Count; i++)
+{
+    if (rrtPts[i].TimeSeconds + 1e-9 < rrtPts[i - 1].TimeSeconds)
+        Fail("RRT trajectory times must be monotonic increasing");
+}
 Ok("RRT Connect avoids obstacle with RobotMeshCollisionChecker");
 
 // Attach body + RRT (PlanningContext attach path)
@@ -331,6 +346,11 @@ try
         var back = FrameConversion.FromPlane(pl);
         if (Math.Abs(back.X - src.X) > 1e-4 || Math.Abs(back.Y - src.Y) > 1e-4 || Math.Abs(back.Z - src.Z) > 1e-4)
             Fail($"Frame roundtrip position drift at sample {i}");
+        var dot = Math.Abs(
+            back.Qw * src.Qw + back.Qx * src.Qx + back.Qy * src.Qy + back.Qz * src.Qz);
+        var oriErr = 2 * Math.Acos(Math.Clamp(dot, -1, 1));
+        if (oriErr > 1e-3)
+            Fail($"Frame roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
     }
     Ok("FrameConversion ToPlane/FromPlane roundtrip within tolerance");
 }
@@ -355,6 +375,10 @@ try
     var tcpPlane = KinematicsPreview.TcpPlane(urRobot, testJoints);
     if (!tcpPlane.IsValid || tcpPlane.Origin.DistanceTo(Point3d.Origin) < 0.01)
         Fail("TcpPlane should produce a valid TCP away from base origin for test joints");
+    var fkM = Transforms.FromFrame(libTcp);
+    var approach = new Vector3d(fkM[0], fkM[4], fkM[8]);
+    if (!approach.Unitize() || tcpPlane.ZAxis * approach < 0.99)
+        Fail("TCP plane Z should align with Motus tool approach axis (FK matrix column 0)");
     Ok("Motus TCP Pose FK path produces valid plane");
 }
 catch (DllNotFoundException)

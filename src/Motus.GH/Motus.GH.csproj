@@ -12,11 +12,17 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <UseWindowsForms>true</UseWindowsForms>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <ProduceReferenceAssembly Condition="'$(Configuration)' == 'Debug'">false</ProduceReferenceAssembly>
+    <DebugType Condition="'$(Configuration)' == 'Debug'">portable</DebugType>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Motus.Rhino\Motus.Rhino.csproj" />
-  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::IsOSPlatform(Windows))">
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+    <StartProgram>$(Rhino8Dir)\System\Rhino.exe</StartProgram>
+    <StartArguments>/netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\examples\03_collision_rrt.ghx')) _enter"</StartArguments>
+    <StartAction>Program</StartAction>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
@@ -52,20 +58,8 @@
       <MotusDeployFiles Include="$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll" Condition="Exists('$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll')" />
       <MotusDeployResources Include="$(TargetDir)resources\**\*" />
     </ItemGroup>
-    <Copy
-      SourceFiles="@(MotusDeployFiles)"
-      DestinationFiles="@(MotusDeployFiles->'$(GrasshopperLibraryDir)\%(RecursiveDir)%(Filename)%(Extension)')"
-      SkipUnchangedFiles="true"
-      Retries="3"
-      RetryDelayMilliseconds="500"
-      ContinueOnError="WarnAndContinue" />
-    <Copy
-      SourceFiles="@(MotusDeployResources)"
-      DestinationFiles="@(MotusDeployResources->'$(GrasshopperLibraryDir)\resources\%(RecursiveDir)%(Filename)%(Extension)')"
-      SkipUnchangedFiles="true"
-      Retries="3"
-      RetryDelayMilliseconds="500"
-      ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(MotusDeployFiles)" DestinationFiles="@(MotusDeployFiles->'$(GrasshopperLibraryDir)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(MotusDeployResources)" DestinationFiles="@(MotusDeployResources->'$(GrasshopperLibraryDir)\resources\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
   </Target>
 
 </Project>

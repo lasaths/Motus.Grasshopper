@@ -3,7 +3,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
 using Motus.GH.UI;
-using Motus.Rhino;
+using Motus.GH.Rhino;
 using Rhino.Geometry;
 
 namespace Motus.GH.Components;
@@ -339,7 +339,13 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
 
         var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel);
-        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5);
+        var collision = GhExtract.ParseCollisionInput(da, 3);
+        if (collision.Error is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
+        else if (collision.Warning is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
+
+        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
         var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {

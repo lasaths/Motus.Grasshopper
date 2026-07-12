@@ -4,7 +4,7 @@ using Motus.GH.Components;
 using Motus.GH.Data;
 using Motus.GH.Params;
 
-namespace Motus.GH;
+namespace Motus.GH.Preview;
 
 /// <summary>Waypoint layout for Motus Scrub — display positions are evenly spaced by index; time fractions drive playback.</summary>
 internal readonly struct ScrubTimeline

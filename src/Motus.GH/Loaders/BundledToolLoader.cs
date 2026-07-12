@@ -2,7 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.Presets;
 
-namespace Motus.GH;
+namespace Motus.GH.Loaders;
 
 /// <summary>Default end-effectors and bundled robot assets beside the plugin.</summary>
 internal static class BundledToolLoader

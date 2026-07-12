@@ -53,21 +53,22 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 `Motus Plan` inputs:
 
 - `Robot`
-- `Goal` (**Plane** or **Joint State**)
+- `Goal` (**list** of **Plane** and/or **Joint State** — visited in order; each segment starts from the previous end pose)
 - optional `Start`
 - optional `Step` (m, plane goals only; default 0.005 — TCP LIN discretization)
 - optional `Collision` (scene — **required** for obstacle-aware planning; without it, red obstacle previews are display-only)
 - optional `Group` (`PlanningGroup`)
 - optional `Attach` (list of attached bodies)
 
-- `Goal` is either a **Plane** (Cartesian TCP LIN) or a **Joint State**.
+- Each `Goal` item is either a **Plane** (Cartesian TCP LIN) or a **Joint State**. Wire multiple sources into the list input (or use **Merge**) to chain waypoints; see `examples/12_sequential_goals.ghx`.
 - `Start` is optional; unwired it uses the viewer home pose or zeros.
 - `Step` applies only to plane goals. Long TCP moves auto-scale step size (max ~150 waypoints) so planning stays bounded.
 - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.
 - The planner is inferred from the inputs:
   - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). Falls back to joint-space path if LIN fails but goal IK succeeded.
-  - `Goal` is joints + `Collision` wired → RRT-Connect.
+  - `Goal` is joints + `Collision` wired → RRT-Connect (or RRT* via `RrtPlanner`).
+  - Optional RRT tuning (joint goals + collision only): `RrtMaxIter` (default 4000), `RrtTimeLimit` (seconds, 0 = no limit), `RrtPlanner` (`RrtConnect` / `RrtStar`), `RrtGoalBias` (0–1), `RrtStep` (radians).
   - `Goal` is joints, no collision → joint-linear plan.
 - Plane goal **Status** errors distinguish: outside reach, goal IK failed, or LIN path failed at intermediate poses.
 - Trajectory output preserves robot chain and frame overrides for preview/export.

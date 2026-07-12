@@ -5,6 +5,7 @@ using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
 using Motus.GH.Params;
+using Motus.GH.Preview;
 
 namespace Motus.GH.UI;
 
@@ -54,8 +55,12 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
     public override GH_ObjectResponse RespondToMouseMove(GH_Canvas sender, GH_CanvasMouseEvent e)
     {
         var response = base.RespondToMouseMove(sender, e);
-        if (ScrubOwner.IsDragging && ScrubOwner.SnapToKeyframes)
-            ScrubOwner.ApplyKeyframeSnap(TrackBounds().Width, 24f);
+        if (ScrubOwner.IsDragging)
+        {
+            if (ScrubOwner.SnapToKeyframes)
+                ScrubOwner.ApplyKeyframeSnap(TrackBounds().Width, 24f);
+            ExpireDownstreamPreview(true);
+        }
         return response;
     }
 

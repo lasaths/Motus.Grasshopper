@@ -8,7 +8,8 @@ using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.UI;
-using Motus.Rhino;
+using Motus.GH.Preview;
+using Motus.GH.Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
@@ -35,6 +36,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private double _position;
     private int _index;
     private bool _showStart;
+    private bool _lastBuiltShowStart;
+    private bool _suppressScrubInput;
     private Trajectory? _staticsFor;
     private global::Rhino.Geometry.Curve? _tcpCurve;
     private List<global::Rhino.Geometry.Line> _invalidSegments = new();
@@ -94,13 +97,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     public bool CanInsertParameter(GH_ParameterSide side, int index) =>
         side == GH_ParameterSide.Input &&
         index == CustomColorsParamIndex &&
-        !_showCustomColors &&
         Params.Input.Count == CustomColorsParamIndex;
 
     public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
         side == GH_ParameterSide.Input &&
         index == CustomColorsParamIndex &&
-        _showCustomColors &&
         Params.Input.Count > CustomColorsParamIndex;
 
     public IGH_Param CreateParameter(GH_ParameterSide side, int index)
@@ -119,7 +120,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     public bool DestroyParameter(GH_ParameterSide side, int index) =>
         side == GH_ParameterSide.Input && index == CustomColorsParamIndex;
 
-    public void VariableParameterMaintenance() { }
+    public void VariableParameterMaintenance() =>
+        _showCustomColors = Params.Input.Count > CustomColorsParamIndex;
 
     public override BoundingBox ClippingBox
     {
@@ -231,12 +233,17 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private void TogglePlayback()
     {
-        if (_playing) _playing = false;
+        if (_playing)
+        {
+            _playing = false;
+        }
         else if (_trajectory?.Points.Count > 0)
         {
+            _position = 0;
             _playing = true;
-            _playStartPosition = _position;
+            _playStartPosition = 0;
             _playStartUtc = DateTime.UtcNow;
+            SyncScrubSlider(0);
         }
         ExpireSolution(true);
     }
@@ -246,17 +253,25 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (!_playing || OnPingDocument() is not GH_Document doc) return;
         doc.ScheduleSolution(33, _ =>
         {
-            if (!_playing || _trajectory is null || _meshCache is null || _previewPoints.Count == 0) return;
-            ResolveFrame(out var state, out var elapsed, out var tickIndex, out var toolState);
+            if (!_playing || _trajectory is null || _previewPoints.Count == 0) return;
+            ResolveFrame(out var state, out var elapsed, out var segmentIndex, out var toolState);
             var duration = _trajectory.DurationSeconds;
             if (elapsed >= duration)
             {
                 _playing = false;
                 _position = duration > 0 ? 1 : 0;
-                SyncScrubSlider(_position, expireDownstream: true);
+                SyncScrubSlider(_position, expireDownstream: false);
                 ExpireSolution(false);
                 return;
             }
+
+            if (_meshCache is null)
+            {
+                SyncScrubSlider(_position);
+                ExpireSolution(true);
+                return;
+            }
+
             _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
             SyncScrubSlider(_position);
             ExpirePreview(true);
@@ -275,7 +290,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0);
         if (_meshCache is not null && sig == _cacheSig)
+        {
+            _drawMeshColors = _meshCache.MeshColors ??
+                              PreviewColorResolver.AlignMeshColors(previewGeometry, ctx.PreviewMeshColors);
             return;
+        }
 
         _cacheSig = sig;
         _meshCache = KinematicsPreview.PreviewMeshCache.TryCreate(
@@ -306,11 +325,13 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 "Custom colours mode: wire a colour list (Meshes order) or switch to Override.");
         }
 
-        if (!SameTrajectoryContent(_trajectory, t))
+        var trajectoryChanged = !ReferenceEquals(_trajectory, t);
+        if (trajectoryChanged)
         {
             _playing = false;
             _position = 0;
             _staticsFor = null;
+            _suppressScrubInput = true;
         }
         _trajectory = t;
         if (t.Points.Count == 0)
@@ -325,7 +346,16 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
         da.GetData(1, ref _showStart);
-        ApplyScrubInput(da);
+        if (trajectoryChanged)
+            SyncScrubSlider(0);
+        else
+            ApplyScrubInput(da);
+
+        if (_suppressScrubInput)
+        {
+            _position = 0;
+            _suppressScrubInput = false;
+        }
         if (t.Robot.Preset.AxisCount != ctx.Model.Preset.AxisCount)
         {
             AddRuntimeMessage(
@@ -336,7 +366,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _previewPoints = previewPoints;
         _previewTrajectory = new Trajectory(ctx.Model, previewPoints);
         ResolveFrame(out var state, out var timeSeconds, out _index, out var toolState);
-        if (!ReferenceEquals(_staticsFor, t))
+        var staticsDirty = !ReferenceEquals(_staticsFor, t);
+        if (staticsDirty)
         {
             var pl = KinematicsPreview.TcpPath(ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
             _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
@@ -351,10 +382,15 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 ctx.Tool);
             _invalidSegments = invalid;
             _staticsFor = t;
+        }
+
+        if (staticsDirty || _showStart != _lastBuiltShowStart)
+        {
             if (_showStart && _meshCache is not null && previewPoints.Count > 0)
                 _startMeshes = _meshCache.MeshesFor(previewPoints[0].JointState, previewPoints[0].ToolState);
             else
                 _startMeshes = [];
+            _lastBuiltShowStart = _showStart;
         }
         if (_meshCache is not null)
         {
@@ -406,18 +442,6 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private void ResolveFrame(out JointState state, out double timeSeconds, out int index, out EndEffectorState? toolState)
     {
         var duration = _trajectory!.DurationSeconds;
-        if (!_playing && TryGetWiredScrub(out var scrub) && !scrub.IsSyncingFromPreview && !scrub.IsDragging)
-        {
-            var idx = WaypointIndexFromPosition(_position);
-            var pt = _trajectory.Points[idx];
-            state = pt.JointState;
-            toolState = pt.ToolState;
-            timeSeconds = pt.TimeSeconds;
-            index = idx;
-            _index = idx;
-            return;
-        }
-
         double elapsed;
         if (_playing)
         {
@@ -436,8 +460,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private void ApplyScrubInput(IGH_DataAccess da)
     {
+        if (_suppressScrubInput) return;
         if (!TryReadWiredPosition(da, out var scrub, out var positionFromWire)) return;
         if (scrub?.IsSyncingFromPreview == true) return;
+        positionFromWire = MapScrubToTimeFraction(scrub, positionFromWire);
         if (scrub?.IsDragging == true)
         {
             _playing = false;
@@ -448,12 +474,13 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _position = Math.Clamp(positionFromWire, 0, 1);
     }
 
-    private static bool SameTrajectoryContent(Trajectory? prior, Trajectory next)
+    private static double MapScrubToTimeFraction(MotusScrubSlider? scrub, double scrubFraction)
     {
-        if (prior is null) return false;
-        if (ReferenceEquals(prior, next)) return true;
-        if (prior.Points.Count != next.Points.Count) return false;
-        return Math.Abs(prior.DurationSeconds - next.DurationSeconds) < 1e-6;
+        if (scrub is null || !scrub.SnapToKeyframes) return scrubFraction;
+        var timeline = scrub.ResolveTimeline();
+        if (timeline.IsEmpty) return scrubFraction;
+        var idx = timeline.NearestDisplayIndex(scrubFraction);
+        return timeline.TimeFractions[idx];
     }
 
     private bool TryGetWiredScrub(out MotusScrubSlider scrub)
@@ -465,13 +492,6 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
         scrub = null!;
         return false;
-    }
-
-    private int WaypointIndexFromPosition(double position)
-    {
-        var n = _trajectory!.Points.Count;
-        if (n <= 1) return 0;
-        return (int)Math.Round(Math.Clamp(position, 0, 1) * (n - 1));
     }
 
     private bool TryReadWiredPosition(IGH_DataAccess da, out MotusScrubSlider? scrub, out double position)

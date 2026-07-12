@@ -2,7 +2,7 @@
 
 
 
-Ten focused `.ghx` files cover every Motus component and planner input. Regenerate them after component changes:
+Twelve focused `.ghx` files cover every Motus component and planner input. Regenerate them after component changes:
 
 
 
@@ -46,6 +46,7 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 | `09_tool_tcp.ghx` | Motus Tool (TCP + gripper box) → Robot.Tool → Plan → Preview / Export |
 | `10_robotiq_tool.ghx` | Robotiq 2F-85 STL → Load Mesh → Motus Tool → UR10e Plan + Preview |
 | `11_gripper_motion_program.ghx` | PTP + SET gripper close → Program Plan → Preview / Export (toolState on trajectory) |
+| `12_sequential_goals.ghx` | Multiple goals (Joint State + Planes) on Plan.Goal list → chained trajectory → Preview / Export |
 
 
 
@@ -53,58 +54,60 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 
 
 
-| Component / option | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 |
+| Component / option | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10 | 11 | 12 |
 
-|--------------------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+|--------------------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 
-| Motus Robot (preset dropdown) | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ | ✓ |
+| Motus Robot (preset dropdown) | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ | ✓ | | | ✓ | ✓ |
 
-| Motus Load URDF | | | | | | ✓ | | |
+| Motus Load URDF | | | | | | ✓ | | | ✓ | ✓ | | |
 
-| Motus Joint State | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Motus TCP Pose | | ✓ | | | | | | |
+| Motus Joint State | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Motus TCP Pose | | ✓ | | | | | | | | | | |
 
-| Joint validation (Robot on Joints) | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Joint validation (Robot on Joints) | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
 
-| Plane goal (Cartesian LIN) | | ✓ | | | | | | ✓ |
+| Plane goal (Cartesian LIN) | | ✓ | | | | | | ✓ | | | | ✓ |
 
-| Motus Motion Segment | | | | | | | | ✓ |
+| Motus Motion Segment | | | | | | | | ✓ | | | ✓ | |
 
-| Motus Program Plan | | | | | | | | ✓ |
+| Motus Program Plan | | | | | | | | ✓ | | | ✓ | |
 
-| Motus Plan — Start | | | | | | | ✓ | ✓ |
+| Motus Plan — Goal list | | | | | | | | | | | | ✓ |
 
-| Motus Plan — Collision | | | ✓ | ✓ | ✓ | | | |
+| Motus Plan — Start | | | | | | | ✓ | ✓ | | | ✓ | ✓ |
 
-| Motus Plan — Group | | | | | ✓ | | | |
+| Motus Plan — Collision | | | ✓ | ✓ | ✓ | | | | | | | |
 
-| Motus Plan — Attach | | | | | ✓ | | | |
+| Motus Plan — Group | | | | | ✓ | | | | | | | |
 
-| Motus Collision Sphere | | | ✓ | ✓ | ✓ | | | |
+| Motus Plan — Attach | | | | | ✓ | | | | | | | |
 
-| Motus Collision Box | | | | ✓ | | | | |
+| Motus Collision Sphere | | | ✓ | ✓ | ✓ | | | | | | | |
 
-| Motus Collision Mesh | | | | *(note)* | | | | |
+| Motus Collision Box | | | | ✓ | | | | | | | | |
 
-| Motus Collision Scene | | | ✓ | ✓ | ✓ | | | |
+| Motus Collision Mesh | | | | *(note)* | | | | | | | | |
 
-| ColScene SRDF | | | | | ✓ | | | |
+| Motus Collision Scene | | | ✓ | ✓ | ✓ | | | | | | | |
 
-| Motus Planning Group | | | | | ✓ | | | |
+| ColScene SRDF | | | | | ✓ | | | | | | | |
 
-| Motus Attach Body | | | | | ✓ | | | |
+| Motus Planning Group | | | | | ✓ | | | | | | | |
 
-| Motus Preview | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Motus Attach Body | | | | | ✓ | | | | | | | |
 
-| Preview ShowStart | | | | | | | ✓ | |
+| Motus Preview | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-| Motus Export | ✓ | | | | | | | ✓ |
+| Preview ShowStart | | | | | | | ✓ | | | | | |
 
-| Motus Trajectory Data | ✓ | | | | | | | |
+| Motus Export | ✓ | | | | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-| Robot Base / Tool override | | | | | | | ✓ | |
+| Motus Trajectory Data | ✓ | | | | | | | | | | | |
 
-| JsonPath on Robot | | | | | | | *(unwired)* | |
+| Robot Base / Tool override | | | | | | | ✓ | | ✓ | ✓ | | |
+
+| JsonPath on Robot | | | | | | | *(unwired)* | | | | | |
 
 
 
@@ -155,6 +158,26 @@ Joint State (Rb) ───┼→ Plan [Plan] → Preview [Play]
                     └→ Trajectory Data
 
 ```
+
+
+
+### Sequential goals — Plan list (12)
+
+
+
+```
+
+Robot + Start (optional) ─┐
+
+Joint State / Planes ───┼→ Plan.Goal (list) [Plan] → Preview [Play] / Export
+
+                          └→ wire multiple sources into Goal, or use Merge
+
+```
+
+
+
+For PTP/LIN/CIRC arcs, gripper SET, and WAIT dwells, use **Motion Segment** nodes and **Program Plan** instead (`08_motion_program.ghx`, `11_gripper_motion_program.ghx`).
 
 
 

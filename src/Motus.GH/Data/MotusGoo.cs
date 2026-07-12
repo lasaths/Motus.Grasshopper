@@ -2,6 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
+using Motus.GH.Preview;
 using System.Drawing;
 
 namespace Motus.GH.Data;
@@ -55,9 +56,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     {
         var model = Value!.Robot;
         var session = ApplyTool(model, ToolSnapshot, BaseFrameOverride);
-        var preview = PreviewGeometry;
-        if (preview is not null && ToolSnapshot?.Geometry is { } toolGeom && preview.ToolGeometry is null)
-            preview = new RobotCollisionModel(preview.Links, toolGeom);
+        var preview = RobotPreviewGeometry.ForViewport(PreviewGeometry, ToolSnapshot);
         return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors);
     }
 

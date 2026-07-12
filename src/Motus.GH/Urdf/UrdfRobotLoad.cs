@@ -7,7 +7,7 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using System.Xml.Linq;
 
-namespace Motus.GH;
+namespace Motus.GH.Urdf;
 
 internal static class UrdfRobotLoad
 {

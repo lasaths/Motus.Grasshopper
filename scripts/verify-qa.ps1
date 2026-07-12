@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Automated QA: Motus.NET tests + Motus.Rhino smoke + install artifact check.
+# Automated QA: Motus.NET tests + Rhino adapter smoke + install artifact check.
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
@@ -24,7 +24,7 @@ Write-Host "`n[3/4] Motus.NET unit tests..."
 dotnet test (Join-Path $motusNet "Motus.NET.slnx") -c $Configuration --no-build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "`n[4/4] Motus.Rhino QA smoke..."
+Write-Host "`n[4/4] Rhino adapter QA smoke..."
 dotnet run --project (Join-Path $root "scripts\qa-smoke\QaSmoke.csproj") -c $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

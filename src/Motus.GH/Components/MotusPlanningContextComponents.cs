@@ -2,7 +2,7 @@ using Grasshopper.Kernel;
 using Motus.Core;
 using Motus.GH;
 using Motus.GH.Data;
-using Motus.Rhino;
+using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;

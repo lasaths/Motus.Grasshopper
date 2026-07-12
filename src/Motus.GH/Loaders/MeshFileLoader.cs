@@ -2,7 +2,7 @@ using Motus.Presets;
 using Rhino.Geometry;
 using System.Collections.Concurrent;
 
-namespace Motus.GH;
+namespace Motus.GH.Loaders;
 
 internal static class MeshFileLoader
 {

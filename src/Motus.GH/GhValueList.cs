@@ -20,6 +20,7 @@ internal static class GhValueList
             NickName = listNickName ?? "Model",
             ListMode = GH_ValueListMode.DropDown
         };
+        list.ListItems.Clear();
         list.CreateAttributes();
         list.Attributes.Pivot = new PointF(owner.Attributes.Pivot.X - 120, owner.Attributes.Pivot.Y + 14 + inputIndex * 22);
         foreach (var item in items)

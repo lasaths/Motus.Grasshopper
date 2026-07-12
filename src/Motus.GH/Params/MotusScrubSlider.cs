@@ -2,6 +2,7 @@ using GH_IO.Serialization;
 using Grasshopper.GUI.Base;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
+using Motus.GH.Preview;
 using Motus.GH.Resources;
 using Motus.GH.UI;
 using System.Drawing;

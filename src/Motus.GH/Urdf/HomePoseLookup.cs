@@ -1,6 +1,6 @@
 using Motus.Core;
 
-namespace Motus.GH;
+namespace Motus.GH.Urdf;
 
 internal static class HomePoseLookup
 {

@@ -3,7 +3,7 @@ using Motus.Geometry;
 using Rhino.Geometry;
 using System.Drawing;
 
-namespace Motus.Rhino;
+namespace Motus.GH.Rhino;
 
 public static class KinematicsPreview
 {

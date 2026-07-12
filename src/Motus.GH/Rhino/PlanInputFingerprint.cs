@@ -1,9 +1,10 @@
 using Motus.Core;
+using Motus.GH.Planning;
 using Rhino.Geometry;
 using System.Globalization;
 using System.Text;
 
-namespace Motus.Rhino;
+namespace Motus.GH.Rhino;
 
 /// <summary>Stable fingerprint of Motus Plan inputs for auto-replan detection.</summary>
 public static class PlanInputFingerprint
@@ -15,11 +16,20 @@ public static class PlanInputFingerprint
         IReadOnlyList<(JointState? joints, Plane? plane)> goals,
         JointState start,
         PlanningContext context,
-        double linStepMeters = 0.005)
+        double linStepMeters = 0.005,
+        RrtPlanSettings? rrtSettings = null)
     {
+        rrtSettings ??= RrtPlanSettings.Defaults;
+        var rrt = rrtSettings.Value;
+
         var sb = new StringBuilder(512);
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
         sb.Append("linStep:").Append(linStepMeters.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        sb.Append("rrt:").Append(rrt.PlannerId).Append(',')
+            .Append(rrt.MaxIterations).Append(',')
+            .Append(rrt.MaxPlanTimeSeconds.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(rrt.GoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(rrt.StepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         AppendFrame(sb, "base", baseFrameOverride);
         if (toolOverride is not null)
         {

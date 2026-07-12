@@ -1,25 +1,24 @@
 using Grasshopper.Kernel;
 using GH_IO.Serialization;
 using Motus.Core;
-using Motus.Geometry;
-using Motus.GH;
 using Motus.GH.Data;
+using Motus.GH.Planning;
 using Motus.GH.UI;
-using Motus.OMPL.NET;
-using Motus.Rhino;
-using Rhino.Geometry;
+using Motus.GH.Rhino;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Motus.GH.Components;
 
-public sealed class MotusPlanComponent : MotusComponentBase
+public sealed class MotusPlanComponent : MotusAsyncComponentBase
 {
-    private const double MaxJointStep = 0.05;
-    private const double DefaultLinStepMeters = 0.005;
+    internal const double DefaultLinStepMeters = 0.005;
     private const int AutoPlanDebounceMs = 400;
+
+    private readonly PlanWorker _worker;
 
     private List<PlanningResult>? _cached;
     private List<TrajectoryGoo>? _cachedGoos;
@@ -27,14 +26,33 @@ public sealed class MotusPlanComponent : MotusComponentBase
     private bool _autoPlan;
     private string? _lastPlannedFingerprint;
     private int _debounceGen;
-    private int _planCancelGen;
-    private int _planCancelGenAtStart;
     private bool _planningPending;
+    private string? _activeWorkerFingerprint;
 
-    public MotusPlanComponent() : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan", "Plan", "flow-arrow") { }
+    public MotusPlanComponent()
+        : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan", "Plan", "flow-arrow")
+    {
+        _worker = new PlanWorker(this);
+        BaseWorker = _worker;
+        TaskCreationOptions = System.Threading.Tasks.TaskCreationOptions.LongRunning;
+    }
+
+    internal bool AutoPlanEnabled => _autoPlan;
+
+    protected override bool ShouldAbortRunningWorkers() => false;
+
+    protected override void BeforeSolveInstance()
+    {
+        // Keep in-flight workers alive across idle re-solves; cancel explicitly below.
+        if (IsReadyToSetData)
+            base.BeforeSolveInstance();
+    }
 
     public override void CreateAttributes() =>
-        m_attributes = new ButtonAttributes(this, () => _autoPlan ? "Replan" : "Plan", () => _autoPlan, RequestRun);
+        m_attributes = new ButtonAttributes(this, PlanButtonLabel, () => _autoPlan || IsOperationInProgress, RequestRun);
+
+    private string PlanButtonLabel() =>
+        IsOperationInProgress ? "Planning…" : _autoPlan ? "Replan" : "Plan";
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -50,6 +68,16 @@ public sealed class MotusPlanComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Attach", "A", "Optional attached bodies list", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
+        p.AddIntegerParameter("RrtMaxIter", "Ri", "Joint goals + collision: max RRT iterations (default 4000)", GH_ParamAccess.item, 4000);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("RrtTimeLimit", "Rt", "Joint goals + collision: max plan time in seconds (0 = no limit)", GH_ParamAccess.item, 0);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("RrtPlanner", "Rp", "Joint goals + collision: RrtConnect or RrtStar", GH_ParamAccess.item, "RrtConnect");
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("RrtGoalBias", "Rb", "Joint goals + collision: goal bias 0–1 (default 0.08)", GH_ParamAccess.item, 0.08);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("RrtStep", "Rs", "Joint goals + collision: tree step size in radians (default 0.12)", GH_ParamAccess.item, 0.12);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -62,6 +90,8 @@ public sealed class MotusPlanComponent : MotusComponentBase
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
     {
         Menu_AppendItem(menu, "Auto Plan", AutoPlanMenuClick, true, _autoPlan);
+        if (IsOperationInProgress)
+            Menu_AppendItem(menu, "Cancel planning", (_, _) => RequestCancellation());
         base.AppendAdditionalMenuItems(menu);
     }
 
@@ -78,73 +108,30 @@ public sealed class MotusPlanComponent : MotusComponentBase
         return base.Read(reader);
     }
 
-    private void AutoPlanMenuClick(object? sender, EventArgs e)
-    {
-        RecordUndoEvent("Auto Plan");
-        _autoPlan = !_autoPlan;
-        _lastPlannedFingerprint = null;
-        _debounceGen++;
-        _planningPending = false;
-        if (_autoPlan && HasCollisionInputsWired())
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Auto Plan enabled with collision — planning is debounced but may still be slow on large scenes.");
-        }
-
-        ExpireSolution(true);
-    }
-
-    private bool HasCollisionInputsWired() =>
-        Params.Input[4].SourceCount > 0 || Params.Input[6].SourceCount > 0;
-
-    private void RequestRun()
-    {
-        _run = true;
-        _planningPending = false;
-        ExpireSolution(true);
-    }
-
-    private static TrajectoryGoo TrajectoryFrom(RobotModelGoo robotGoo, Trajectory trajectory)
-    {
-        robotGoo.EnsureBundledTool();
-        return new TrajectoryGoo(trajectory)
-        {
-            Chain = robotGoo.Chain,
-            PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
-            PreviewMeshColors = robotGoo.PreviewMeshColors,
-            BaseFrameOverride = robotGoo.BaseFrameOverride,
-            ToolSnapshot = robotGoo.Tool
-        };
-    }
-
-    private static Trajectory? AppendTrajectory(Trajectory? acc, Trajectory segment, RobotModel robot)
-    {
-        if (segment.Points.Count == 0) return acc;
-        if (acc is null)
-            return new Trajectory(robot, segment.Points.ToList());
-
-        var points = acc.Points.ToList();
-        var timeOffset = points[^1].TimeSeconds;
-        for (var i = 1; i < segment.Points.Count; i++)
-        {
-            var pt = segment.Points[i];
-            points.Add(new TrajectoryPoint(timeOffset + pt.TimeSeconds, pt.JointState));
-        }
-        return new Trajectory(robot, points);
-    }
+    internal bool HasCollisionInputsWired() =>
+        Params.Input[MotusPlanInputs.Collision].SourceCount > 0 ||
+        Params.Input[MotusPlanInputs.Attach].SourceCount > 0;
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo)) return;
-        var ctx = RobotContext.FromGoo(robotGoo);
+        if (IsReadyToSetData)
+        {
+            base.SolveInstance(da);
+            _activeWorkerFingerprint = null;
+            return;
+        }
 
+        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo))
+            return;
+
+        var ctx = RobotContext.FromGoo(robotGoo);
         if (!GhExtract.TryGoals(da, 1, out var goals, out var goalErrors))
         {
             foreach (var error in goalErrors)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
             if (goals.Count == 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Provide at least one valid Plane or Joint State goal.");
-            EmitOutputs(da, null, GhExtract.PlanStatusKind.Manual);
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
             return;
         }
 
@@ -156,14 +143,41 @@ public sealed class MotusPlanComponent : MotusComponentBase
             if (stepInput <= 0)
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
-                EmitOutputs(da, null, GhExtract.PlanStatusKind.Manual);
+                EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
                 return;
             }
 
             linStep = stepInput;
         }
 
-        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 4, 5, 6);
+        var collision = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
+        if (collision.Error is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
+        else if (collision.Warning is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
+
+        if (!RrtPlanSettings.TryRead(
+                da,
+                MotusPlanInputs.RrtMaxIter,
+                MotusPlanInputs.RrtTimeLimit,
+                MotusPlanInputs.RrtPlanner,
+                MotusPlanInputs.RrtGoalBias,
+                MotusPlanInputs.RrtStep,
+                out var rrtSettings,
+                out var rrtError))
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, rrtError!);
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
+            return;
+        }
+
+        var planningContext = GhExtract.BuildPlanningContext(
+            ctx.EffectiveModel,
+            da,
+            MotusPlanInputs.Collision,
+            MotusPlanInputs.Group,
+            MotusPlanInputs.Attach,
+            collision.Scene);
         var fingerprint = PlanInputFingerprint.Compute(
             ctx.Model,
             robotGoo.BaseFrameOverride,
@@ -171,51 +185,119 @@ public sealed class MotusPlanComponent : MotusComponentBase
             goals,
             start,
             planningContext,
-            linStep);
+            linStep,
+            rrtSettings);
+
+        if (IsOperationInProgress && _activeWorkerFingerprint is not null && _activeWorkerFingerprint != fingerprint)
+            RequestCancellation();
+
+        var collisionInputWired = HasCollisionInputsWired();
+        var activity = GhExtract.DescribePlanningActivity(goals, planningContext, collisionInputWired, rrtSettings);
 
         var planNow = _run;
         if (planNow)
             _run = false;
 
-        if (_autoPlan && !Locked && !planNow && fingerprint != _lastPlannedFingerprint)
+        if (_autoPlan && !Locked && !planNow && !IsOperationInProgress && fingerprint != _lastPlannedFingerprint)
         {
-            _planCancelGen++;
+            _debounceGen++;
             ScheduleDebouncedPlan(fingerprint);
             _planningPending = true;
         }
 
-        if (!planNow)
+        if (!ShouldStartPlanning(fingerprint, planNow))
         {
-            EmitOutputs(da, fingerprint, ResolveIdleStatusKind(fingerprint));
+            var idleKind = ResolveIdleStatusKind(fingerprint);
+            var idleActivity = idleKind == GhExtract.PlanStatusKind.Planning ? activity : null;
+            EmitOutputs(da, idleKind, idleActivity);
             return;
         }
 
-        _planCancelGenAtStart = _planCancelGen;
         _planningPending = false;
-        RunPlanning(da, robotGoo, ctx, goals, start, planningContext, fingerprint, linStep);
+        _activeWorkerFingerprint = fingerprint;
+        Message = "Planning…";
+        OnDisplayExpired(true);
+        // Collect inputs before writing outputs — GH data access may not allow reads after SetData.
+        LaunchWorker(da);
+        EmitOutputs(da, GhExtract.PlanStatusKind.Planning, activity);
+    }
+
+    internal void ApplyWorkerResult(
+        string fingerprint,
+        IReadOnlyList<PlanningResult> results,
+        IReadOnlyList<TrajectoryGoo> goos,
+        bool isAutoPlan,
+        IReadOnlyList<string> remarks)
+    {
+        _cached = results.ToList();
+        _cachedGoos = goos.ToList();
+        _lastPlannedFingerprint = fingerprint;
+
+        ReportPlanningFailures(_cached);
+        foreach (var remark in remarks)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, remark);
+    }
+
+    private bool ShouldStartPlanning(string fingerprint, bool planNow)
+    {
+        if (Locked)
+            return false;
+        if (planNow)
+            return true;
+        if (_autoPlan && fingerprint != _lastPlannedFingerprint && !IsOperationInProgress)
+            return _run;
+        return false;
+    }
+
+    private void AutoPlanMenuClick(object? sender, EventArgs e)
+    {
+        RecordUndoEvent("Auto Plan");
+        _autoPlan = !_autoPlan;
+        _lastPlannedFingerprint = null;
+        _debounceGen++;
+        _planningPending = false;
+        if (_autoPlan && HasCollisionInputsWired())
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                "Auto Plan enabled with collision — planning is debounced and runs in the background.");
+        }
+
+        RequestSolutionRefresh();
+    }
+
+    private void RequestRun()
+    {
+        if (IsOperationInProgress)
+            RequestCancellation();
+        _run = true;
+        _planningPending = false;
+        RequestSolutionRefresh();
     }
 
     private GhExtract.PlanStatusKind ResolveIdleStatusKind(string fingerprint)
     {
-        if (_planningPending || (_autoPlan && fingerprint != _lastPlannedFingerprint))
+        if (IsOperationInProgress || _planningPending || (_autoPlan && fingerprint != _lastPlannedFingerprint))
             return GhExtract.PlanStatusKind.Planning;
         if (_autoPlan)
             return GhExtract.PlanStatusKind.AutoCached;
         return _cached is null ? GhExtract.PlanStatusKind.Manual : GhExtract.PlanStatusKind.ManualCached;
     }
 
-    private void EmitOutputs(IGH_DataAccess da, string? fingerprint, GhExtract.PlanStatusKind statusKind)
+    private void EmitOutputs(IGH_DataAccess da, GhExtract.PlanStatusKind statusKind, string? activity = null)
     {
+        if (statusKind != GhExtract.PlanStatusKind.Planning && _cached is not null)
+            ReportPlanningFailures(_cached);
+
         if (_cachedGoos is { Count: > 0 })
             da.SetDataList(0, _cachedGoos);
 
         if (statusKind == GhExtract.PlanStatusKind.Planning && _cachedGoos is { Count: > 0 })
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Trajectory is from previous inputs; replanning…");
+                "Trajectory is from previous inputs; replanning in background…");
         }
 
-        da.SetData(1, GhExtract.BuildStatusMessage(_cached, statusKind));
+        da.SetData(1, GhExtract.BuildStatusMessage(_cached, statusKind, activity));
         if (_cached is not null)
             da.SetDataList(2, GhExtract.BuildWarnings(_cached));
     }
@@ -228,171 +310,28 @@ public sealed class MotusPlanComponent : MotusComponentBase
         {
             if (gen != _debounceGen || Locked || !_autoPlan) return;
             _run = true;
+            ExpireSolution(false);
+        });
+    }
+
+    private void RequestSolutionRefresh()
+    {
+        if (OnPingDocument() is GH_Document doc)
+            doc.ScheduleSolution(1, _ => ExpireSolution(false));
+        else
             ExpireSolution(true);
-        });
     }
 
-    private void RunPlanning(
-        IGH_DataAccess da,
-        RobotModelGoo robotGoo,
-        RobotContext ctx,
-        List<(JointState? joints, Plane? plane)> goals,
-        JointState start,
-        PlanningContext planningContext,
-        string fingerprint,
-        double linStep)
+    private void ReportPlanningFailures(IReadOnlyList<PlanningResult> results)
     {
-        _cached = new List<PlanningResult>(goals.Count);
-        _cachedGoos = new List<TrajectoryGoo>(goals.Count);
-        var session = ctx.EffectiveModel;
-        var currentStart = start;
-        Trajectory? chained = null;
-
-        var collisionInputWired = HasCollisionInputsWired();
-        foreach (var goal in goals)
+        foreach (var pair in results.Select((result, index) => (result, index)))
         {
-            var result = goal.plane is { } plane
-                ? PlanCartesianLin(ctx, planningContext, currentStart, plane, linStep, collisionInputWired)
-                : (planningContext.Scene.Objects.Count > 0 || planningContext.Attached.Count > 0)
-                    ? PlanRrt(ctx, planningContext, currentStart, goal.joints!)
-                    : new JointLinearPlanner().Plan(new PlanningRequest(
-                        session,
-                        currentStart,
-                        goal.joints!,
-                        planningContext.ToPlanningOptions(new PlanningOptions { MaxJointStepRadians = MaxJointStep })));
-            _cached.Add(result);
-            if (result.Success && result.Trajectory is not null)
-            {
-                chained = AppendTrajectory(chained, result.Trajectory, session);
-                currentStart = result.Trajectory.Points[^1].JointState;
-            }
+            if (pair.result.Success) continue;
+            var detail = pair.result.Errors.Count > 0
+                ? string.Join("; ", pair.result.Errors)
+                : "Planning failed.";
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Goal[{pair.index}]: {detail}");
         }
-
-        _lastPlannedFingerprint = fingerprint;
-        if (chained is not null)
-            _cachedGoos.Add(TrajectoryFrom(robotGoo, chained));
-        else if (_cached.Any(r => r.Success))
-        {
-            foreach (var result in _cached)
-            {
-                if (result.Success && result.Trajectory is not null)
-                    _cachedGoos.Add(TrajectoryFrom(robotGoo, result.Trajectory));
-            }
-        }
-
-        if (_cachedGoos.Count > 0)
-            da.SetDataList(0, _cachedGoos);
-
-        if (!collisionInputWired && _cached.Any(r => r.Success))
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Obstacle previews are visual only until ColScene is wired to Collision.");
-        }
-
-        var statusKind = _autoPlan ? GhExtract.PlanStatusKind.Auto : GhExtract.PlanStatusKind.Manual;
-        da.SetData(1, GhExtract.BuildStatusMessage(_cached, statusKind));
-        da.SetDataList(2, GhExtract.BuildWarnings(_cached));
-    }
-
-    private PlanningResult PlanCartesianLin(
-        RobotContext ctx,
-        PlanningContext planningContext,
-        JointState start,
-        Plane plane,
-        double linStepMeters,
-        bool collisionInputWired)
-    {
-        var session = ctx.EffectiveModel;
-        var goal = new CartesianPose(FrameConversion.FromPlane(plane));
-        if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
-        {
-            return PlanningResult.Failed(new[]
-            {
-                $"No kinematics profile for '{session.Preset.ModelName}'."
-            });
-        }
-
-        var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
-        ICollisionChecker? checker = needsCollision
-            ? GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached)
-            : null;
-        var opts = planningContext.ToPlanningOptions(new PlanningOptions
-        {
-            MaxJointStepRadians = MaxJointStep,
-            CollisionChecker = checker,
-            CollisionScene = planningContext.Scene
-        });
-
-        var linOptions = new CartesianLinOptions(StepMeters: linStepMeters, ContinueOnIkFailure: false);
-        var linRequest = new CartesianPlanningRequest(session, start, goal, opts, planningContext.Scene);
-        var linResult = new CartesianLinearPathPlanner(session.Preset, ctx.Chain).PlanToResult(linRequest, linOptions);
-        if (linResult.Success)
-        {
-            var linWarnings = linResult.Warnings.ToList();
-            if (!collisionInputWired)
-                linWarnings.Add("Collision input unwired — plane goal planned in free space (LIN only).");
-            else if (needsCollision)
-                linWarnings.Add("Collision validated on link envelopes; TCP line may still intersect obstacles that do not hit link geometry.");
-            return PlanningResult.Succeeded(linResult.Trajectory!, linWarnings);
-        }
-
-        if (linResult.Errors.Any(e => e.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
-            return linResult;
-
-        var reach = new CartesianGoalSolver().TryReach(
-            session,
-            goal,
-            CartesianGoalSolver.EnumerateDefaultSeeds(start, session),
-            ctx.Chain);
-        if (!reach.Success)
-        {
-            return PlanningResult.Failed(reach.Errors.Concat(new[]
-            {
-                "TCP-LIN failed at intermediate poses. For large moves use a Joint State goal or wire Start near the target."
-            }).ToArray());
-        }
-
-        var goalJoints = reach.Solution!;
-        var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(session, start, goalJoints, opts));
-        if (!jointResult.Success)
-        {
-            return PlanningResult.Failed(jointResult.Errors
-                .DefaultIfEmpty("Cartesian planning failed.")
-                .ToArray());
-        }
-
-        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-            "TCP-LIN failed; joint-space fallback used — TCP path is not straight.");
-        var warnings = jointResult.Warnings.ToList();
-        warnings.Add("TCP-LIN failed; used joint-space path to the Cartesian goal instead (not a straight TCP line).");
-        return PlanningResult.Succeeded(jointResult.Trajectory!, warnings);
-    }
-
-    private PlanningResult PlanRrt(RobotContext ctx, PlanningContext planningContext, JointState start, JointState goal)
-    {
-        var session = ctx.EffectiveModel;
-        var checker = GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached);
-        if (checker is null)
-            return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
-
-        var opts = new RrtConnectOptions
-        {
-            MaxIterations = 4000,
-            RandomSeed = 42,
-            ShouldCancel = () => OnPingDocument() is null || _planCancelGen != _planCancelGenAtStart
-        };
-
-        var req = new PlanningRequest(
-            session,
-            start,
-            goal,
-            planningContext.ToPlanningOptions(new PlanningOptions
-            {
-                CollisionScene = planningContext.Scene,
-                CollisionChecker = checker
-            }));
-
-        return new RrtConnectPlanner(checker, opts).Plan(req);
     }
 
     public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");

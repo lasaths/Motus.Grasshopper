@@ -1,14 +1,11 @@
 <Project>
   <PropertyGroup>
-    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.6.1</MotusNetVersion>
+    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.6.2</MotusNetVersion>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.Rhino'">
+  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
     <PackageReference Include="Motus.Core" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
     <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
   </ItemGroup>

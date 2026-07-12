@@ -12,13 +12,15 @@ $root = $PSScriptRoot
 $out = Join-Path $root "src\Motus.GH\bin\$Configuration\net8.0-windows"
 
 Write-Host "Building Motus.Grasshopper ($Configuration)..."
-dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration
+dotnet restore (Join-Path $root "Motus.Grasshopper.slnx") --force-evaluate
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration --no-restore
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`nBuilt: $out\Motus.GH.gha"
 Write-Host "Copy to Grasshopper Libraries\Motus:"
 Write-Host "  Motus.GH.gha"
-Write-Host "  Motus.*.dll (from NuGet + Motus.Rhino.dll)"
+Write-Host "  Motus.*.dll (from NuGet)"
 Write-Host "  resources\robots\ (from Motus.Presets package)"
 
 if ($Install) {

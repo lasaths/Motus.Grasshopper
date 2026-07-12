@@ -2,7 +2,7 @@ using System.Drawing;
 using Motus.Core;
 using Motus.Geometry;
 
-namespace Motus.GH;
+namespace Motus.GH.Preview;
 
 public enum PreviewColorMode
 {

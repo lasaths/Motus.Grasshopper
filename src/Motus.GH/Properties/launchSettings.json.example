@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "Rhino 8 - netcore": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\Rhino 8\\System\\Rhino.exe",
+      "commandLineArgs": "/netcore /nosplash /runscript=\"-_Grasshopper editor load document open C:\\<YOUR_REPO_PATH>\\examples\\03_collision_rrt.ghx _enter\"",
+      "environmentVariables": {
+        "RHINO_PACKAGE_DIRS": "$(OutputPath)"
+      }
+    },
+    "Rhino 8 - netfx": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\Rhino 8\\System\\Rhino.exe",
+      "commandLineArgs": "/netfx /nosplash /runscript=\"-_Grasshopper editor load document open C:\\<YOUR_REPO_PATH>\\examples\\03_collision_rrt.ghx _enter\"",
+      "environmentVariables": {
+        "RHINO_PACKAGE_DIRS": "$(OutputPath)"
+      }
+    }
+  }
+}

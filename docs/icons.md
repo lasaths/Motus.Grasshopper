@@ -36,6 +36,7 @@ Source PNGs are black duotone; `MotusIcon.Recolor` maps alpha to the subcategory
 | Motus Load Mesh | Model | download-simple |
 | Motus UR10e Robotiq | Model | robot |
 | Motus Joint State | Model | gear-six |
+| Motus Tool State | Model | sliders-horizontal |
 | Motus TCP Pose | Model | crosshair |
 | Motus Plan | Plan | flow-arrow |
 | Motus Motion Segment | Plan | line-segments |
@@ -47,5 +48,6 @@ Source PNGs are black duotone; `MotusIcon.Recolor` maps alpha to the subcategory
 | Motus Collision Scene | Collision | circles-three-plus |
 | Motus Attach Body | Collision | paperclip |
 | Motus Preview | Preview | eye |
+| Motus Scrub (param) | Preview | sliders-horizontal |
 | Motus Trajectory Data | Export | grid-four |
 | Motus Export | Export | export |

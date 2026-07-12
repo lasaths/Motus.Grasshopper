@@ -1,12 +1,13 @@
 using Grasshopper.Kernel;
 using Motus.Core;
 using Motus.GH.Data;
-using Motus.Rhino;
+using Motus.GH.Rhino;
+using Motus.GH.Urdf;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
 
-namespace Motus.GH;
+namespace Motus.GH.Preview;
 
 internal static class RobotViewportPreview
 {
@@ -29,7 +30,9 @@ internal static class RobotViewportPreview
     goo.UrdfSourcePath ??= sourcePath;
     var home = HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
     var ctx = RobotContext.FromGoo(goo);
-    var geometry = ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel;
+    var geometry = RobotPreviewGeometry.ForViewport(
+        ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
+        goo.Tool);
     if (geometry is not null &&
         KinematicsPreview.PreviewMeshCache.TryCreate(ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool) is { } cache)
     {

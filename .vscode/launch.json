@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Rhino 8 — Motus (Debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-debug",
+      "program": "C:/Program Files/Rhino 8/System/Rhino.exe",
+      "args": [
+        "/netcore",
+        "/nosplash",
+        "/runscript=-_Grasshopper editor load document open ${workspaceFolder}/examples/03_collision_rrt.ghx _enter"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RHINO_PACKAGE_DIRS": "${workspaceFolder}/src/Motus.GH/bin/Debug/net8.0-windows"
+      },
+      "stopAtEntry": false
+    },
+    {
+      "name": ".NET Core Attach",
+      "type": "coreclr",
+      "request": "attach"
+    }
+  ]
+}

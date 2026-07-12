@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Motus.Rhino\Motus.Rhino.csproj" />
+    <Compile Include="..\..\src\Motus.GH\Rhino\**\*.cs" Link="Rhino\%(Filename)%(Extension)" />
     <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
   </ItemGroup>
   <ItemGroup>

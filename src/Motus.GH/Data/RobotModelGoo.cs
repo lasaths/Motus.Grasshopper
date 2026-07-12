@@ -1,6 +1,6 @@
 using Motus.Core;
 using Motus.Geometry;
-using Motus.GH;
+using Motus.GH.Loaders;
 using Motus.GH.Urdf;
 using Motus.Presets;
 using GH_IO.Serialization;

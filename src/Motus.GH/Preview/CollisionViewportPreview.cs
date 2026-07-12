@@ -1,11 +1,11 @@
 using Grasshopper.Kernel;
 using Motus.Core;
-using Motus.Rhino;
+using Motus.GH.Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
 
-namespace Motus.GH;
+namespace Motus.GH.Preview;
 
 internal static class CollisionViewportPreview
 {

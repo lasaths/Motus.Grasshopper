@@ -3,6 +3,9 @@ using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
+using Motus.GH.Planning;
+using Motus.GH.Rhino;
+using Motus.GH.Urdf;
 using Motus.OMPL.NET;
 using Rhino.Geometry;
 using System;
@@ -127,11 +130,76 @@ internal static class GhExtract
         return false;
     }
 
-    public static CollisionScene? OptionalCollisionScene(IGH_DataAccess da, int index)
+    internal readonly struct CollisionInputParse
     {
-        CollisionSceneGoo? goo = null;
-        if (!da.GetData(index, ref goo) || goo?.Value is null) return null;
-        return goo.Value;
+        public CollisionScene? Scene { get; init; }
+        public bool Wired { get; init; }
+        public string? Error { get; init; }
+        public string? Warning { get; init; }
+    }
+
+    public static CollisionInputParse ParseCollisionInput(IGH_DataAccess da, int index)
+    {
+        IGH_Goo? goo = null;
+        if (!da.GetData(index, ref goo) || goo is null)
+            return new CollisionInputParse { Wired = false };
+
+        if (goo is CollisionSceneGoo sceneGoo && sceneGoo.Value is { } scene)
+        {
+            if (scene.Objects.Count == 0)
+            {
+                return new CollisionInputParse
+                {
+                    Wired = true,
+                    Scene = scene,
+                    Warning = "Collision scene is empty — ColScene received no valid collision objects."
+                };
+            }
+
+            return new CollisionInputParse { Wired = true, Scene = scene };
+        }
+
+        if (TryCollisionObject(goo, out var obj))
+        {
+            return new CollisionInputParse
+            {
+                Wired = true,
+                Scene = new CollisionScene(new[] { obj }),
+                Warning = "Single collision object wired to Plan — use ColScene when merging multiple obstacles."
+            };
+        }
+
+        if (TryCollisionObjectFromGeometry(goo, out obj))
+        {
+            return new CollisionInputParse
+            {
+                Wired = true,
+                Scene = new CollisionScene(new[] { obj! }),
+                Warning = "Raw mesh/Brep wired to Collision — prefer ColMesh → ColScene → Plan for explicit control."
+            };
+        }
+
+        return new CollisionInputParse
+        {
+            Wired = true,
+            Error = "Collision input not recognized. Wire ColScene (ColMesh/ColSphere → ColScene → Plan.Collision)."
+        };
+    }
+
+    public static CollisionScene? OptionalCollisionScene(IGH_DataAccess da, int index) =>
+        ParseCollisionInput(da, index).Scene;
+
+    private static bool TryCollisionObjectFromGeometry(IGH_Goo goo, out CollisionObject? obj)
+    {
+        obj = null;
+        if (goo is not IGH_GeometricGoo) return false;
+
+        if (goo is GH_Mesh ghm && ghm.Value is { IsValid: true } mesh)
+            obj = CollisionMeshBuilder.FromMesh(mesh, Plane.WorldXY, "obstacle");
+        else if (goo is GH_Brep ghb && ghb.Value is { IsValid: true } brep)
+            obj = CollisionMeshBuilder.FromBrep(brep, Plane.WorldXY, "obstacle");
+
+        return obj is not null;
     }
 
     public static PlanningContext BuildPlanningContext(
@@ -139,9 +207,10 @@ internal static class GhExtract
         IGH_DataAccess da,
         int collisionIndex,
         int groupIndex,
-        int attachIndex)
+        int attachIndex,
+        CollisionScene? collisionScene = null)
     {
-        var scene = OptionalCollisionScene(da, collisionIndex);
+        var scene = collisionScene ?? OptionalCollisionScene(da, collisionIndex);
         var planningContext = PlanningContext.Create(robot, scene);
         PlanningGroupGoo? groupGoo = null;
         if (da.GetData(groupIndex, ref groupGoo) && groupGoo?.Value is not null)
@@ -199,10 +268,10 @@ internal static class GhExtract
         Planning
     }
 
-    public static string BuildStatusMessage(IReadOnlyList<PlanningResult>? results, PlanStatusKind kind)
+    public static string BuildStatusMessage(IReadOnlyList<PlanningResult>? results, PlanStatusKind kind, string? activity = null)
     {
         if (kind == PlanStatusKind.Planning)
-            return results is { Count: > 0 } ? "Planning…" : "Planning… (press Replan to start).";
+            return activity ?? (results is { Count: > 0 } ? "Planning…" : "Planning… (press Replan to start).");
         if (kind == PlanStatusKind.Manual && results is null)
             return "Press Plan to compute.";
 
@@ -249,6 +318,48 @@ internal static class GhExtract
         if (!warnings.Any(w => string.Equals(w, capabilities, StringComparison.OrdinalIgnoreCase)))
             warnings.Add(capabilities);
         return warnings;
+    }
+
+    public static string DescribePlanningActivity(
+        IReadOnlyList<(JointState? joints, Plane? plane)> goals,
+        PlanningContext context,
+        bool collisionWired,
+        RrtPlanSettings? rrtSettings = null)
+    {
+        rrtSettings ??= RrtPlanSettings.Defaults;
+        var rrt = rrtSettings.Value;
+        if (goals.Count == 0) return "Planning…";
+
+        var parts = new List<string>(goals.Count);
+        for (var i = 0; i < goals.Count; i++)
+        {
+            var goal = goals[i];
+            if (goal.plane is not null)
+            {
+                var collision = collisionWired && PlanningCollision.SceneHasObstacles(context.Scene);
+                parts.Add(collision
+                    ? $"Goal[{i}]: TCP-LIN + link collision check"
+                    : $"Goal[{i}]: TCP-LIN");
+                continue;
+            }
+
+            if (PlanningCollision.SceneHasObstacles(context.Scene) || context.Attached.Count > 0)
+            {
+                var obstacleCount = context.Scene.Objects.Count;
+                var attachCount = context.Attached.Count;
+                var scene = obstacleCount > 0
+                    ? $"{obstacleCount} obstacle{(obstacleCount == 1 ? "" : "s")}"
+                    : attachCount > 0
+                        ? $"{attachCount} attached body{(attachCount == 1 ? "" : "ies")}"
+                        : "collision scene";
+                parts.Add($"Goal[{i}]: {rrt.PlannerLabel} ({scene})");
+                continue;
+            }
+
+            parts.Add($"Goal[{i}]: joint-linear");
+        }
+
+        return "Planning… " + string.Join("; ", parts);
     }
 
     public static string BuildProgramStatusMessage(PlanningResult result, bool cached)
@@ -299,5 +410,38 @@ internal static class GhExtract
         {
             return null;
         }
+    }
+
+    /// <summary>Fast-fail before expensive planners when start/goal already intersect obstacles.</summary>
+    public static PlanningResult? TryPreflightCollision(
+        RobotContext ctx,
+        PlanningContext planningContext,
+        JointState start,
+        (JointState? joints, Plane? plane) goal)
+    {
+        if (!PlanningCollision.SceneHasObstacles(planningContext.Scene) && planningContext.Attached.Count == 0)
+            return null;
+
+        var checker = TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        if (checker is null)
+            return null;
+
+        JointState? goalState = goal.joints;
+        if (goal.plane is { } plane)
+        {
+            var reach = CartesianGoalSolver.TryReachFromStart(
+                ctx.EffectiveModel,
+                new CartesianPose(FrameConversion.FromPlane(plane)),
+                start,
+                ctx.Chain);
+            if (!reach.Success)
+                return null;
+            goalState = reach.Solution;
+        }
+
+        if (goalState is null)
+            return null;
+
+        return PlanningCollision.ValidateEndpoints(start, goalState, planningContext.Scene, checker);
     }
 }
