@@ -97,7 +97,11 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             Start,
             PlanningContext,
             LinStepMeters,
-            RrtSettings);
+            RrtSettings.PlannerId,
+            RrtSettings.MaxIterations,
+            RrtSettings.MaxPlanTimeSeconds,
+            RrtSettings.GoalBias,
+            RrtSettings.StepRadians);
     }
 
     public override void DoWork(Action<string, double> reportProgress, Action done)

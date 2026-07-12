@@ -1,5 +1,5 @@
 using Motus.Core;
-using Motus.GH.Planning;
+using Motus.OMPL.NET;
 using Rhino.Geometry;
 using System.Globalization;
 using System.Text;
@@ -17,19 +17,20 @@ public static class PlanInputFingerprint
         JointState start,
         PlanningContext context,
         double linStepMeters = 0.005,
-        RrtPlanSettings? rrtSettings = null)
+        SamplingPlannerId plannerId = SamplingPlannerId.RrtConnect,
+        int rrtMaxIterations = 4000,
+        double rrtMaxPlanTimeSeconds = 0,
+        double rrtGoalBias = 0.08,
+        double rrtStepRadians = 0.12)
     {
-        rrtSettings ??= RrtPlanSettings.Defaults;
-        var rrt = rrtSettings.Value;
-
         var sb = new StringBuilder(512);
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
         sb.Append("linStep:").Append(linStepMeters.ToString("R", CultureInfo.InvariantCulture)).Append('|');
-        sb.Append("rrt:").Append(rrt.PlannerId).Append(',')
-            .Append(rrt.MaxIterations).Append(',')
-            .Append(rrt.MaxPlanTimeSeconds.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-            .Append(rrt.GoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-            .Append(rrt.StepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        sb.Append("rrt:").Append(plannerId).Append(',')
+            .Append(rrtMaxIterations).Append(',')
+            .Append(rrtMaxPlanTimeSeconds.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(rrtGoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+            .Append(rrtStepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         AppendFrame(sb, "base", baseFrameOverride);
         if (toolOverride is not null)
         {

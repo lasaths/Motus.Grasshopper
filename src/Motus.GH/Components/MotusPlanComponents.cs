@@ -165,7 +165,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             start,
             planningContext,
             linStep,
-            rrtSettings);
+            rrtSettings.PlannerId,
+            rrtSettings.MaxIterations,
+            rrtSettings.MaxPlanTimeSeconds,
+            rrtSettings.GoalBias,
+            rrtSettings.StepRadians);
 
         if (IsOperationInProgress && _activeWorkerFingerprint is not null && _activeWorkerFingerprint != fingerprint)
             RequestCancellation();
