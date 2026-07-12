@@ -78,17 +78,20 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
         if (da.GetData(3, ref stepInput))
             LinStepMeters = stepInput;
 
+        var collisionParse = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
         PlanningContext = GhExtract.BuildPlanningContext(
             Context.EffectiveModel,
             da,
             MotusPlanInputs.Collision,
             MotusPlanInputs.Group,
             MotusPlanInputs.Attach,
-            GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision).Scene);
+            collisionParse.Scene);
+        CollisionInputWired = collisionParse.Wired;
         RrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings);
-        CollisionInputWired = _owner.HasCollisionInputsWired();
         IsAutoPlan = _owner.AutoPlanEnabled;
 
+        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext);
+        var fingerprintRrt = needsSampling ? RrtSettings : RrtPlanSettings.Defaults;
         Fingerprint = PlanInputFingerprint.Compute(
             Context.Model,
             BaseFrameOverride,
@@ -97,11 +100,11 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             Start,
             PlanningContext,
             LinStepMeters,
-            RrtSettings.PlannerId,
-            RrtSettings.MaxIterations,
-            RrtSettings.MaxPlanTimeSeconds,
-            RrtSettings.GoalBias,
-            RrtSettings.StepRadians);
+            fingerprintRrt.PlannerId,
+            fingerprintRrt.MaxIterations,
+            fingerprintRrt.MaxPlanTimeSeconds,
+            fingerprintRrt.GoalBias,
+            fingerprintRrt.StepRadians);
     }
 
     public override void DoWork(Action<string, double> reportProgress, Action done)
@@ -126,7 +129,8 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             reportProgress("plan", publish);
         }
 
-        // Native OMPL has no iteration callback — nudge progress so the UI does not sit at 0%.
+        // Native OMPL has no iteration callback — creep progress so the UI does not look frozen at 95%.
+        var started = Environment.TickCount64;
         using var heartbeat = new System.Threading.Timer(_ =>
         {
             if (CancellationToken.IsCancellationRequested)
@@ -134,9 +138,11 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
 
             lock (progressLock)
             {
-                if (lastProgress >= 0.95)
-                    return;
-                lastProgress = Math.Min(0.95, lastProgress + 0.03);
+                var elapsedSeconds = (Environment.TickCount64 - started) / 1000.0;
+                var bump = lastProgress >= 0.90 ? 0.004 : 0.03;
+                var timeFloor = Math.Min(0.99, 0.90 + elapsedSeconds / 120.0);
+                lastProgress = Math.Max(lastProgress, Math.Min(0.99, lastProgress + bump));
+                lastProgress = Math.Max(lastProgress, timeFloor);
                 reportProgress("plan", lastProgress);
             }
         }, null, 400, 400);
@@ -152,16 +158,6 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             {
                 CompletionMessage = "Cancelled";
                 return;
-            }
-
-            if (!CollisionInputWired && Result.Results.Any(r => r.Success))
-                RuntimeRemarks.Add("Obstacle previews are visual only until ColScene is wired to Collision.");
-            else if (CollisionInputWired &&
-                     !PlanningCollision.SceneHasObstacles(PlanningContext.Scene) &&
-                     PlanningContext.Attached.Count == 0 &&
-                     Result.Results.Any(r => r.Success))
-            {
-                RuntimeRemarks.Add("Collision input ignored — wire ColMesh/ColSphere → ColScene → Plan, or pass a valid mesh/Brep/ColScene.");
             }
 
             foreach (var result in Result.Results)

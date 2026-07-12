@@ -27,6 +27,28 @@ internal static class UrdfVisualPreviewLoader
         return result;
     }
 
+    /// <summary>Fixed URDF chain from the last actuated link to <paramref name="tipLink"/> (e.g. wrist_3 → tool0).</summary>
+    internal static Frame? TryTipAttachOffset(string urdfPath, string baseLink, string tipLink)
+    {
+        if (!File.Exists(urdfPath))
+            return null;
+
+        var doc = XDocument.Load(urdfPath);
+        return TryTipAttachOffset(doc.Root, baseLink, tipLink);
+    }
+
+    internal static Frame? TryTipAttachOffset(XElement? robotRoot, string baseLink, string tipLink)
+    {
+        if (robotRoot is null)
+            return null;
+
+        var chain = BuildActuatedChainLinkNames(robotRoot, baseLink, tipLink);
+        if (chain.Count == 0)
+            return null;
+
+        return ComposeFixedForwardChain(robotRoot, chain[^1], tipLink);
+    }
+
     public static RobotPreviewVisuals? TryLoad(XDocument doc, string urdfDirectory, string baseLink, string tipLink) =>
         TryLoad(doc.Root, urdfDirectory, baseLink, tipLink);
 

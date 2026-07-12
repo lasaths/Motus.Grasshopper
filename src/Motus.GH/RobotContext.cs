@@ -27,43 +27,24 @@ public readonly struct RobotContext
     public ToolFrame Tool { get; }
 
     public RobotCollisionModel? PreviewGeometry { get; }
-
     public Color?[]? PreviewMeshColors { get; }
 
-
-
     public RobotContext(
-
         RobotModel model,
-
         RobotModel effectiveModel,
-
         SerialJointChain? chain,
-
         BaseFrame @base,
-
         ToolFrame tool,
-
         RobotCollisionModel? previewGeometry = null,
-
         Color?[]? previewMeshColors = null)
-
     {
-
         Model = model;
-
         EffectiveModel = effectiveModel;
-
         Chain = chain;
-
         Base = @base;
-
         Tool = tool;
-
         PreviewGeometry = previewGeometry;
-
         PreviewMeshColors = previewMeshColors;
-
     }
 
 
@@ -91,7 +72,6 @@ public readonly struct RobotContext
             goo.EffectiveTool(),
 
             goo.EffectivePreviewGeometry(),
-
             goo.PreviewMeshColors);
 
     }

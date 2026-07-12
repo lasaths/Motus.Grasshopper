@@ -271,7 +271,7 @@ internal static class GhExtract
     public static string BuildStatusMessage(IReadOnlyList<PlanningResult>? results, PlanStatusKind kind, string? activity = null)
     {
         if (kind == PlanStatusKind.Planning)
-            return activity ?? (results is { Count: > 0 } ? "Planning…" : "Planning… (press Replan to start).");
+            return activity ?? "Planning…";
         if (kind == PlanStatusKind.Manual && results is null)
             return "Press Plan to compute.";
 
@@ -320,6 +320,13 @@ internal static class GhExtract
         return warnings;
     }
 
+    /// <summary>Joint goals with obstacles or attached bodies route through the sampling planner.</summary>
+    public static bool GoalsNeedSamplingPlanner(
+        IReadOnlyList<(JointState? joints, Plane? plane)> goals,
+        PlanningContext context) =>
+        goals.Any(g => g.joints is not null) &&
+        (PlanningCollision.SceneHasObstacles(context.Scene) || context.Attached.Count > 0);
+
     public static string DescribePlanningActivity(
         IReadOnlyList<(JointState? joints, Plane? plane)> goals,
         PlanningContext context,
@@ -336,7 +343,7 @@ internal static class GhExtract
             var goal = goals[i];
             if (goal.plane is not null)
             {
-                var collision = collisionWired && PlanningCollision.SceneHasObstacles(context.Scene);
+                var collision = PlanningCollision.SceneHasObstacles(context.Scene) || context.Attached.Count > 0;
                 parts.Add(collision
                     ? $"Goal[{i}]: TCP-LIN + link collision check"
                     : $"Goal[{i}]: TCP-LIN");

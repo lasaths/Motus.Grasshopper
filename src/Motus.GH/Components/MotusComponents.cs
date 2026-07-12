@@ -18,6 +18,7 @@ using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
 using System.Globalization;
+using System.Windows.Forms;
 
 namespace Motus.GH.Components;
 
@@ -40,20 +41,26 @@ public abstract class MotusComponentBase : GH_Component
 public abstract class RobotSourceComponentBase : MotusComponentBase
 {
     protected List<Mesh> _previewMeshes = [];
+    protected List<Mesh> _collisionPreviewMeshes = [];
     protected List<Line> _previewWires = [];
     private string? _previewKey;
+    private bool _showCollisionPreview;
 
     protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName = "cube")
         : base(name, nickname, desc, "Model", iconName) { }
 
     protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)
     {
-        var key = PreviewKey(goo, sourcePath);
-        if (key == _previewKey && _previewMeshes.Count > 0)
+        var key = PreviewKey(goo, sourcePath, _showCollisionPreview);
+        if (key == _previewKey && _previewMeshes.Count > 0 &&
+            (!_showCollisionPreview || _collisionPreviewMeshes.Count > 0))
             return;
 
         _previewKey = key;
         RobotViewportPreview.Build(goo, sourcePath, out _previewMeshes, out _previewWires);
+        _collisionPreviewMeshes = _showCollisionPreview
+            ? RobotViewportPreview.BuildPlanningCollisionMeshes(goo, sourcePath)
+            : [];
         ExpirePreview(true);
     }
 
@@ -61,26 +68,58 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     {
         _previewKey = null;
         _previewMeshes = [];
+        _collisionPreviewMeshes = [];
         _previewWires = [];
         ExpirePreview(true);
     }
 
-    private static string PreviewKey(RobotModelGoo goo, string? sourcePath) =>
-        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}";
+    private static string PreviewKey(RobotModelGoo goo, string? sourcePath, bool showCollision) =>
+        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}|col:{showCollision}";
 
     public override BoundingBox ClippingBox =>
-        RobotViewportPreview.ComputeBounds(_previewMeshes, _previewWires);
+        RobotViewportPreview.ComputeBounds(
+            _collisionPreviewMeshes.Count > 0 ? _collisionPreviewMeshes : _previewMeshes,
+            _previewWires);
 
     public override void DrawViewportMeshes(IGH_PreviewArgs args)
     {
         if (Locked) return;
         RobotViewportPreview.DrawMeshes(args, _previewMeshes);
+        if (_showCollisionPreview)
+            RobotViewportPreview.DrawCollisionMeshes(args, _collisionPreviewMeshes);
     }
 
     public override void DrawViewportWires(IGH_PreviewArgs args)
     {
         if (Locked) return;
         RobotViewportPreview.DrawWires(args, _previewWires, _previewMeshes.Count == 0);
+    }
+
+    public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
+    {
+        Menu_AppendItem(menu, "Preview collision meshes", CollisionPreviewMenuClick, true, _showCollisionPreview);
+        base.AppendAdditionalMenuItems(menu);
+    }
+
+    public override bool Write(GH_IWriter writer)
+    {
+        writer.SetBoolean("ShowCollisionPreview", _showCollisionPreview);
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        if (reader.ItemExists("ShowCollisionPreview"))
+            _showCollisionPreview = reader.GetBoolean("ShowCollisionPreview");
+        return base.Read(reader);
+    }
+
+    private void CollisionPreviewMenuClick(object? sender, EventArgs e)
+    {
+        RecordUndoEvent("Preview collision meshes");
+        _showCollisionPreview = !_showCollisionPreview;
+        _previewKey = null;
+        ExpireSolution(true);
     }
 }
 

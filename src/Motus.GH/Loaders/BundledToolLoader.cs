@@ -10,6 +10,26 @@ internal static class BundledToolLoader
     public const string Ur10eRobotiqUrdf = "resources/robots/ur10e_robotiq/ur10e_robotiq.urdf";
     private const string RobotiqStl = "resources/tools/robotiq_2f85_tcp_local.stl";
     private static readonly Frame RobotiqTcp = new(0, 0, 0.1633, 0.7071067811865476, 0, 0.7071067811865476, 0);
+    private static readonly double[] TcpLocalToTool0Local = ComputeTcpLocalToTool0Local();
+
+    private static double[] ComputeTcpLocalToTool0Local()
+    {
+        var tcpInFlange = Transforms.FromFrame(RobotiqTcp);
+        var tool0InFlange = Transforms.FromRpy(0, 0, 0, Math.PI / 2, 0, Math.PI / 2);
+        return Transforms.Multiply(Transforms.Inverse(tool0InFlange), tcpInFlange);
+    }
+
+    private static List<double[]> ConvertVerticesToTool0Local(IReadOnlyList<double[]> tcpLocal)
+    {
+        var result = new List<double[]>(tcpLocal.Count);
+        foreach (var v in tcpLocal)
+        {
+            var p = Transforms.TransformPoint(TcpLocalToTool0Local, v[0], v[1], v[2]);
+            result.Add(new[] { p[0], p[1], p[2] });
+        }
+
+        return result;
+    }
 
     public static ToolDefinition? TryDefaultForUrdfPath(string urdfPath)
     {
@@ -22,13 +42,23 @@ internal static class BundledToolLoader
 
     private static ToolDefinition? TryLoadRobotiq(string? urdfPath = null)
     {
+        var resolvedUrdf = ResolveRobotiqUrdfPath(urdfPath);
         foreach (var path in RobotiqMeshCandidates(urdfPath))
         {
-            if (TryLoadRobotiqFromPath(path) is { } tool)
+            if (TryLoadRobotiqFromPath(path, resolvedUrdf) is { } tool)
                 return tool;
         }
 
         return null;
+    }
+
+    private static string? ResolveRobotiqUrdfPath(string? urdfPath)
+    {
+        if (!string.IsNullOrWhiteSpace(urdfPath) && File.Exists(urdfPath))
+            return Path.GetFullPath(urdfPath);
+
+        var bundled = ResolveBundledPath(Ur10eRobotiqUrdf);
+        return File.Exists(bundled) ? bundled : urdfPath;
     }
 
     private static IEnumerable<string> RobotiqMeshCandidates(string? urdfPath)
@@ -45,7 +75,7 @@ internal static class BundledToolLoader
         yield return Path.GetFullPath(Path.Combine(urdfDir, "..", "..", "tools", "robotiq_2f85_tcp_local.stl"));
     }
 
-    private static ToolDefinition? TryLoadRobotiqFromPath(string path)
+    private static ToolDefinition? TryLoadRobotiqFromPath(string path, string? urdfPath = null)
     {
         if (!File.Exists(path)) return null;
 
@@ -53,8 +83,16 @@ internal static class BundledToolLoader
         if (vertices.Count < 3 || indices.Count < 3 || !MeshVerticesFinite(vertices))
             return null;
 
-        var geometry = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, vertices, indices);
-        return new ToolDefinition("robotiq_2f85", RobotiqTcp, geometry, ToolCapabilities.Robotiq2F85);
+        var tool0Vertices = ConvertVerticesToTool0Local(vertices);
+        var geometry = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, tool0Vertices, indices);
+        var attachOffset = string.IsNullOrWhiteSpace(urdfPath)
+            ? null
+            : UrdfFixedChain.TryTipAttachOffset(urdfPath, "base_link", "tool0");
+        return new ToolDefinition("robotiq_2f85", RobotiqTcp, geometry, ToolCapabilities.Robotiq2F85)
+        {
+            GeometryInFlangeFrame = true,
+            GeometryAttachOffset = attachOffset
+        };
     }
 
     private static bool MeshVerticesFinite(IReadOnlyList<double[]> vertices)

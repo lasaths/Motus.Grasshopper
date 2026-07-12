@@ -91,8 +91,8 @@ public static class KinematicsPreview
         }
 
         if (geometry.ToolGeometry is null) yield break;
-        var tcp = fk.ComputeTcp(state, baseF, tool).Tcp;
-        var toolWorld = TransformCollision(geometry.ToolGeometry, Transforms.FromFrame(tcp));
+        var toolM = ToolCollisionPreview.WorldMatrix(fk, state.Positions, baseF, tool, geometry);
+        var toolWorld = TransformCollision(geometry.ToolGeometry, toolM);
         if (ToRhinoMesh(toolWorld) is { } toolMesh)
             yield return toolMesh;
     }
@@ -106,6 +106,9 @@ public static class KinematicsPreview
         private readonly double[] _baseMatrix;
         private readonly List<(int LinkIndex, Mesh Mesh)> _links;
         private readonly Mesh? _toolMesh;
+        private readonly CollisionObject? _toolGeometry;
+        private readonly bool _toolInFlangeFrame;
+        private readonly Frame? _toolAttachOffset;
         private readonly double _toolOpenWidth;
         private readonly IReadOnlyList<Color?> _meshColors;
         private List<Mesh>? _frameMeshes;
@@ -118,6 +121,9 @@ public static class KinematicsPreview
             ToolFrame toolF,
             List<(int, Mesh)> links,
             Mesh? toolMesh,
+            CollisionObject? toolGeometry,
+            bool toolInFlangeFrame,
+            Frame? toolAttachOffset,
             double toolOpenWidth,
             IReadOnlyList<Color?> meshColors)
         {
@@ -127,6 +133,9 @@ public static class KinematicsPreview
             _baseMatrix = Transforms.FromFrame(baseF.Frame);
             _links = links;
             _toolMesh = toolMesh;
+            _toolGeometry = toolGeometry;
+            _toolInFlangeFrame = toolInFlangeFrame;
+            _toolAttachOffset = toolAttachOffset;
             _toolOpenWidth = toolOpenWidth > 1e-9 ? toolOpenWidth : 0.085;
             _meshColors = meshColors;
         }
@@ -178,6 +187,9 @@ public static class KinematicsPreview
                     toolF,
                     links,
                     toolMesh,
+                    geometry.ToolGeometry,
+                    geometry.ToolGeometryInFlangeFrame,
+                    geometry.ToolGeometryAttachOffset,
                     toolCapabilities?.Parameters.FirstOrDefault(p =>
                         string.Equals(p.Name, "width", StringComparison.Ordinal))?.Max ?? 0.085,
                     meshColors);
@@ -242,8 +254,9 @@ public static class KinematicsPreview
 
             if (_toolMesh is not null)
             {
-                var tcp = _fk.ComputeTcp(state, _baseF, _toolF).Tcp;
-                var toolXform = ToRhinoTransform(Transforms.FromFrame(tcp));
+                var toolM = ToolCollisionPlacement.WorldMatrix(
+                    _fk, state.Positions, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
+                var toolXform = ToRhinoTransform(toolM);
                 var widthRatio = 1.0;
                 if (toolState?.Values.TryGetValue("width", out var width) == true)
                     widthRatio = Math.Clamp(width / _toolOpenWidth, 0.05, 1.0);

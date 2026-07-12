@@ -314,7 +314,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
-        var previewGeometry = ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel;
+        var previewGeometry = RobotPreviewGeometry.ForViewport(
+            ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
+            trajGoo.ToolSnapshot);
         EnsureMeshCache(ctx, previewGeometry, trajGoo.ToolCapabilitiesSnapshot);
         ReadCustomColors(da);
 

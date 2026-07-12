@@ -100,8 +100,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         return base.Read(reader);
     }
 
-    internal bool HasCollisionInputsWired() =>
-        Params.Input[MotusPlanInputs.Collision].SourceCount > 0 ||
+    internal bool IsCollisionPortWired() =>
+        Params.Input[MotusPlanInputs.Collision].SourceCount > 0;
+
+    internal bool HasObstacleAwareInputsWired() =>
+        IsCollisionPortWired() ||
         Params.Input[MotusPlanInputs.Attach].SourceCount > 0;
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -123,7 +126,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
             if (goals.Count == 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Provide at least one valid Plane or Joint State goal.");
-            EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix goal input errors.");
             return;
         }
 
@@ -135,7 +138,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             if (stepInput <= 0)
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
-                EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
+                EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Step input (must be positive).");
                 return;
             }
 
@@ -157,6 +160,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             MotusPlanInputs.Group,
             MotusPlanInputs.Attach,
             collision.Scene);
+        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(goals, planningContext);
+        var fingerprintRrt = needsSampling ? rrtSettings : RrtPlanSettings.Defaults;
         var fingerprint = PlanInputFingerprint.Compute(
             ctx.Model,
             robotGoo.BaseFrameOverride,
@@ -165,16 +170,16 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             start,
             planningContext,
             linStep,
-            rrtSettings.PlannerId,
-            rrtSettings.MaxIterations,
-            rrtSettings.MaxPlanTimeSeconds,
-            rrtSettings.GoalBias,
-            rrtSettings.StepRadians);
+            fingerprintRrt.PlannerId,
+            fingerprintRrt.MaxIterations,
+            fingerprintRrt.MaxPlanTimeSeconds,
+            fingerprintRrt.GoalBias,
+            fingerprintRrt.StepRadians);
 
         if (IsOperationInProgress && _activeWorkerFingerprint is not null && _activeWorkerFingerprint != fingerprint)
             RequestCancellation();
 
-        var collisionInputWired = HasCollisionInputsWired();
+        var collisionInputWired = IsCollisionPortWired();
         var activity = GhExtract.DescribePlanningActivity(goals, planningContext, collisionInputWired, rrtSettings);
 
         var planNow = _run;
@@ -239,7 +244,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         _lastPlannedFingerprint = null;
         _debounceGen++;
         _planningPending = false;
-        if (_autoPlan && HasCollisionInputsWired())
+        if (_autoPlan && HasObstacleAwareInputsWired())
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
                 "Auto Plan enabled with collision — planning is debounced and runs in the background.");
@@ -266,23 +271,34 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         return _cached is null ? GhExtract.PlanStatusKind.Manual : GhExtract.PlanStatusKind.ManualCached;
     }
 
-    private void EmitOutputs(IGH_DataAccess da, GhExtract.PlanStatusKind statusKind, string? activity = null)
+    private void EmitOutputs(
+        IGH_DataAccess da,
+        GhExtract.PlanStatusKind statusKind,
+        string? activity = null,
+        bool emitCache = true,
+        string? statusOverride = null)
     {
-        if (statusKind != GhExtract.PlanStatusKind.Planning && _cached is not null)
-            ReportPlanningFailures(_cached);
-
-        if (_cachedGoos is { Count: > 0 })
-            da.SetDataList(0, _cachedGoos);
-
-        if (statusKind == GhExtract.PlanStatusKind.Planning && _cachedGoos is { Count: > 0 })
+        if (emitCache)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Trajectory is from previous inputs; replanning in background…");
+            if (statusKind != GhExtract.PlanStatusKind.Planning && _cached is not null)
+                ReportPlanningFailures(_cached);
+
+            if (_cachedGoos is { Count: > 0 })
+                da.SetDataList(0, _cachedGoos);
+
+            if (statusKind == GhExtract.PlanStatusKind.Planning && _cachedGoos is { Count: > 0 })
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    "Trajectory is from previous inputs; replanning in background…");
+            }
+
+            da.SetData(1, statusOverride ?? GhExtract.BuildStatusMessage(_cached, statusKind, activity));
+            if (_cached is not null)
+                da.SetDataList(2, GhExtract.BuildWarnings(_cached));
+            return;
         }
 
-        da.SetData(1, GhExtract.BuildStatusMessage(_cached, statusKind, activity));
-        if (_cached is not null)
-            da.SetDataList(2, GhExtract.BuildWarnings(_cached));
+        da.SetData(1, statusOverride ?? "Fix input errors.");
     }
 
     private void ScheduleDebouncedPlan(string fingerprint)
@@ -319,11 +335,21 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
                     e.Contains("collision", StringComparison.OrdinalIgnoreCase)))
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                    "Preview draws URDF visual meshes; Plan checks URDF collision meshes (often larger) plus any tool collision hull. " +
-                    "ShowStart ghost is the trajectory start — confirm Plan Start matches that pose.");
+                    "Plan checks URDF collision meshes (often larger than visuals) plus tool collision hull. " +
+                    "Right-click the robot component → Preview collision meshes to compare. " +
+                    "Confirm Plan Start matches the ShowStart ghost pose.");
             }
         }
     }
 
     public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");
+
+    protected override string FormatProgressMessage(double fraction) =>
+        fraction switch
+        {
+            >= 0.999 => "Done",
+            <= 0.001 => "Planning…",
+            >= 0.90 => "Planning… RRT (busy)",
+            _ => $"Planning… {(fraction * 100):0}%"
+        };
 }
