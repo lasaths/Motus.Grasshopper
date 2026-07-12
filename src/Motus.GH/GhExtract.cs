@@ -444,4 +444,21 @@ internal static class GhExtract
 
         return PlanningCollision.ValidateEndpoints(start, goalState, planningContext.Scene, checker);
     }
+
+    public static RrtPlanSettings ResolveRrtSettings(IGH_DataAccess da, int index, GH_Component? owner = null)
+    {
+        var goo = default(RrtPlanSettingsGoo);
+        if (!da.GetData(index, ref goo) || goo is null)
+            return RrtPlanSettings.Defaults;
+
+        if (!goo.IsValid)
+        {
+            owner?.AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "RRT Settings input is invalid — using Motus RRT Settings defaults.");
+            return RrtPlanSettings.Defaults;
+        }
+
+        return goo.Value;
+    }
 }

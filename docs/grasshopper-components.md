@@ -45,6 +45,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Component | Notes |
 |-----------|-------|
 | Motus Plan | One planner for all goals. Click **Plan** to compute, or enable **Auto Plan** from the right-click menu. |
+| Motus RRT Settings | Tune RRT-Connect / RRT* (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. |
 | Motus Motion Segment | Build a single PTP, LIN, or CIRC segment (`MotionSegmentGoo`). |
 | Motus Program Plan | Plan a mixed segment list via `IndustrialMotionPlanner` (click **Plan**). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
@@ -59,6 +60,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - optional `Collision` (scene — **required** for obstacle-aware planning; without it, red obstacle previews are display-only)
 - optional `Group` (`PlanningGroup`)
 - optional `Attach` (list of attached bodies)
+- optional `RrtSettings` (**Motus RRT Settings** output — joint goals + collision only)
 
 - Each `Goal` item is either a **Plane** (Cartesian TCP LIN) or a **Joint State**. Wire multiple sources into the list input (or use **Merge**) to chain waypoints; see `examples/12_sequential_goals.ghx`.
 - `Start` is optional; unwired it uses the viewer home pose or zeros.
@@ -67,8 +69,8 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.
 - The planner is inferred from the inputs:
   - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). Falls back to joint-space path if LIN fails but goal IK succeeded.
-  - `Goal` is joints + `Collision` wired → RRT-Connect (or RRT* via `RrtPlanner`).
-  - Optional RRT tuning (joint goals + collision only): `RrtMaxIter` (default 4000), `RrtTimeLimit` (seconds, 0 = no limit), `RrtPlanner` (`RrtConnect` / `RrtStar`), `RrtGoalBias` (0–1), `RrtStep` (radians).
+  - `Goal` is joints + `Collision` wired → RRT-Connect (or RRT* via **Motus RRT Settings** → `Plan.RrtSettings`).
+  - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (`RrtConnect` / `RrtStar`), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
   - `Goal` is joints, no collision → joint-linear plan.
 - Plane goal **Status** errors distinguish: outside reach, goal IK failed, or LIN path failed at intermediate poses.
 - Trajectory output preserves robot chain and frame overrides for preview/export.
@@ -105,6 +107,7 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 
 | Component | GUID |
 |-----------|------|
+| Motus RRT Settings | `11d59b15-ffe2-488e-83b8-52eddf772025` |
 | Motus Motion Segment | `7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31` |
 | Motus Program Plan | `8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42` |
 

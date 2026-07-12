@@ -9,9 +9,5 @@ internal static class MotusPlanInputs
     internal const int Collision = 4;
     internal const int Group = 5;
     internal const int Attach = 6;
-    internal const int RrtMaxIter = 7;
-    internal const int RrtTimeLimit = 8;
-    internal const int RrtPlanner = 9;
-    internal const int RrtGoalBias = 10;
-    internal const int RrtStep = 11;
+    internal const int RrtSettings = 7;
 }

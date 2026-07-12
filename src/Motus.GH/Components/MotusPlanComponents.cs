@@ -62,21 +62,13 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Collision", "C", "Required for obstacle-aware planning. Without this, red obstacle previews are display-only. Joint goals → RRT-Connect; plane goals → LIN validate", GH_ParamAccess.item);
+        p.AddGenericParameter("Collision", "C", "Obstacle-aware planning: ColScene → Collision. Joint goals use RRT (tune via RrtSettings); plane goals use LIN validate", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Group", "Gr", "Optional planning group (locks non-group joints)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Attach", "A", "Optional attached bodies list", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
-        p.AddIntegerParameter("RrtMaxIter", "Ri", "Joint goals + collision: max RRT iterations (default 4000)", GH_ParamAccess.item, 4000);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("RrtTimeLimit", "Rt", "Joint goals + collision: max plan time in seconds (0 = no limit)", GH_ParamAccess.item, 0);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("RrtPlanner", "Rp", "Joint goals + collision: RrtConnect or RrtStar", GH_ParamAccess.item, "RrtConnect");
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("RrtGoalBias", "Rb", "Joint goals + collision: goal bias 0–1 (default 0.08)", GH_ParamAccess.item, 0.08);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("RrtStep", "Rs", "Joint goals + collision: tree step size in radians (default 0.12)", GH_ParamAccess.item, 0.12);
+        p.AddGenericParameter("RrtSettings", "Rrt", "Optional RRT tuning from Motus RRT Settings (joint goals + collision only)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -156,20 +148,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         else if (collision.Warning is not null)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
-        if (!RrtPlanSettings.TryRead(
-                da,
-                MotusPlanInputs.RrtMaxIter,
-                MotusPlanInputs.RrtTimeLimit,
-                MotusPlanInputs.RrtPlanner,
-                MotusPlanInputs.RrtGoalBias,
-                MotusPlanInputs.RrtStep,
-                out var rrtSettings,
-                out var rrtError))
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, rrtError!);
-            EmitOutputs(da, GhExtract.PlanStatusKind.Manual);
-            return;
-        }
+        var rrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings, this);
 
         var planningContext = GhExtract.BuildPlanningContext(
             ctx.EffectiveModel,
@@ -331,6 +310,14 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
                 ? string.Join("; ", pair.result.Errors)
                 : "Planning failed.";
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Goal[{pair.index}]: {detail}");
+            if (pair.result.Errors.Any(e =>
+                    e.Contains("Start configuration", StringComparison.OrdinalIgnoreCase) &&
+                    e.Contains("collision", StringComparison.OrdinalIgnoreCase)))
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    "Preview draws URDF visual meshes; Plan checks URDF collision meshes (often larger) plus any tool collision hull. " +
+                    "ShowStart ghost is the trajectory start — confirm Plan Start matches that pose.");
+            }
         }
     }
 

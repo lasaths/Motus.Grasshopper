@@ -85,21 +85,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             MotusPlanInputs.Group,
             MotusPlanInputs.Attach,
             GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision).Scene);
-        if (!RrtPlanSettings.TryRead(
-                da,
-                MotusPlanInputs.RrtMaxIter,
-                MotusPlanInputs.RrtTimeLimit,
-                MotusPlanInputs.RrtPlanner,
-                MotusPlanInputs.RrtGoalBias,
-                MotusPlanInputs.RrtStep,
-                out var rrtSettings,
-                out _))
-        {
-            SkipWork = true;
-            return;
-        }
-
-        RrtSettings = rrtSettings;
+        RrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings);
         CollisionInputWired = _owner.HasCollisionInputsWired();
         IsAutoPlan = _owner.AutoPlanEnabled;
 

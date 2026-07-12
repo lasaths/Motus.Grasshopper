@@ -14,6 +14,9 @@ public readonly record struct RrtPlanSettings(
 {
     public static RrtPlanSettings Defaults => new(4000, 0, OmplPlannerId.RrtConnect, 0.08, 0.12);
 
+    public static bool TryBuild(IGH_DataAccess da, out RrtPlanSettings settings, out string? error) =>
+        TryRead(da, 0, 1, 2, 3, 4, out settings, out error);
+
     public static bool TryRead(
         IGH_DataAccess da,
         int maxIterIndex,

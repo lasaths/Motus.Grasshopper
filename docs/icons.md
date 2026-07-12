@@ -39,6 +39,7 @@ Source PNGs are black duotone; `MotusIcon.Recolor` maps alpha to the subcategory
 | Motus Tool State | Model | sliders-horizontal |
 | Motus TCP Pose | Model | crosshair |
 | Motus Plan | Plan | flow-arrow |
+| Motus RRT Settings | Plan | faders |
 | Motus Motion Segment | Plan | line-segments |
 | Motus Program Plan | Plan | stack |
 | Motus Planning Group | Plan | list-plus |
