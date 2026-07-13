@@ -79,6 +79,12 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             LinStepMeters = stepInput;
 
         var collisionParse = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
+        if (collisionParse.Error is not null)
+        {
+            SkipWork = true;
+            return;
+        }
+
         PlanningContext = GhExtract.BuildPlanningContext(
             Context.EffectiveModel,
             da,

@@ -335,13 +335,29 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         }
 
         var toolCaps = robotGoo.Tool?.Capabilities;
-        foreach (var err in MotionProgramValidation.ValidateToolStates(segments, toolCaps))
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
+        var toolStateErrors = MotionProgramValidation.ValidateToolStates(segments, toolCaps).ToList();
+        if (toolStateErrors.Count > 0)
+        {
+            _cached = null;
+            _cachedGoo = null;
+            foreach (var err in toolStateErrors)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
+            da.SetData(1, "Fix tool state errors.");
+            da.SetDataList(2, toolStateErrors);
+            return;
+        }
 
         var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel);
         var collision = GhExtract.ParseCollisionInput(da, 3);
         if (collision.Error is not null)
+        {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
+            _cached = null;
+            _cachedGoo = null;
+            da.SetData(1, "Fix Collision input errors.");
+            da.SetDataList(2, new[] { collision.Error });
+            return;
+        }
         else if (collision.Warning is not null)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 

@@ -117,11 +117,15 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         }
 
         if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo))
+        {
+            InvalidateCachedPlan();
             return;
+        }
 
         var ctx = RobotContext.FromGoo(robotGoo);
         if (!GhExtract.TryGoals(da, 1, out var goals, out var goalErrors))
         {
+            InvalidateCachedPlan();
             foreach (var error in goalErrors)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
             if (goals.Count == 0)
@@ -137,6 +141,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         {
             if (stepInput <= 0)
             {
+                InvalidateCachedPlan();
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
                 EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Step input (must be positive).");
                 return;
@@ -147,7 +152,12 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
 
         var collision = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
         if (collision.Error is not null)
+        {
+            InvalidateCachedPlan();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Collision input errors.");
+            return;
+        }
         else if (collision.Warning is not null)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
@@ -260,6 +270,17 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         _run = true;
         _planningPending = false;
         RequestSolutionRefresh();
+    }
+
+    private void InvalidateCachedPlan()
+    {
+        if (IsOperationInProgress)
+            RequestCancellation();
+        _cached = null;
+        _cachedGoos = null;
+        _lastPlannedFingerprint = null;
+        _activeWorkerFingerprint = null;
+        _planningPending = false;
     }
 
     private GhExtract.PlanStatusKind ResolveIdleStatusKind(string fingerprint)

@@ -449,7 +449,12 @@ internal static class GhExtract
         if (goalState is null)
             return null;
 
-        return PlanningCollision.ValidateEndpoints(start, goalState, planningContext.Scene, checker);
+        return PlanningCollision.ValidateEndpoints(
+            start,
+            goalState,
+            planningContext.Scene,
+            checker,
+            planningContext.Attached.Count > 0);
     }
 
     public static RrtPlanSettings ResolveRrtSettings(IGH_DataAccess da, int index, GH_Component? owner = null)
