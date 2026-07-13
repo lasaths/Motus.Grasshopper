@@ -47,7 +47,8 @@ internal static class PlanExecutor
         var currentStart = request.Start;
         Trajectory? chained = null;
         var goalCount = Math.Max(1, request.Goals.Count);
-        timings?.GoalCount = request.Goals.Count;
+        if (timings is not null)
+            timings.GoalCount = request.Goals.Count;
 
         var needsCollision = PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
             || request.PlanningContext.Attached.Count > 0;

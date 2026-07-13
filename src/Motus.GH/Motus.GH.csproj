@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- Rhino 8 Windows: net8.0-windows; Rhino 8 Mac: net8.0 (McNeel cross-platform template pattern) -->
+    <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Version>0.6.4</Version>
@@ -10,10 +11,15 @@
     <InformationalVersion>0.6.4</InformationalVersion>
     <TargetExt>.gha</TargetExt>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <NoWarn>NU1701;NETSDK1086</NoWarn>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <ProduceReferenceAssembly Condition="'$(Configuration)' == 'Debug'">false</ProduceReferenceAssembly>
     <DebugType Condition="'$(Configuration)' == 'Debug'">portable</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::IsOSPlatform(Windows))">
@@ -24,12 +30,21 @@
     <StartAction>Program</StartAction>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::IsOSPlatform(OSX)) AND Exists('$(Rhino8App)/Contents/MacOS/Rhinoceros')">
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+    <StartProgram>$(Rhino8App)/Contents/MacOS/Rhinoceros</StartProgram>
+    <StartArguments>-netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../examples/03_collision_rrt.ghx')) _enter"</StartArguments>
+    <StartAction>Program</StartAction>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" Condition="'$(Rhino8CommonAssemblyPath)' == ''" />
+    <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" Condition="'$(Rhino8CommonAssemblyPath)' == ''" ExcludeAssets="runtime" />
     <Reference Include="RhinoCommon" Condition="Exists('$(Rhino8CommonAssemblyPath)')">
       <HintPath>$(Rhino8CommonAssemblyPath)</HintPath>
       <Private>false</Private>
     </Reference>
+    <PackageReference Include="Grasshopper" Version="8.32.26160.13001" Condition="!Exists('$(Rhino8GrasshopperDir)/Grasshopper.dll')" ExcludeAssets="runtime" />
     <Reference Include="Grasshopper" Condition="Exists('$(Rhino8GrasshopperDir)/Grasshopper.dll')">
       <HintPath>$(Rhino8GrasshopperDir)/Grasshopper.dll</HintPath>
       <Private>false</Private>
@@ -38,6 +53,14 @@
       <HintPath>$(Rhino8GrasshopperDir)/GH_IO.dll</HintPath>
       <Private>false</Private>
     </Reference>
+  </ItemGroup>
+
+  <!-- WinForms on net8.0 (Mac): McNeel template uses net48 reference assemblies until desktop ref is used -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" ExcludeAssets="all" GeneratePathProperty="true" />
+    <Reference Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net48)\build\.NETFramework\v4.8\System.Windows.Forms.dll" Private="False" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -53,18 +76,20 @@
   <PropertyGroup>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(Windows))">$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX))">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
+    <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(Windows))">net8.0-windows</MotusDeployTfm>
+    <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(OSX))">net8.0</MotusDeployTfm>
   </PropertyGroup>
 
-  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(GrasshopperLibraryDir)' != ''">
+  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(GrasshopperLibraryDir)' != '' AND '$(TargetFramework)' == '$(MotusDeployTfm)'">
     <MakeDir Directories="$(GrasshopperLibraryDir)" />
     <ItemGroup>
       <MotusDeployFiles Include="$(TargetDir)Motus*.gha" />
       <MotusDeployFiles Include="$(TargetDir)Motus*.dll" />
-      <MotusDeployFiles Include="$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll" Condition="Exists('$(MotusNetSiblingRoot)src\Motus.Native\bin\$(Configuration)\net8.0\Motus.Native.dll')" />
-      <MotusDeployResources Include="$(TargetDir)resources\**\*" />
+      <MotusDeployFiles Include="$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll" Condition="Exists('$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll')" />
+      <MotusDeployResources Include="$(TargetDir)resources/**/*" />
     </ItemGroup>
-    <Copy SourceFiles="@(MotusDeployFiles)" DestinationFiles="@(MotusDeployFiles->'$(GrasshopperLibraryDir)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
-    <Copy SourceFiles="@(MotusDeployResources)" DestinationFiles="@(MotusDeployResources->'$(GrasshopperLibraryDir)\resources\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(MotusDeployFiles)" DestinationFolder="$(GrasshopperLibraryDir)" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(MotusDeployResources)" DestinationFiles="@(MotusDeployResources->'$(GrasshopperLibraryDir)/resources/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />
   </Target>
 
 </Project>

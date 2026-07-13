@@ -7,6 +7,30 @@ on:
     branches: [master, main]
 
 jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Motus.GH (net8.0-windows)
+        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Motus.GH (net8.0)
+        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release -f net8.0
+
   smoke:
     runs-on: windows-latest
     steps:

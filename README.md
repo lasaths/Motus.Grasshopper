@@ -13,29 +13,36 @@ Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL
 
 ## Build
 
+**Windows (PowerShell):**
+
 ```powershell
 ./build.ps1                      # Release (default)
 ./build.ps1 -Configuration Debug
 ./build.ps1 -Zip                 # also writes dist/Motus.Grasshopper-Release.zip
+./build.ps1 -Install             # copy to %APPDATA%\Grasshopper\Libraries\Motus
 ```
 
 Output: `src/Motus.GH/bin/Release/net8.0-windows/`
 
-Copy to `%APPDATA%\Grasshopper\Libraries\Motus`:
+**macOS (bash):**
+
+```bash
+./build.sh              # Release
+./build.sh Debug
+INSTALL=1 ./build.sh    # copy to ~/Library/Application Support/.../Grasshopper/Libraries/Motus
+```
+
+Output: `src/Motus.GH/bin/Release/net8.0/`
+
+The plugin multi-targets `net8.0-windows` (Rhino 8 Windows) and `net8.0` (Rhino 8 Mac) per [McNeel cross-platform guidance](https://developer.rhino3d.com/guides/rhinocommon/moving-to-dotnet-core/). Yak/Rhino pick the matching folder automatically when both are packaged.
+
+Copy to Grasshopper Libraries/Motus:
 
 - `Motus.GH.gha`
 - `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`
 - `resources/robots/`
 
-Verify: `./scripts/verify-install.ps1`
-
-Install to Grasshopper Libraries (Windows):
-
-```powershell
-./build.ps1 -Install
-```
-
-Copies to `%APPDATA%\Grasshopper\Libraries\Motus` (e.g. `C:\Users\...\AppData\Roaming\Grasshopper\Libraries\Motus`).
+Verify: `./scripts/verify-install.ps1` (Windows)
 
 Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-subcategory colors (Model teal, Plan sky, Collision orange, Preview purple, Export amber).
 
@@ -43,7 +50,8 @@ Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-sub
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
+| `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints (Windows) |
+| `Rhino8App` | `/Applications/Rhino 8.app` | RhinoCommon / Grasshopper hints (macOS) |
 | `MotusNetVersion` | `0.6.6` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
