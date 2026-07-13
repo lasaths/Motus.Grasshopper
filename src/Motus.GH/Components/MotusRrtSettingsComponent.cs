@@ -32,7 +32,7 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddIntegerParameter("MaxIter", "Mi", "Max sampling iterations", GH_ParamAccess.item, 4000);
-        p.AddNumberParameter("TimeLimit", "T", "Optional wall-clock cap in seconds (0 = off; planning stops at MaxIter)", GH_ParamAccess.item, 0);
+        p.AddNumberParameter("TimeLimit", "T", "Wall-clock cap in seconds (0 = off; planning stops at MaxIter)", GH_ParamAccess.item, 30);
         p.AddTextParameter("Planner", "P", "Sampling planner from registry", GH_ParamAccess.item, "RrtConnect");
         p.AddNumberParameter("GoalBias", "Gb", "Goal bias 0–1", GH_ParamAccess.item, 0.08);
         p.AddNumberParameter("Step", "St", "Tree step size (rad)", GH_ParamAccess.item, 0.12);

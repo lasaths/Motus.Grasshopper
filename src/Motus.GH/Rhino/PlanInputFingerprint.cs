@@ -1,7 +1,9 @@
 using Motus.Core;
 using Motus.OMPL.NET;
 using Rhino.Geometry;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Motus.GH.Rhino;
@@ -9,6 +11,13 @@ namespace Motus.GH.Rhino;
 /// <summary>Stable fingerprint of Motus Plan inputs for auto-replan detection.</summary>
 public static class PlanInputFingerprint
 {
+    private sealed class FingerprintBox(int value)
+    {
+        public int Value { get; } = value;
+    }
+
+    private static readonly ConditionalWeakTable<CollisionObject, FingerprintBox> CollisionFingerprints = new();
+
     public static string Compute(
         RobotModel model,
         Frame? baseFrameOverride,
@@ -119,25 +128,39 @@ public static class PlanInputFingerprint
         AppendFrame(sb, "pose", obj.Pose);
         sb.Append(obj.ExtentX.ToString("R", CultureInfo.InvariantCulture)).Append(',')
             .Append(obj.ExtentY.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-            .Append(obj.ExtentZ.ToString("R", CultureInfo.InvariantCulture)).Append('|');
-        if (obj.MeshVertices is { Count: > 0 } vertices)
-        {
-            sb.Append("mv:").Append(vertices.Count).Append('|');
-            foreach (var v in vertices)
-            {
-                sb.Append(v[0].ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                    .Append(v[1].ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                    .Append(v[2].ToString("R", CultureInfo.InvariantCulture)).Append(';');
-            }
-        }
-
-        if (obj.MeshIndices is { Count: > 0 } indices)
-        {
-            sb.Append("mi:").Append(indices.Count).Append('|');
-            foreach (var index in indices)
-                sb.Append(index).Append(',');
-        }
-
-        sb.Append('|');
+            .Append(obj.ExtentZ.ToString("R", CultureInfo.InvariantCulture)).Append('|')
+            .Append("mesh:").Append(CollisionFingerprint(obj)).Append('|');
     }
+
+    private static int CollisionFingerprint(CollisionObject obj) =>
+        CollisionFingerprints.GetValue(obj, static value =>
+        {
+            var hash = new HashCode();
+            hash.Add(value.Name, StringComparer.Ordinal);
+            hash.Add(value.Shape);
+            hash.Add(value.Pose.X);
+            hash.Add(value.Pose.Y);
+            hash.Add(value.Pose.Z);
+            hash.Add(value.Pose.Qw);
+            hash.Add(value.Pose.Qx);
+            hash.Add(value.Pose.Qy);
+            hash.Add(value.Pose.Qz);
+            hash.Add(value.ExtentX);
+            hash.Add(value.ExtentY);
+            hash.Add(value.ExtentZ);
+
+            if (value.MeshVertices is { } vertices)
+                foreach (var vertex in vertices)
+                {
+                    hash.Add(vertex[0]);
+                    hash.Add(vertex[1]);
+                    hash.Add(vertex[2]);
+                }
+
+            if (value.MeshIndices is { } indices)
+                foreach (var index in indices)
+                    hash.Add(index);
+
+            return new FingerprintBox(hash.ToHashCode());
+        }).Value;
 }
