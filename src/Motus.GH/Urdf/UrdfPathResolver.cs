@@ -10,6 +10,9 @@ internal static class UrdfPathResolver
     public static string ResolveUrdfPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return path;
+        if (IsRemotePath(path))
+            throw new ArgumentException("Remote asset paths are not supported.", nameof(path));
+
         if (ResolvedCache.TryGetValue(path, out var cached) && File.Exists(cached))
             return cached;
 
@@ -35,5 +38,17 @@ internal static class UrdfPathResolver
         }
 
         return path;
+    }
+
+    private static bool IsRemotePath(string path)
+    {
+        if (path.StartsWith(@"\\", StringComparison.Ordinal) ||
+            path.StartsWith("//", StringComparison.Ordinal))
+            return true;
+
+        return path.Contains("://", StringComparison.Ordinal) &&
+               Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
+               !uri.IsFile &&
+               !string.IsNullOrEmpty(uri.Scheme);
     }
 }

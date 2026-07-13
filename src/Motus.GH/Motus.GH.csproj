@@ -25,13 +25,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
-    <Reference Include="Grasshopper">
-      <HintPath>$(Rhino8Dir)\Plug-ins\Grasshopper\Grasshopper.dll</HintPath>
+    <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" Condition="'$(Rhino8CommonAssemblyPath)' == ''" />
+    <Reference Include="RhinoCommon" Condition="Exists('$(Rhino8CommonAssemblyPath)')">
+      <HintPath>$(Rhino8CommonAssemblyPath)</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="GH_IO">
-      <HintPath>$(Rhino8Dir)\Plug-ins\Grasshopper\GH_IO.dll</HintPath>
+    <Reference Include="Grasshopper" Condition="Exists('$(Rhino8GrasshopperDir)/Grasshopper.dll')">
+      <HintPath>$(Rhino8GrasshopperDir)/Grasshopper.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GH_IO" Condition="Exists('$(Rhino8GrasshopperDir)/GH_IO.dll')">
+      <HintPath>$(Rhino8GrasshopperDir)/GH_IO.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
@@ -47,10 +51,11 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <GrasshopperLibraryDir>$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))\Grasshopper\Libraries\Motus</GrasshopperLibraryDir>
+    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(Windows))">$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
+    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX))">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
   </PropertyGroup>
 
-  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(GrasshopperLibraryDir)' != ''">
     <MakeDir Directories="$(GrasshopperLibraryDir)" />
     <ItemGroup>
       <MotusDeployFiles Include="$(TargetDir)Motus*.gha" />

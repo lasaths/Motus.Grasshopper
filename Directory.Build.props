@@ -3,6 +3,12 @@
   <Import Project="$(MSBuildThisFileDirectory)build\MotusNetPackages.props" />
 
   <PropertyGroup>
-    <Rhino8Dir Condition="'$(Rhino8Dir)' == ''">C:\Program Files\Rhino 8</Rhino8Dir>
+    <Rhino8Dir Condition="'$(Rhino8Dir)' == '' and $([MSBuild]::IsOSPlatform(Windows))">C:\Program Files\Rhino 8</Rhino8Dir>
+    <Rhino8App Condition="'$(Rhino8App)' == '' and $([MSBuild]::IsOSPlatform(OSX))">/Applications/Rhino 8.app</Rhino8App>
+    <Rhino8CommonAssemblyPath Condition="'$(Rhino8CommonAssemblyPath)' == '' and $([MSBuild]::IsOSPlatform(Windows))">$(Rhino8Dir)/System/RhinoCommon.dll</Rhino8CommonAssemblyPath>
+    <Rhino8CommonAssemblyPath Condition="'$(Rhino8CommonAssemblyPath)' == '' and Exists('$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/RhinoCommon.dll')">$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/RhinoCommon.dll</Rhino8CommonAssemblyPath>
+    <Rhino8GrasshopperDir Condition="'$(Rhino8GrasshopperDir)' == '' and $([MSBuild]::IsOSPlatform(Windows))">$(Rhino8Dir)/Plug-ins/Grasshopper</Rhino8GrasshopperDir>
+    <Rhino8GrasshopperDir Condition="'$(Rhino8GrasshopperDir)' == '' and Exists('$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/ManagedPlugIns/GrasshopperPlugin.rhp')">$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/ManagedPlugIns/GrasshopperPlugin.rhp</Rhino8GrasshopperDir>
+    <Rhino8GrasshopperDir Condition="'$(Rhino8GrasshopperDir)' == '' and Exists('$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/ManagedPlugIns/Grasshopper')">$(Rhino8App)/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/ManagedPlugIns/Grasshopper</Rhino8GrasshopperDir>
   </PropertyGroup>
 </Project>

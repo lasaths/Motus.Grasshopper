@@ -13,5 +13,11 @@
     <None Include="..\..\resources\robots\ur10e_robotiq\**\*" Link="resources\robots\ur10e_robotiq\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\examples\ur10e\**\*" Link="examples\ur10e\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\resources\robots\ur10e_robotiq\meshes\**\*" Link="examples\ur10e\meshes\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

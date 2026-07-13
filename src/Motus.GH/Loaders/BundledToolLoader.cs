@@ -1,6 +1,7 @@
 using Motus.Core;
 using Motus.Geometry;
 using Motus.Presets;
+using Motus.GH.Urdf;
 
 namespace Motus.GH.Loaders;
 
@@ -54,8 +55,12 @@ internal static class BundledToolLoader
 
     private static string? ResolveRobotiqUrdfPath(string? urdfPath)
     {
-        if (!string.IsNullOrWhiteSpace(urdfPath) && File.Exists(urdfPath))
-            return Path.GetFullPath(urdfPath);
+        if (!string.IsNullOrWhiteSpace(urdfPath))
+        {
+            urdfPath = UrdfPathResolver.ResolveUrdfPath(urdfPath);
+            if (File.Exists(urdfPath))
+                return Path.GetFullPath(urdfPath);
+        }
 
         var bundled = ResolveBundledPath(Ur10eRobotiqUrdf);
         return File.Exists(bundled) ? bundled : urdfPath;
@@ -65,7 +70,11 @@ internal static class BundledToolLoader
     {
         yield return ResolveBundledPath(RobotiqStl);
 
-        if (string.IsNullOrWhiteSpace(urdfPath) || !File.Exists(urdfPath))
+        if (string.IsNullOrWhiteSpace(urdfPath))
+            yield break;
+
+        urdfPath = UrdfPathResolver.ResolveUrdfPath(urdfPath);
+        if (!File.Exists(urdfPath))
             yield break;
 
         var urdfDir = Path.GetDirectoryName(Path.GetFullPath(urdfPath));
