@@ -5,6 +5,7 @@ using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -34,7 +35,8 @@ internal static class PlanExecutor
     public static PlanExecutionResult Execute(
         PlanRequest request,
         CancellationToken cancellationToken,
-        Action<double>? reportProgress = null)
+        Action<double>? reportProgress = null,
+        PlanPhaseTimings? timings = null)
     {
         if (cancellationToken.IsCancellationRequested)
             return new PlanExecutionResult { Cancelled = true };
@@ -45,6 +47,22 @@ internal static class PlanExecutor
         var currentStart = request.Start;
         Trajectory? chained = null;
         var goalCount = Math.Max(1, request.Goals.Count);
+        timings?.GoalCount = request.Goals.Count;
+
+        var needsCollision = PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
+            || request.PlanningContext.Attached.Count > 0;
+        ICollisionChecker? sharedChecker = null;
+        if (needsCollision)
+        {
+            var checkerSw = Stopwatch.StartNew();
+            sharedChecker = GhExtract.TryCollisionChecker(
+                session,
+                request.Context.Chain,
+                request.PlanningContext.Scene,
+                request.PlanningContext.Attached);
+            if (timings is not null)
+                timings.CheckerBuildMs = checkerSw.ElapsedMilliseconds;
+        }
 
         for (var goalIndex = 0; goalIndex < request.Goals.Count; goalIndex++)
         {
@@ -60,8 +78,19 @@ internal static class PlanExecutor
                 : sub => reportProgress(spanStart + sub * spanSize);
 
             var goal = request.Goals[goalIndex];
-            var preflight = GhExtract.TryPreflightCollision(request.Context, request.PlanningContext, currentStart, goal);
+
+            var preflightSw = Stopwatch.StartNew();
+            var preflight = GhExtract.TryPreflightCollision(
+                request.Context,
+                request.PlanningContext,
+                currentStart,
+                goal,
+                sharedChecker);
+            if (timings is not null)
+                timings.PreflightMs += preflightSw.ElapsedMilliseconds;
+
             PlanningResult result;
+            var plannerSw = Stopwatch.StartNew();
             if (preflight is not null)
             {
                 result = preflight;
@@ -69,15 +98,17 @@ internal static class PlanExecutor
             else
             {
                 result = goal.plane is { } plane
-                    ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress)
-                    : PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene) || request.PlanningContext.Attached.Count > 0
-                        ? PlanRrt(request, currentStart, goal.joints!, cancellationToken, goalProgress)
+                    ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress, sharedChecker)
+                    : needsCollision
+                        ? PlanRrt(request, currentStart, goal.joints!, cancellationToken, goalProgress, sharedChecker)
                         : new JointLinearPlanner().Plan(new PlanningRequest(
                             session,
                             currentStart,
                             goal.joints!,
                             request.PlanningContext.ToPlanningOptions(new PlanningOptions { MaxJointStepRadians = MaxJointStep })));
             }
+            if (timings is not null)
+                timings.PlannerMs += plannerSw.ElapsedMilliseconds;
 
             results.Add(result);
             reportProgress?.Invoke(spanStart + spanSize);
@@ -133,7 +164,8 @@ internal static class PlanExecutor
         JointState start,
         Plane plane,
         CancellationToken cancellationToken,
-        Action<double>? goalProgress)
+        Action<double>? goalProgress,
+        ICollisionChecker? sharedChecker)
     {
         goalProgress?.Invoke(0.1);
 
@@ -155,9 +187,7 @@ internal static class PlanExecutor
         goalProgress?.Invoke(0.25);
 
         var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
-        ICollisionChecker? checker = needsCollision
-            ? GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached)
-            : null;
+        ICollisionChecker? checker = needsCollision ? sharedChecker : null;
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
@@ -220,12 +250,17 @@ internal static class PlanExecutor
         JointState start,
         JointState goal,
         CancellationToken cancellationToken,
-        Action<double>? goalProgress)
+        Action<double>? goalProgress,
+        ICollisionChecker? sharedChecker)
     {
         var ctx = request.Context;
         var planningContext = request.PlanningContext;
         var session = ctx.EffectiveModel;
-        var checker = GhExtract.TryCollisionChecker(session, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        var checker = sharedChecker ?? GhExtract.TryCollisionChecker(
+            session,
+            ctx.Chain,
+            planningContext.Scene,
+            planningContext.Attached);
         if (checker is null)
             return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
 

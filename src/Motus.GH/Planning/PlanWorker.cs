@@ -9,13 +9,14 @@ using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Threading;
 
 namespace Motus.GH.Planning;
 
-internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
+internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloadedInputs
 {
     private readonly MotusPlanComponent _owner;
 
@@ -39,78 +40,67 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
 
     public PlanExecutionResult? Result { get; private set; }
     public List<string> RuntimeRemarks { get; } = [];
+    public PlanPhaseTimings Timings { get; } = new();
+
+    private bool _resultsCommitted;
+    private bool _inputsReady;
+    private List<TrajectoryGoo>? _cachedGoos;
 
     public PlanWorker(MotusPlanComponent owner) => _owner = owner;
 
     public override WorkerInstance Duplicate() => new PlanWorker(_owner);
+
+    public void ApplySnapshot(object snapshot)
+    {
+        if (snapshot is not PlanInputSnapshot snap)
+            return;
+
+        ApplySnapshot(snap);
+    }
+
+    private void ApplySnapshot(PlanInputSnapshot snap)
+    {
+        Context = snap.Context;
+        Goals.Clear();
+        Goals.AddRange(snap.Goals);
+        Start = snap.Start;
+        PlanningContext = snap.PlanningContext;
+        LinStepMeters = snap.LinStepMeters;
+        RrtSettings = snap.RrtSettings;
+        CollisionInputWired = snap.CollisionInputWired;
+        Fingerprint = snap.Fingerprint;
+        IsAutoPlan = snap.IsAutoPlan;
+        Chain = snap.Chain;
+        PreviewGeometry = snap.PreviewGeometry;
+        PreviewMeshColors = snap.PreviewMeshColors;
+        BaseFrameOverride = snap.BaseFrameOverride;
+        ToolSnapshot = snap.ToolSnapshot;
+        _inputsReady = true;
+    }
 
     public override void GetData(IGH_DataAccess da, GH_ComponentParamServer parameters)
     {
         SkipWork = false;
         Result = null;
         RuntimeRemarks.Clear();
+        _resultsCommitted = false;
+        _cachedGoos = null;
+
+        if (_inputsReady)
+        {
+            _inputsReady = false;
+            return;
+        }
+
         Goals.Clear();
 
-        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo))
+        if (!PlanInputSnapshot.TryCollect(da, _owner, out var snapshot) || snapshot is null)
         {
             SkipWork = true;
             return;
         }
 
-        robotGoo.EnsureBundledTool();
-        Context = RobotContext.FromGoo(robotGoo);
-        Chain = robotGoo.Chain;
-        PreviewGeometry = robotGoo.EffectivePreviewGeometry();
-        PreviewMeshColors = robotGoo.PreviewMeshColors;
-        BaseFrameOverride = robotGoo.BaseFrameOverride;
-        ToolSnapshot = robotGoo.Tool;
-
-        if (!GhExtract.TryGoals(da, 1, out var goals, out _))
-        {
-            SkipWork = true;
-            return;
-        }
-
-        Goals.AddRange(goals);
-        Start = GhExtract.StartOrHome(da, 2, Context.Model);
-        LinStepMeters = MotusPlanComponent.DefaultLinStepMeters;
-        var stepInput = LinStepMeters;
-        if (da.GetData(3, ref stepInput))
-            LinStepMeters = stepInput;
-
-        var collisionParse = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
-        if (collisionParse.Error is not null)
-        {
-            SkipWork = true;
-            return;
-        }
-
-        PlanningContext = GhExtract.BuildPlanningContext(
-            Context.EffectiveModel,
-            da,
-            MotusPlanInputs.Collision,
-            MotusPlanInputs.Group,
-            MotusPlanInputs.Attach,
-            collisionParse.Scene);
-        CollisionInputWired = collisionParse.Wired;
-        RrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings);
-        IsAutoPlan = _owner.AutoPlanEnabled;
-
-        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext);
-        var fingerprintRrt = needsSampling ? RrtSettings : RrtPlanSettings.Defaults;
-        Fingerprint = PlanInputFingerprint.Compute(
-            Context.Model,
-            BaseFrameOverride,
-            ToolSnapshot,
-            Goals,
-            Start,
-            PlanningContext,
-            LinStepMeters,
-            fingerprintRrt.PlannerId,
-            fingerprintRrt.MaxIterations,
-            fingerprintRrt.MaxPlanTimeSeconds,
-            fingerprintRrt.GoalBias,
-            fingerprintRrt.StepRadians);
+        ApplySnapshot(snapshot);
     }
 
     public override void DoWork(Action<string, double> reportProgress, Action done)
@@ -162,7 +152,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
         {
             Report(0);
             var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings);
-            Result = PlanExecutor.Execute(request, CancellationToken, Report);
+            Result = PlanExecutor.Execute(request, CancellationToken, Report, Timings);
             Report(1);
 
             if (Result.Cancelled)
@@ -180,6 +170,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
                 }
             }
 
+            RuntimeRemarks.Add(Timings.FormatSummary());
             CompletionMessage = Result.Results.All(r => r.Success) ? "Done" : "Failed";
         }
         finally
@@ -193,19 +184,25 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
         if (Result is null || Result.Cancelled)
             return;
 
-        var goos = BuildTrajectoryGoos();
+        var goos = EnsureCachedGoos();
         CommitCachedResults();
         WriteOutputs(da, Result.Results, goos, IsAutoPlan);
     }
 
     public override void CommitCachedResults()
     {
-        if (Result is null || Result.Cancelled)
+        if (Result is null || Result.Cancelled || _resultsCommitted)
             return;
 
-        var goos = BuildTrajectoryGoos();
+        var sw = Stopwatch.StartNew();
+        var goos = EnsureCachedGoos();
         _owner.ApplyWorkerResult(Fingerprint, Result.Results, goos, IsAutoPlan, RuntimeRemarks);
+        Timings.CommitMs = sw.ElapsedMilliseconds;
+        _resultsCommitted = true;
     }
+
+    private List<TrajectoryGoo> EnsureCachedGoos() =>
+        _cachedGoos ??= BuildTrajectoryGoos();
 
     private List<TrajectoryGoo> BuildTrajectoryGoos()
     {

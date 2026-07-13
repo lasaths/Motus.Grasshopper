@@ -444,12 +444,13 @@ internal static class GhExtract
         RobotContext ctx,
         PlanningContext planningContext,
         JointState start,
-        (JointState? joints, Plane? plane) goal)
+        (JointState? joints, Plane? plane) goal,
+        ICollisionChecker? checker = null)
     {
         if (!PlanningCollision.SceneHasObstacles(planningContext.Scene) && planningContext.Attached.Count == 0)
             return null;
 
-        var checker = TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        checker ??= TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
         if (checker is null)
             return null;
 

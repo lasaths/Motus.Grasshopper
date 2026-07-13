@@ -27,6 +27,8 @@ public abstract class GH_AsyncComponent : GH_Component
     private bool _setDataExpireScheduled;
     private bool _documentIsSolving;
     private bool _setDataSolutionPending;
+    private bool _workersCommitted;
+    private object? _workerInputSnapshot;
 
     protected GH_AsyncComponent(string name, string nickname, string description, string category, string subCategory)
         : base(name, nickname, description, category, subCategory)
@@ -84,7 +86,13 @@ public abstract class GH_AsyncComponent : GH_Component
             EmitSetDataSolutionNow();
     }
 
-    protected void LaunchWorker(IGH_DataAccess da) => CollectWorker(da);
+    protected void LaunchWorker(IGH_DataAccess da) => LaunchWorker(da, null);
+
+    protected void LaunchWorker(IGH_DataAccess da, object? inputSnapshot)
+    {
+        _workerInputSnapshot = inputSnapshot;
+        CollectWorker(da);
+    }
 
     protected override void BeforeSolveInstance()
     {
@@ -155,6 +163,10 @@ public abstract class GH_AsyncComponent : GH_Component
         }
 
         var currentWorker = BaseWorker.Duplicate();
+        if (_workerInputSnapshot is not null && currentWorker is IWorkerPreloadedInputs preload)
+            preload.ApplySnapshot(_workerInputSnapshot);
+        _workerInputSnapshot = null;
+
         try
         {
             currentWorker.GetData(da, Params);
@@ -310,9 +322,10 @@ public abstract class GH_AsyncComponent : GH_Component
         List<WorkerInstance> workers;
         lock (_lifecycleLock)
         {
-            if (!_isReadyToSetData)
+            if (!_isReadyToSetData || _workersCommitted)
                 return;
             workers = Workers.ToList();
+            _workersCommitted = true;
         }
 
         foreach (var worker in workers)
@@ -334,7 +347,8 @@ public abstract class GH_AsyncComponent : GH_Component
             return;
 
         _setDataSolutionPending = false;
-        CommitWorkerCachedResults();
+        if (!_workersCommitted)
+            CommitWorkerCachedResults();
         ExpireSolution(false);
         doc.NewSolution(false);
     }
@@ -375,6 +389,7 @@ public abstract class GH_AsyncComponent : GH_Component
             _isReadyToSetData = false;
             _setDataExpireScheduled = false;
             _setDataSolutionPending = false;
+            _workersCommitted = false;
             _runId++;
         }
 
@@ -409,6 +424,7 @@ public abstract class GH_AsyncComponent : GH_Component
             _isReadyToSetData = false;
             _setDataExpireScheduled = false;
             _setDataSolutionPending = false;
+            _workersCommitted = false;
         }
 
         Message = string.IsNullOrEmpty(message) ? string.Empty : message;

@@ -3,6 +3,7 @@ using Motus.Geometry;
 using Motus.OMPL.NET;
 using Motus.Presets;
 using Motus.GH.Rhino;
+using Motus.GH.Planning;
 using Rhino.Geometry;
 using System.Xml.Linq;
 using System.Text.Json;
@@ -574,6 +575,22 @@ var fpMeshB = PlanInputFingerprint.Compute(urRobot, null, null, fpGoals, start,
     PlanningContext.Create(urRobot, new CollisionScene(new[] { meshB })));
 if (fpMeshA == fpMeshB) Fail("Mesh geometry edit should change fingerprint");
 Ok("Plan input fingerprint is stable and sensitive to edits");
+
+// Plan phase timing summary formatting
+{
+    var timings = new PlanPhaseTimings
+    {
+        CheckerBuildMs = 12,
+        PreflightMs = 3,
+        PlannerMs = 450,
+        CommitMs = 2,
+        GoalCount = 2
+    };
+    var summary = timings.FormatSummary();
+    if (!summary.Contains("checker=12") || !summary.Contains("goals=2"))
+        Fail("Plan phase timing summary should include checker and goal counts");
+    Ok("Plan phase timing summary formats profiling fields");
+}
 
 // Tool definition: TCP offset + collision parity + export metadata
 var customTool = new ToolDefinition(

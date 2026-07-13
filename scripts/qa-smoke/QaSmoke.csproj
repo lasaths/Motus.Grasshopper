@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\src\Motus.GH\Rhino\**\*.cs" Link="Rhino\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Motus.GH\Planning\PlanPhaseTimings.cs" Link="Planning\PlanPhaseTimings.cs" />
     <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" />
   </ItemGroup>
   <ItemGroup>

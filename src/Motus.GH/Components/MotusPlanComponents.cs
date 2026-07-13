@@ -116,13 +116,12 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             return;
         }
 
-        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo))
+        if (!GhExtract.TryRobotGoo(da, 0, out _))
         {
             InvalidateCachedPlan();
             return;
         }
 
-        var ctx = RobotContext.FromGoo(robotGoo);
         if (!GhExtract.TryGoals(da, 1, out var goals, out var goalErrors))
         {
             InvalidateCachedPlan();
@@ -134,8 +133,6 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             return;
         }
 
-        var start = GhExtract.StartOrHome(da, 2, ctx.Model);
-        var linStep = DefaultLinStepMeters;
         var stepInput = DefaultLinStepMeters;
         if (da.GetData(3, ref stepInput))
         {
@@ -146,8 +143,6 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
                 EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Step input (must be positive).");
                 return;
             }
-
-            linStep = stepInput;
         }
 
         var collision = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
@@ -161,35 +156,20 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         else if (collision.Warning is not null)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
-        var rrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings, this);
+        if (!PlanInputSnapshot.TryCollect(da, this, out var snapshot) || snapshot is null)
+        {
+            InvalidateCachedPlan();
+            return;
+        }
 
-        var planningContext = GhExtract.BuildPlanningContext(
-            ctx.EffectiveModel,
-            da,
-            MotusPlanInputs.Collision,
-            MotusPlanInputs.Group,
-            MotusPlanInputs.Attach,
-            collision.Scene);
-        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(goals, planningContext);
-        var fingerprintRrt = needsSampling ? rrtSettings : RrtPlanSettings.Defaults;
-        var fingerprint = PlanInputFingerprint.Compute(
-            ctx.Model,
-            robotGoo.BaseFrameOverride,
-            robotGoo.Tool,
-            goals,
-            start,
-            planningContext,
-            linStep,
-            fingerprintRrt.PlannerId,
-            fingerprintRrt.MaxIterations,
-            fingerprintRrt.MaxPlanTimeSeconds,
-            fingerprintRrt.GoalBias,
-            fingerprintRrt.StepRadians);
+        var fingerprint = snapshot.Fingerprint;
+        var planningContext = snapshot.PlanningContext;
+        var rrtSettings = snapshot.RrtSettings;
 
         if (IsOperationInProgress && _activeWorkerFingerprint is not null && _activeWorkerFingerprint != fingerprint)
             RequestCancellation();
 
-        var collisionInputWired = IsCollisionPortWired();
+        var collisionInputWired = snapshot.CollisionInputWired;
         var activity = GhExtract.DescribePlanningActivity(goals, planningContext, collisionInputWired, rrtSettings);
 
         var planNow = _run;
@@ -216,7 +196,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         Message = "Planning…";
         OnDisplayExpired(true);
         // Collect inputs before writing outputs — GH data access may not allow reads after SetData.
-        LaunchWorker(da);
+        LaunchWorker(da, snapshot);
         EmitOutputs(da, GhExtract.PlanStatusKind.Planning, activity);
     }
 
@@ -234,6 +214,12 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         ReportPlanningFailures(_cached);
         foreach (var remark in remarks)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, remark);
+    }
+
+    internal void ReportCachedFailuresIfNeeded()
+    {
+        if (_cached is not null)
+            ReportPlanningFailures(_cached);
     }
 
     private bool ShouldStartPlanning(string fingerprint, bool planNow)
@@ -302,7 +288,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         if (emitCache)
         {
             if (statusKind != GhExtract.PlanStatusKind.Planning && _cached is not null)
-                ReportPlanningFailures(_cached);
+                ReportCachedFailuresIfNeeded();
 
             if (_cachedGoos is { Count: > 0 })
                 da.SetDataList(0, _cachedGoos);
