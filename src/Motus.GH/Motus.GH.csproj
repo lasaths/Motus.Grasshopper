@@ -5,10 +5,10 @@
     <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.6.4</Version>
-    <AssemblyVersion>0.6.4.0</AssemblyVersion>
-    <FileVersion>0.6.4.0</FileVersion>
-    <InformationalVersion>0.6.4</InformationalVersion>
+    <Version>0.6.6</Version>
+    <AssemblyVersion>0.6.6.0</AssemblyVersion>
+    <FileVersion>0.6.6.0</FileVersion>
+    <InformationalVersion>0.6.6</InformationalVersion>
     <TargetExt>.gha</TargetExt>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -75,7 +75,7 @@
 
   <PropertyGroup>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(Windows))">$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
-    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX))">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
+    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX))">$(MacGrasshopperLibrariesRoot)/Motus</GrasshopperLibraryDir>
     <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(Windows))">net8.0-windows</MotusDeployTfm>
     <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(OSX))">net8.0</MotusDeployTfm>
   </PropertyGroup>

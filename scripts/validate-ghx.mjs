@@ -35,6 +35,7 @@ const MOTUS_COMPONENTS = new Map([
   ['a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'Motus Tool State'],
   ['b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', 'Motus Tool'],
   ['c3d4e5f6-a7b8-4901-c234-56789abcdef2', 'Motus Load Mesh'],
+  ['11d59b15-ffe2-488e-83b8-52eddf772025', 'Motus RRT Settings'],
 ]);
 
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';

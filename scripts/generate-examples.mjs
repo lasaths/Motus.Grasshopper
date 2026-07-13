@@ -11,6 +11,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, '../examples');
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';
+const csproj = fs.readFileSync(path.resolve(__dirname, '../src/Motus.GH/Motus.GH.csproj'), 'utf8');
+const props = fs.readFileSync(path.resolve(__dirname, '../build/MotusNetPackages.props'), 'utf8');
+const MOTUS_NET_VERSION = props.match(/<MotusNetVersion[^>]*>([^<]+)<\/MotusNetVersion>/)?.[1]?.trim() ?? '0.6.6';
+const PLUGIN_VERSION = csproj.match(/<Version>([^<]+)<\/Version>/)?.[1] ?? MOTUS_NET_VERSION;
+const PLUGIN_ASSEMBLY_VERSION = `${PLUGIN_VERSION}.0`;
 
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
@@ -57,23 +62,24 @@ const MOTUS = {
       { name: 'State', nick: 'S', desc: 'Joint state', optional: false },
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
-  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 152,
-    desc: 'Plan to plane/joint goal; optional Collision, Group, and Attach inputs (click Plan)',
+  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 172,
+    desc: 'Plan to plane/joint goal; optional Collision, Group, Attach, and RrtSettings (click Plan or enable Auto Plan)',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
       { name: 'Start', nick: 'S', desc: 'Optional start joint state (defaults to home)', optional: true },
       { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005 },
-      { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT-Connect; plane goals validate LIN against scene', optional: true },
+      { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT; plane goals validate LIN against scene', optional: true },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
       { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1 },
+      { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true },
     ],
     outputs: [
       { name: 'Trajectory', nick: 'T', desc: 'Planned trajectories' },
       { name: 'Status', nick: 'St', desc: 'Planning status' },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
-  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 64,
+  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 104,
     inputs: [
       { name: 'Trajectory', nick: 'T', desc: 'Motus trajectory from Motus Plan', optional: false },
       { name: 'ShowStart', nick: 'S', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false },
@@ -87,20 +93,37 @@ const MOTUS = {
       { name: 'Time', nick: 'Tm', desc: 'Elapsed trajectory time at current frame (seconds)' },
       { name: 'Index', nick: 'I', desc: 'Current waypoint index (0-based)' },
       { name: 'Invalid', nick: 'X', desc: 'Invalid TCP segments (joint/velocity/acceleration limits)', access: 1 },
+      { name: 'ToolState', nick: 'Ts', desc: 'Tool state at the current frame', optional: true },
+      { name: 'Width', nick: 'W', desc: 'Gripper width (m) at playhead when present', optional: true },
     ] },
-  export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 44,
-    inputs: [{ name: 'Trajectory', nick: 'T', desc: 'Motus trajectory', optional: false }],
+  export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 84,
+    inputs: [
+      { name: 'Trajectory', nick: 'T', desc: 'Motus trajectory', optional: false },
+      { name: 'Retime', nick: 'R', desc: 'Apply bottleneck path retiming before export', optional: true, bool: true },
+      { name: 'Validate', nick: 'V', desc: 'Validate limits/velocity after retiming', optional: true, bool: false },
+    ],
     outputs: [
       { name: 'Json', nick: 'J', desc: 'Trajectory JSON' },
       { name: 'Csv', nick: 'C', desc: 'Trajectory CSV' },
+      { name: 'Validation', nick: 'Val', desc: 'Validation summary when Validate=true', optional: true },
     ] },
-  trajData: { guid: 'a72b5cfa-5cf5-4e54-a5cd-943e2aae82da', name: 'Motus Trajectory Data', nick: 'TrajData', w: 74, h: 64,
+  trajData: { guid: 'a72b5cfa-5cf5-4e54-a5cd-943e2aae82da', name: 'Motus Trajectory Data', nick: 'Data', w: 74, h: 84,
     inputs: [{ name: 'Trajectory', nick: 'T', desc: 'Motus trajectory', optional: false }],
     outputs: [
       { name: 'Planes', nick: 'P', desc: 'TCP plane per waypoint' },
       { name: 'Times', nick: 'Tm', desc: 'Waypoint times (seconds)' },
       { name: 'Joints', nick: 'J', desc: 'Per-axis joint values', access: 1 },
+      { name: 'ToolStates', nick: 'Ts', desc: 'Tool state JSON per waypoint', optional: true },
     ] },
+  rrtSettings: { guid: '11d59b15-ffe2-488e-83b8-52eddf772025', name: 'Motus RRT Settings', nick: 'RrtSet', w: 74, h: 104,
+    inputs: [
+      { name: 'MaxIter', nick: 'Mi', desc: 'Max sampling iterations', optional: false, number: 4000 },
+      { name: 'TimeLimit', nick: 'T', desc: 'Wall-clock cap in seconds (0 = off)', optional: false, number: 30 },
+      { name: 'Planner', nick: 'P', desc: 'Sampling planner from registry', optional: false, text: 'RrtConnect' },
+      { name: 'GoalBias', nick: 'Gb', desc: 'Goal bias 0–1', optional: false, number: 0.08 },
+      { name: 'Step', nick: 'St', desc: 'Tree step size (rad)', optional: false, number: 0.12 },
+    ],
+    outputs: [{ name: 'Settings', nick: 'S', desc: 'Sampling planner settings for Motus Plan' }] },
   colSphere: { guid: 'c1a2b3c4-d5e6-4789-a012-3456789abcde', name: 'Motus Collision Sphere', nick: 'ColSph', w: 74, h: 64,
     inputs: [
       { name: 'Center', nick: 'C', desc: 'Sphere center', optional: false, point: [0.35, 0.15, 0.35] },
@@ -881,12 +904,12 @@ function buildGraph(objects) {
             </chunk>
             <chunk name="Library" index="1">
               <items count="6">
-                ${item('AssemblyFullName', 'gh_string', '10', 'Motus.GH, Version=0.6.0.0, Culture=neutral, PublicKeyToken=null')}
-                ${item('AssemblyVersion', 'gh_string', '10', '0.6.0.0')}
+                ${item('AssemblyFullName', 'gh_string', '10', `Motus.GH, Version=${PLUGIN_ASSEMBLY_VERSION}, Culture=neutral, PublicKeyToken=null`)}
+                ${item('AssemblyVersion', 'gh_string', '10', PLUGIN_ASSEMBLY_VERSION)}
                 ${item('Author', 'gh_string', '10', 'Motus')}
                 ${item('Id', 'gh_guid', '9', MOTUS_LIB)}
                 ${item('Name', 'gh_string', '10', 'Motus')}
-                ${item('Version', 'gh_string', '10', '0.6.0')}
+                ${item('Version', 'gh_string', '10', PLUGIN_VERSION)}
               </items>
             </chunk>
           </chunks>
@@ -933,7 +956,7 @@ function graph01() {
 
 function graph02() {
   const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 220, { Robot: [outRef(robot.node, 'Robot')] }, { jointValues: GOAL_JOINTS });
+  const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
   const tcp = motusComponent('tcpPose', 300, 140, {
     Robot: [outRef(robot.node, 'Robot')],
     State: [outRef(joints.node, 'State')],
@@ -956,16 +979,18 @@ function graph03() {
   const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
   const sphere = motusComponent('colSphere', 140, 380, {});
   const scene = motusComponent('colScene', 300, 380, { Objects: [outRef(sphere.node, 'Object')] });
+  const rrt = motusComponent('rrtSettings', 300, 500, {});
   const plan = motusComponent('plan', 480, 180, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(joints.node, 'State')],
     Collision: [outRef(scene.node, 'Scene')],
+    RrtSettings: [outRef(rrt.node, 'Settings')],
   });
   const { scrub, preview } = previewWithScrub(680, 160, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, joints, sphere, scene, plan, scrub, preview];
+  const objs = [robot, joints, sphere, scene, rrt, plan, scrub, preview];
   objs._meta = {
     fileName: '03_collision_rrt.ghx',
-    description: 'Collision-aware RRT: ColSphere -> ColScene -> Plan.Collision with joint goal. Click Plan, then drag Motus Scrub or Play.',
+    description: 'Collision-aware RRT: ColSphere -> ColScene -> Plan.Collision with Motus RRT Settings on joint goal. Click Plan, then drag Motus Scrub or Play.',
   };
   return buildGraph(objs);
 }
@@ -1048,9 +1073,7 @@ function graph06() {
     Goal: [outRef(goalJoints.node, 'State')],
     Start: [outRef(startJoints.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(618, 110, outRef(plan.node, 'Trajectory'), {
-    inputs: { Robot: [outRef(robot.node, 'Robot')] },
-  });
+  const { scrub, preview } = previewWithScrub(618, 110, outRef(plan.node, 'Trajectory'));
   const objs = [robot, plan, scrub, preview, urdfFile, startJoints, goalPanel, goalJoints, startPanel];
   objs._meta = {
     fileName: '06_urdf_load.ghx',
