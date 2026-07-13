@@ -14,7 +14,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         : base(
             "Motus Motion Segment",
             "Segment",
-            "Build PTP, LIN, CIRC, SET, or WAIT motion segments. Optional ToolState on arm segments.",
+            "Build declarative PTP/LIN/CIRC/SET/WAIT planner segments (execution hints only; no robot commands). Optional ToolState on arm segments.",
             "Plan",
             "line-segments") { }
 
@@ -33,9 +33,9 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("ToolMode", "Tm", "Hold, Ramp, or Instant (arm segments)", GH_ParamAccess.item, "Hold");
+        p.AddTextParameter("ToolMode", "Tm", "Hold, Ramp, or Instant interpolation hint (arm segments)", GH_ParamAccess.item, "Hold");
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Duration", "D", "SET/WAIT duration (s); SET ramp time when > 0", GH_ParamAccess.item, 0);
+        p.AddNumberParameter("Duration", "D", "SET/WAIT timing hint (s); SET ramp time when > 0", GH_ParamAccess.item, 0);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -386,7 +386,12 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 PreviewMeshColors = robotGoo.PreviewMeshColors,
                 BaseFrameOverride = robotGoo.BaseFrameOverride,
                 ToolSnapshot = robotGoo.Tool,
-                ToolCapabilitiesSnapshot = toolCaps
+                ToolCapabilitiesSnapshot = toolCaps,
+                DiagnosticsSnapshot = _cached.Messages,
+                ProvenanceSnapshot = new PlannerProvenance
+                {
+                    PlannerId = "industrial-motion-program"
+                }
             };
             da.SetData(0, _cachedGoo);
         }

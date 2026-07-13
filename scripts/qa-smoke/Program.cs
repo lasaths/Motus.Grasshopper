@@ -5,6 +5,7 @@ using Motus.Presets;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System.Xml.Linq;
+using System.Text.Json;
 
 static void Fail(string msg) => throw new InvalidOperationException(msg);
 static void Ok(string msg) => Console.WriteLine($"  OK: {msg}");
@@ -160,6 +161,18 @@ Ok("Out-of-limit joint → Validate returns Valid=false");
 var traj = jointResult.Trajectory!;
 var json = TrajectoryExport.ToJson(traj);
 if (string.IsNullOrWhiteSpace(json) || !json.Contains("joint")) Fail("JSON export empty");
+using (var doc = JsonDocument.Parse(json))
+{
+    var root = doc.RootElement;
+    if (!root.TryGetProperty("contractVersion", out _))
+        Fail("JSON export missing contractVersion");
+    if (!root.TryGetProperty("units", out var units) || !units.TryGetProperty("jointAngles", out _))
+        Fail("JSON export missing units metadata");
+    if (!root.TryGetProperty("frameConvention", out _))
+        Fail("JSON export missing frameConvention metadata");
+    if (!root.TryGetProperty("points", out var points) || points.ValueKind != JsonValueKind.Array || points.GetArrayLength() == 0)
+        Fail("JSON export points missing/empty");
+}
 var csv = TrajectoryExport.ToCsv(traj);
 if (!csv.StartsWith("time_seconds,joint_1_rad,")) Fail($"CSV header wrong: {csv.Split('\n')[0]}");
 Ok("JSON export parses; CSV header is time_seconds,joint_1_rad,...");
@@ -181,6 +194,11 @@ Ok("Joint-linear fails loudly without collision checker");
 // Retimed export (bottleneck default)
 var retimedJson = TrajectoryExport.ToJson(traj, retime: true);
 if (!retimedJson.Contains("\"retimed\": true")) Fail("Retimed JSON export missing retimed flag");
+using (var retimedDoc = JsonDocument.Parse(retimedJson))
+{
+    if (!retimedDoc.RootElement.TryGetProperty("retimed", out var retimedFlag) || !retimedFlag.GetBoolean())
+        Fail("Retimed JSON should have retimed=true");
+}
 var retimed = TrajectoryExport.Prepare(traj, new TrajectoryExportOptions { Retime = true });
 if (retimed.Points.Count < 2) Fail("Bottleneck retime produced too few points");
 Ok("Trajectory bottleneck retiming before JSON export");

@@ -381,7 +381,9 @@ public sealed class MotusExportComponent : MotusComponentBase
             Retime = retime,
             Validate = validate,
             SessionToolFrame = ctx.Tool,
-            ToolCapabilities = trajGoo.ToolCapabilitiesSnapshot
+            ToolCapabilities = trajGoo.ToolCapabilitiesSnapshot,
+            Diagnostics = trajGoo.DiagnosticsSnapshot,
+            Provenance = trajGoo.ProvenanceSnapshot
         });
         da.SetData(0, result.Json);
         da.SetData(1, result.Csv);

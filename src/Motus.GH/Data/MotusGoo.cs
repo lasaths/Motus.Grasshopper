@@ -48,6 +48,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public Frame? BaseFrameOverride { get; set; }
     public ToolDefinition? ToolSnapshot { get; set; }
     public ToolCapabilities? ToolCapabilitiesSnapshot { get; set; }
+    public IReadOnlyList<PlanningMessage>? DiagnosticsSnapshot { get; set; }
+    public PlannerProvenance? ProvenanceSnapshot { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }

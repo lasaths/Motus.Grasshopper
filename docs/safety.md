@@ -17,6 +17,7 @@ If you connect Motus exports to UR.RTDE.Grasshopper, VirtualRobot, Robots, or cu
 - You are responsible for safe speeds, workspace limits, and e-stop readiness
 - Always verify trajectories in simulation or reduced speed first
 - Preset joint limits may not match your controller configuration
+- `SET` / `WAIT` / `ToolMode` and tool-state fields are planner metadata hints; execution plugins decide how (or if) to map them to robot commands
 
 ## No silent failures
 

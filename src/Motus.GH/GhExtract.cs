@@ -298,7 +298,7 @@ internal static class GhExtract
         var failedDetails = results
             .Select((result, index) => (result, index))
             .Where(x => !x.result.Success)
-            .Select(x => $"Goal[{x.index}]: {(x.result.Errors.Count > 0 ? string.Join("; ", x.result.Errors) : "Failed.")}");
+            .Select(x => $"Goal[{x.index}]: {FormatFailure(x.result)}");
         return $"Success {successCount}/{results.Count}{suffix} {string.Join(" | ", failedDetails)}";
     }
 
@@ -310,7 +310,7 @@ internal static class GhExtract
         var warnings = new List<string>();
         foreach (var pair in results.Select((result, index) => (result, index)))
         {
-            foreach (var warning in pair.result.Warnings)
+            foreach (var warning in ExtractWarnings(pair.result))
                 warnings.Add($"Goal[{pair.index}]: {warning}");
         }
 
@@ -379,11 +379,31 @@ internal static class GhExtract
 
     public static List<string> BuildProgramWarnings(PlanningResult result)
     {
-        var warnings = result.Warnings.ToList();
+        var warnings = ExtractWarnings(result).ToList();
         var capabilities = MotusCapabilities.Describe();
         if (!warnings.Any(w => string.Equals(w, capabilities, StringComparison.OrdinalIgnoreCase)))
             warnings.Add(capabilities);
         return warnings;
+    }
+
+    private static string FormatFailure(PlanningResult result)
+    {
+        var codedErrors = result.Messages
+            .Where(m => m.Severity == PlanningMessageSeverity.Error)
+            .Select(m => $"{m.Code}: {m.Message}")
+            .ToList();
+        if (codedErrors.Count > 0)
+            return string.Join("; ", codedErrors);
+        return result.Errors.Count > 0 ? string.Join("; ", result.Errors) : "Failed.";
+    }
+
+    private static IEnumerable<string> ExtractWarnings(PlanningResult result)
+    {
+        var codedWarnings = result.Messages
+            .Where(m => m.Severity == PlanningMessageSeverity.Warning)
+            .Select(m => $"{m.Code}: {m.Message}")
+            .ToList();
+        return codedWarnings.Count > 0 ? codedWarnings : result.Warnings;
     }
 
     public static PlanningOptions BuildOptions(

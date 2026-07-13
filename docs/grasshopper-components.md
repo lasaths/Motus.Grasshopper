@@ -46,7 +46,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 |-----------|-------|
 | Motus Plan | One planner for all goals. Click **Plan** to compute, or enable **Auto Plan** from the right-click menu. |
 | Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). |
-| Motus Motion Segment | Build a single PTP, LIN, or CIRC segment (`MotionSegmentGoo`). |
+| Motus Motion Segment | Build a single PTP/LIN/CIRC/SET/WAIT declarative segment (`MotionSegmentGoo`, execution hint only). |
 | Motus Program Plan | Plan a mixed segment list via `IndustrialMotionPlanner` (click **Plan**). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
 | Motus Attach Body | Build an attached body from a collision object in TCP-local frame. |
@@ -121,7 +121,7 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 | SET | `ToolState` | `Duration` (s ramp; 0 = instant) |
 | WAIT | `Duration` (s) | — |
 
-**ToolMode** on arm segments: `Hold` (unchanged), `Ramp` (interpolate to `ToolState` over segment), `Instant` (step at segment start).
+**ToolMode** on arm segments: `Hold` (unchanged), `Ramp` (interpolate to `ToolState` over segment), `Instant` (step at segment start). These are execution hints for downstream adapters; Motus does not command hardware.
 
 Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/11_gripper_motion_program.ghx`).
 
@@ -129,7 +129,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 
 `Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Gripper mesh preview morphs with jaw width when tool capabilities are present.
 
-`Motus Trajectory Data` adds **ToolStates** (JSON per waypoint) when present. **Motus Export** JSON includes `toolState` and `toolCapabilities` header fields.
+`Motus Trajectory Data` adds **ToolStates** (JSON per waypoint) when present. **Motus Export** JSON includes `contractVersion`, `diagnostics`, optional `provenance`, and tool metadata (`toolState`, `toolCapabilities`) for downstream consumers.
 
 ## Collision
 

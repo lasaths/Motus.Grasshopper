@@ -215,16 +215,22 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
 
         if (Result.ChainedTrajectory is { } chained)
         {
-            goos.Add(TrajectoryFrom(chained));
+            var diagnostics = Result.Results.SelectMany(r => r.Messages).ToList();
+            goos.Add(TrajectoryFrom(chained, diagnostics));
             return goos;
         }
 
-        foreach (var trajectory in Result.SegmentTrajectories)
-            goos.Add(TrajectoryFrom(trajectory));
+        foreach (var pair in Result.SegmentTrajectories.Select((trajectory, index) => (trajectory, index)))
+        {
+            var diagnostics = pair.index < Result.Results.Count
+                ? Result.Results[pair.index].Messages
+                : Array.Empty<PlanningMessage>();
+            goos.Add(TrajectoryFrom(pair.trajectory, diagnostics));
+        }
         return goos;
     }
 
-    private TrajectoryGoo TrajectoryFrom(Trajectory trajectory)
+    private TrajectoryGoo TrajectoryFrom(Trajectory trajectory, IReadOnlyList<PlanningMessage>? diagnostics = null)
     {
         var robot = trajectory.Robot;
         return new TrajectoryGoo(trajectory)
@@ -233,7 +239,15 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             PreviewGeometry = PreviewGeometry ?? robot.CollisionModel,
             PreviewMeshColors = PreviewMeshColors,
             BaseFrameOverride = BaseFrameOverride,
-            ToolSnapshot = ToolSnapshot
+            ToolSnapshot = ToolSnapshot,
+            DiagnosticsSnapshot = diagnostics,
+            ProvenanceSnapshot = new PlannerProvenance
+            {
+                PlannerId = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext)
+                    ? RrtSettings.PlannerLabel
+                    : "joint-linear/cartesian-lin",
+                RandomSeed = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext) ? 42 : null
+            }
         };
     }
 

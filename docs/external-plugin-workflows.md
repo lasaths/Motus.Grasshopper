@@ -1,6 +1,7 @@
 # External Plugin Workflows
 
 Motus is intentionally independent. It outputs neutral trajectories and exports that you wire manually into other tools.
+Execution ownership lives in the downstream control plugin: controller transport, retries, IO timing, safety gates, and runtime fault handling.
 
 ## UR.RTDE.Grasshopper
 
@@ -21,6 +22,7 @@ Motus does not reference UR.RTDE.Grasshopper at build time.
 ## CSV / JSON / scripting
 
 - **Json** (Motus Export) — structured trajectory with times and joint arrays in radians
+- JSON includes planner metadata (`contractVersion`, `diagnostics`, optional `provenance`) and execution hints (`toolState`, `motionType`, `ToolMode` intent)
 - **Csv** (Motus Export) — `time_seconds,joint_1_rad,...` for spreadsheets or Python scripts
 - **Joints** (Motus Trajectory Data) — Grasshopper trees for parametric downstream graphs
 

@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.3**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.6**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -44,7 +44,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-sub
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints |
-| `MotusNetVersion` | `0.6.3` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.6.6` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -62,6 +62,8 @@ For a full component reference, see [docs/grasshopper-components.md](docs/grassh
 1. **Motus Motion Segment** → build PTP / LIN / CIRC segments (Type dropdown)
 2. Wire segments into **Motus Program Plan** → click **Plan**
 3. **Motus Preview** / **Motus Export** — trajectories include `motionType`, `segmentIndex`, `blendRadiusMeters`
+
+`SET`, `WAIT`, `ToolMode`, and tool-state values are execution hints in the exported plan payload. They are not robot commands and are interpreted by downstream control adapters.
 
 Unlike **Motus Plan** plane goals, **Program Plan** does not fall back to joint-space paths when LIN fails.
 
@@ -107,7 +109,7 @@ Quick pattern with SRDF:
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.6.3** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.6.6** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
 
@@ -136,6 +138,7 @@ The component palette was consolidated from ~25 components to 10 for simplicity 
 ## External plugins
 
 Motus outputs neutral trajectories. Wire exports manually into UR.RTDE.Grasshopper, VirtualRobot, Robots, or custom scripts. Motus does not depend on those plugins.
+Execution policy (safety IO, retries, controller handshake, command transport) belongs in the downstream control plugin, not Motus.Grasshopper.
 
 ## Examples
 
