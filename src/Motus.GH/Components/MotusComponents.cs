@@ -52,8 +52,7 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)
     {
         var key = PreviewKey(goo, sourcePath, _showCollisionPreview);
-        if (key == _previewKey && _previewMeshes.Count > 0 &&
-            (!_showCollisionPreview || _collisionPreviewMeshes.Count > 0))
+        if (key == _previewKey && _previewMeshes.Count > 0)
             return;
 
         _previewKey = key;

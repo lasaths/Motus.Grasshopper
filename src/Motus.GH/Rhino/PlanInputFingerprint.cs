@@ -19,7 +19,7 @@ public static class PlanInputFingerprint
         double linStepMeters = 0.005,
         SamplingPlannerId plannerId = SamplingPlannerId.RrtConnect,
         int rrtMaxIterations = 4000,
-        double rrtMaxPlanTimeSeconds = 30,
+        double rrtMaxPlanTimeSeconds = 0,
         double rrtGoalBias = 0.08,
         double rrtStepRadians = 0.12)
     {

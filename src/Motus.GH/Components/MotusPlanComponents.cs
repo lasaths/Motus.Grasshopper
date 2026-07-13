@@ -298,7 +298,9 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             return;
         }
 
+        da.SetDataList(0, Array.Empty<TrajectoryGoo>());
         da.SetData(1, statusOverride ?? "Fix input errors.");
+        da.SetDataList(2, Array.Empty<string>());
     }
 
     private void ScheduleDebouncedPlan(string fingerprint)

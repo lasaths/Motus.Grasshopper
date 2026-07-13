@@ -129,7 +129,8 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             reportProgress("plan", publish);
         }
 
-        // Native OMPL has no iteration callback — creep progress so the UI does not look frozen at 95%.
+        // Native OMPL has no iteration callback — creep progress so the UI does not look frozen.
+        var timeLimit = RrtSettings.MaxPlanTimeSeconds;
         var started = Environment.TickCount64;
         using var heartbeat = new System.Threading.Timer(_ =>
         {
@@ -140,9 +141,13 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip
             {
                 var elapsedSeconds = (Environment.TickCount64 - started) / 1000.0;
                 var bump = lastProgress >= 0.90 ? 0.004 : 0.03;
-                var timeFloor = Math.Min(0.99, 0.90 + elapsedSeconds / 120.0);
-                lastProgress = Math.Max(lastProgress, Math.Min(0.99, lastProgress + bump));
-                lastProgress = Math.Max(lastProgress, timeFloor);
+                lastProgress = Math.Min(timeLimit > 0 ? 0.99 : 0.95, lastProgress + bump);
+                if (timeLimit > 0)
+                {
+                    var timeFloor = Math.Min(0.99, 0.90 + elapsedSeconds / timeLimit * 0.09);
+                    lastProgress = Math.Max(lastProgress, timeFloor);
+                }
+
                 reportProgress("plan", lastProgress);
             }
         }, null, 400, 400);

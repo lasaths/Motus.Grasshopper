@@ -13,7 +13,7 @@ public readonly record struct RrtPlanSettings(
     double GoalBias,
     double StepRadians)
 {
-    public static RrtPlanSettings Defaults => new(4000, 30, SamplingPlannerId.RrtConnect, 0.08, 0.12);
+    public static RrtPlanSettings Defaults => new(4000, 0, SamplingPlannerId.RrtConnect, 0.08, 0.12);
 
     public static bool TryBuild(IGH_DataAccess da, out RrtPlanSettings settings, out string? error) =>
         TryRead(da, 0, 1, 2, 3, 4, out settings, out error);
