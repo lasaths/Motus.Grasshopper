@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Motus.GH.Loaders;
 
 namespace Motus.GH.Urdf;
 
@@ -28,6 +29,13 @@ internal static class UrdfPathResolver
             return Path.GetFullPath(path);
 
         var normalized = path.Replace('/', Path.DirectorySeparatorChar);
+        if (normalized.StartsWith("resources" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            var bundled = BundledToolLoader.ResolveBundledPath(normalized);
+            if (File.Exists(bundled))
+                return Path.GetFullPath(bundled);
+        }
+
         var dir = Directory.GetCurrentDirectory();
         for (var i = 0; i < 10 && dir is not null; i++)
         {

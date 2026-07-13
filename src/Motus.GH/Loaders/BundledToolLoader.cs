@@ -150,6 +150,28 @@ internal static class BundledToolLoader
         return EnumerateCandidates(normalized).First();
     }
 
+    internal static IEnumerable<string> PluginLibraryRoots()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in GrasshopperMotusLibraryDirs())
+        {
+            if (seen.Add(root))
+                yield return root;
+        }
+
+        var asmPath = typeof(BundledToolLoader).Assembly.Location;
+        if (!string.IsNullOrWhiteSpace(asmPath))
+        {
+            var asmDir = Path.GetDirectoryName(asmPath);
+            if (!string.IsNullOrWhiteSpace(asmDir) && seen.Add(asmDir))
+                yield return asmDir;
+        }
+
+        var baseDir = AppContext.BaseDirectory;
+        if (!string.IsNullOrWhiteSpace(baseDir) && seen.Add(baseDir))
+            yield return baseDir;
+    }
+
     private static string? ResolveFromWorkingDirectory(string normalized)
     {
         var dir = Directory.GetCurrentDirectory();
@@ -166,7 +188,7 @@ internal static class BundledToolLoader
 
     private static IEnumerable<string> EnumerateCandidates(string normalized)
     {
-        foreach (var root in PluginRoots())
+        foreach (var root in PluginLibraryRoots())
         {
             foreach (var rel in RelativePathVariants(normalized))
                 yield return Path.Combine(root, rel);
@@ -189,26 +211,34 @@ internal static class BundledToolLoader
             yield return normalized[prefix.Length..];
     }
 
-    // Grasshopper loads .gha from %AppData%/Grasshopper/Libraries/Motus — not Rhino's netcore folder.
-    private static IEnumerable<string> PluginRoots()
+    // Grasshopper loads .gha from Libraries/Motus beside deployed resources — on Mac that is
+    // ~/Library/.../Plug-ins/Grasshopper ({id})/Libraries/Motus, not inside Rhino.app.
+    private static IEnumerable<string> GrasshopperMotusLibraryDirs()
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var asmPath = typeof(BundledToolLoader).Assembly.Location;
-        if (!string.IsNullOrWhiteSpace(asmPath))
+        if (OperatingSystem.IsWindows())
         {
-            var asmDir = Path.GetDirectoryName(asmPath);
-            if (!string.IsNullOrWhiteSpace(asmDir) && seen.Add(asmDir))
-                yield return asmDir;
+            var win = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Grasshopper", "Libraries", "Motus");
+            if (Directory.Exists(win))
+                yield return win;
+            yield break;
         }
 
-        var baseDir = AppContext.BaseDirectory;
-        if (!string.IsNullOrWhiteSpace(baseDir) && seen.Add(baseDir))
-            yield return baseDir;
+        if (!OperatingSystem.IsMacOS())
+            yield break;
 
-        var ghMotus = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Grasshopper", "Libraries", "Motus");
-        if (Directory.Exists(ghMotus) && seen.Add(ghMotus))
-            yield return ghMotus;
+        var plugIns = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Library", "Application Support", "McNeel", "Rhinoceros", "8.0", "Plug-ins");
+        if (!Directory.Exists(plugIns))
+            yield break;
+
+        foreach (var ghDir in Directory.EnumerateDirectories(plugIns, "Grasshopper*"))
+        {
+            var motus = Path.Combine(ghDir, "Libraries", "Motus");
+            if (Directory.Exists(motus))
+                yield return motus;
+        }
     }
 }
