@@ -73,6 +73,9 @@ public abstract class GH_AsyncComponent : GH_Component
     {
         doc.SolutionStart -= OnDocumentSolutionStart;
         doc.SolutionEnd -= OnDocumentSolutionEnd;
+        RequestCancellation();
+        _displayProgressTimer.Stop();
+        _displayProgressTimer.Dispose();
         base.RemovedFromDocument(doc);
     }
 
@@ -83,7 +86,7 @@ public abstract class GH_AsyncComponent : GH_Component
     {
         _documentIsSolving = false;
         if (_setDataSolutionPending)
-            EmitSetDataSolutionNow();
+            ScheduleSetDataSolution();
     }
 
     protected void LaunchWorker(IGH_DataAccess da) => LaunchWorker(da, null);
@@ -250,9 +253,6 @@ public abstract class GH_AsyncComponent : GH_Component
             return;
 
         ResetCompletedRun();
-        // Defer downstream expire — calling ExpireDownStreamObjects during this SetData pass
-        // expires recipients (e.g. Preview) mid-solution.
-        OnPingDocument()?.ScheduleSolution(1, _ => base.ExpireDownStreamObjects());
     }
 
     private void RunWorker(WorkerInstance worker, Action<string, double> reportProgress, Action done, int runId)
@@ -301,6 +301,7 @@ public abstract class GH_AsyncComponent : GH_Component
                 _isReadyToSetData = true;
                 _setDataIndex = 0;
                 _setDataExpireScheduled = true;
+                _setDataSolutionPending = true;
                 shouldExpire = true;
             }
         }
@@ -308,12 +309,12 @@ public abstract class GH_AsyncComponent : GH_Component
         if (!shouldExpire)
             return;
 
-        _setDataSolutionPending = true;
         RhinoApp.InvokeOnUiThread((Action)(() =>
         {
             CommitWorkerCachedResults();
-            if (!_documentIsSolving)
-                EmitSetDataSolutionNow();
+            if (_documentIsSolving)
+                return;
+            TryImmediateSetDataSolution();
         }));
     }
 
@@ -332,25 +333,41 @@ public abstract class GH_AsyncComponent : GH_Component
             worker.CommitCachedResults();
     }
 
-    private void EmitSetDataSolutionNow()
+    private void ScheduleSetDataSolution()
     {
-        lock (_lifecycleLock)
-        {
-            if (!_isReadyToSetData)
-            {
-                _setDataSolutionPending = false;
-                return;
-            }
-        }
-
         if (OnPingDocument() is not GH_Document doc)
             return;
 
-        _setDataSolutionPending = false;
+        doc.ScheduleSolution(1, _ =>
+        {
+            if (!TryBeginSetDataSolution())
+                return;
+            // Callback runs before the scheduled solution — expire only, no nested NewSolution.
+            ExpireSolution(false);
+        });
+    }
+
+    private void TryImmediateSetDataSolution()
+    {
+        if (_documentIsSolving)
+            return;
+        if (!TryBeginSetDataSolution())
+            return;
+        ExpireSolution(true);
+    }
+
+    private bool TryBeginSetDataSolution()
+    {
+        lock (_lifecycleLock)
+        {
+            if (!_setDataSolutionPending || !_isReadyToSetData)
+                return false;
+            _setDataSolutionPending = false;
+        }
+
         if (!_workersCommitted)
             CommitWorkerCachedResults();
-        ExpireSolution(false);
-        doc.NewSolution(false);
+        return true;
     }
 
     private bool IsCurrentRun(int runId)
@@ -478,8 +495,12 @@ public abstract class GH_AsyncComponent : GH_Component
             fraction = total / workerCount;
         }
 
-        Message = FormatProgressMessage(fraction);
-        RhinoApp.InvokeOnUiThread((Action)(() => OnDisplayExpired(true)));
+        var message = FormatProgressMessage(fraction);
+        RhinoApp.InvokeOnUiThread((Action)(() =>
+        {
+            Message = message;
+            OnDisplayExpired(true);
+        }));
     }
 }
 
