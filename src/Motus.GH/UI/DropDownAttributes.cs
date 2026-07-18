@@ -83,6 +83,11 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
         Bounds = new RectangleF(Bounds.X, Bounds.Y, Bounds.Width, y - Bounds.Y + s);
     }
 
+    // Same Motus green as ButtonAttributes Plan chrome.
+    private static readonly Color Accent = Color.FromArgb(0x2E, 0xA0, 0x43);
+    private static readonly Color AccentDark = Color.FromArgb(0x1E, 0x6B, 0x2C);
+    private static readonly Color MenuFill = Color.FromArgb(0xEC, 0xF8, 0xEF);
+
     protected override void Render(GH_Canvas canvas, Graphics graphics, GH_CanvasChannel channel)
     {
         base.Render(canvas, graphics, channel);
@@ -103,20 +108,20 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
 
             var selected = i < model.Selected.Count ? model.Selected[i] : string.Empty;
             using (var path = RoundedRect(_borders[i], 2))
-            using (var fill = new SolidBrush(Color.FromArgb(245, 245, 245)))
-            using (var pen = new Pen(Color.FromArgb(160, 160, 160), 0.8f))
+            using (var fill = new SolidBrush(Accent))
+            using (var pen = new Pen(AccentDark, 0.8f))
             {
                 graphics.FillPath(fill, path);
                 graphics.DrawPath(pen, path);
             }
 
             var textBounds = new RectangleF(_borders[i].X + 3, _borders[i].Y, _borders[i].Width - _buttons[i].Width - 4, _borders[i].Height);
-            graphics.DrawString(selected, GH_FontServer.Standard, Brushes.Black, textBounds, GH_TextRenderingConstants.NearCenter);
+            graphics.DrawString(selected, GH_FontServer.Standard, Brushes.White, textBounds, GH_TextRenderingConstants.NearCenter);
 
             var midX = _buttons[i].X + _buttons[i].Width / 2f;
             var midY = _buttons[i].Y + _buttons[i].Height / 2f;
             var dir = _open[i] ? -1f : 1f;
-            using (var pen = new Pen(Color.FromArgb(80, 80, 80), 1.2f))
+            using (var pen = new Pen(Color.White, 1.2f))
             {
                 graphics.DrawLines(pen, new[]
                 {
@@ -128,8 +133,8 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
 
             if (!_open[i] || _dropdownAreas[i].IsEmpty) continue;
 
-            using (var fill = new SolidBrush(Color.White))
-            using (var pen = new Pen(Color.FromArgb(140, 140, 140), 0.8f))
+            using (var fill = new SolidBrush(MenuFill))
+            using (var pen = new Pen(AccentDark, 0.8f))
             {
                 graphics.FillRectangle(fill, _dropdownAreas[i]);
                 graphics.DrawRectangle(pen, Rectangle.Round(_dropdownAreas[i]));
@@ -142,13 +147,13 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
                 var isSel = string.Equals(list[j], selected, StringComparison.OrdinalIgnoreCase);
                 if (isSel)
                 {
-                    using var hi = new SolidBrush(Color.FromArgb(220, 235, 250));
+                    using var hi = new SolidBrush(Accent);
                     graphics.FillRectangle(hi, item);
                 }
                 graphics.DrawString(
                     list[j],
                     GH_FontServer.Standard,
-                    Brushes.Black,
+                    isSel ? Brushes.White : Brushes.Black,
                     new RectangleF(item.X + 4, item.Y, item.Width - 6, item.Height),
                     GH_TextRenderingConstants.NearCenter);
             }
