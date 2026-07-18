@@ -9,7 +9,7 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 - Rhino 8 + Grasshopper (Windows or macOS)
 - .NET 8 SDK
 
-Pins **Motus.NET 0.6.7** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
+Pins **Motus.NET 0.6.8** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
 
 ## Install from source
 
@@ -41,7 +41,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 |----------|---------|
 | `Rhino8Dir` | Windows Rhino 8 install (DLL hints) |
 | `Rhino8App` | macOS Rhino 8 `.app` path |
-| `MotusNetVersion` | Override NuGet pin (default `0.6.7`) |
+| `MotusNetVersion` | Override NuGet pin (default `0.6.8`) |
 
 ## First plan (3 components)
 

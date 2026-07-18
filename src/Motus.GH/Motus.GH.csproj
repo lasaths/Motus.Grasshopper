@@ -5,10 +5,10 @@
     <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.6.7</Version>
-    <AssemblyVersion>0.6.7.0</AssemblyVersion>
-    <FileVersion>0.6.7.0</FileVersion>
-    <InformationalVersion>0.6.7</InformationalVersion>
+    <Version>0.6.8</Version>
+    <AssemblyVersion>0.6.8.0</AssemblyVersion>
+    <FileVersion>0.6.8.0</FileVersion>
+    <InformationalVersion>0.6.8</InformationalVersion>
     <TargetExt>.gha</TargetExt>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -75,12 +75,14 @@
 
   <PropertyGroup>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(Windows))">$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
-    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX))">$(MacGrasshopperLibrariesRoot)/Motus</GrasshopperLibraryDir>
+    <!-- Only auto-deploy on macOS when Rhino GH Libraries already exist (skip CI / bare machines). -->
+    <MacGrasshopperLibrariesRoot Condition="'$(MacGrasshopperLibrariesRoot)' == '' and $([MSBuild]::IsOSPlatform(OSX)) and Exists('$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries')">$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries</MacGrasshopperLibrariesRoot>
+    <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX)) and '$(MacGrasshopperLibrariesRoot)' != ''">$(MacGrasshopperLibrariesRoot)/Motus</GrasshopperLibraryDir>
     <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(Windows))">net8.0-windows</MotusDeployTfm>
     <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(OSX))">net8.0</MotusDeployTfm>
   </PropertyGroup>
 
-  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(GrasshopperLibraryDir)' != '' AND '$(TargetFramework)' == '$(MotusDeployTfm)'">
+  <Target Name="CopyGhaToGrasshopperLibraries" AfterTargets="Build" Condition="'$(GrasshopperLibraryDir)' != '' AND '$(GrasshopperLibraryDir)' != '/Motus' AND '$(TargetFramework)' == '$(MotusDeployTfm)'">
     <MakeDir Directories="$(GrasshopperLibraryDir)" />
     <ItemGroup>
       <MotusDeployFiles Include="$(TargetDir)Motus*.gha" />
