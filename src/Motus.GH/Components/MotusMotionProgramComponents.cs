@@ -484,6 +484,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         {
             foreach (var error in segmentErrors)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
+            da.SetData(1, "Fix segment input errors.");
+            da.SetDataList(2, segmentErrors);
             return;
         }
 

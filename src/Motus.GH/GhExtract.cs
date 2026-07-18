@@ -43,23 +43,6 @@ internal static class GhExtract
         return true;
     }
 
-    public static bool TryTrajectoryGoo(IGH_DataAccess da, int index, out TrajectoryGoo goo)
-    {
-        goo = null!;
-        TrajectoryGoo? g = null;
-        if (!da.GetData(index, ref g) || g?.Value is null) return false;
-        goo = g;
-        return true;
-    }
-
-    public static bool TryTrajectory(IGH_DataAccess da, int index, out Trajectory trajectory)
-    {
-        trajectory = null!;
-        if (!TryTrajectoryGoo(da, index, out var goo)) return false;
-        trajectory = goo.Value;
-        return true;
-    }
-
     public static bool TryGoal(IGH_DataAccess da, int index, out JointState? joints, out Plane? plane)
     {
         joints = null;

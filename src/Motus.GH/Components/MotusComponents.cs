@@ -18,7 +18,6 @@ using Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
-using System.Globalization;
 using System.Windows.Forms;
 
 namespace Motus.GH.Components;
@@ -239,17 +238,8 @@ public sealed class MotusJointStateComponent : MotusComponentBase
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var vals = new List<double>();
-        if (!da.GetDataList(0, vals) || vals.Count == 0)
-        {
-            var text = "";
-            if (da.GetData(0, ref text) && !string.IsNullOrWhiteSpace(text))
-            {
-                vals = text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => double.Parse(s.Trim(), CultureInfo.InvariantCulture))
-                    .ToList();
-            }
-        }
-        if (vals.Count == 0) return;
+        // Joints is list access — never call GetData (throws when the list is empty).
+        if (!da.GetDataList(0, vals) || vals.Count == 0) return;
 
         if (!_useDegrees)
         {
@@ -315,6 +305,13 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 {
     public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
+
+    public override void AddedToDocument(GH_Document doc)
+    {
+        base.AddedToDocument(doc);
+        TrajectoryMerge.EnsureListAccess(this, 0);
+    }
+
     protected override void RegisterInputParams(GH_InputParamManager p) =>
         p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -345,14 +342,11 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         da.SetDataList(0, planes);
         da.SetDataList(1, times);
         da.SetDataTree(2, tree);
-        if (t.Points.Any(p => p.ToolState is not null))
-        {
-            var toolStates = t.Points.Select(p =>
-                p.ToolState is null
-                    ? string.Empty
-                    : System.Text.Json.JsonSerializer.Serialize(p.ToolState.Values)).ToList();
-            da.SetDataList(3, toolStates);
-        }
+        var toolStates = t.Points.Select(p =>
+            p.ToolState is null
+                ? string.Empty
+                : System.Text.Json.JsonSerializer.Serialize(p.ToolState.Values)).ToList();
+        da.SetDataList(3, toolStates);
     }
     public override Guid ComponentGuid => new Guid("a72b5cfa-5cf5-4e54-a5cd-943e2aae82da");
 }
@@ -360,6 +354,13 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 public sealed class MotusExportComponent : MotusComponentBase
 {
     public MotusExportComponent() : base("Motus Export", "Export", "Serialize a trajectory to JSON and CSV", "Export", "export") { }
+
+    public override void AddedToDocument(GH_Document doc)
+    {
+        base.AddedToDocument(doc);
+        TrajectoryMerge.EnsureListAccess(this, 0);
+    }
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);

@@ -8,6 +8,18 @@ namespace Motus.GH;
 /// <summary>Concatenates Motus Plan multi-goal trajectory lists for Preview / Export / Data.</summary>
 internal static class TrajectoryMerge
 {
+    /// <summary>
+    /// Old documents may still serialize Trajectory as item after the list migration.
+    /// Call from AddedToDocument so the first solve already uses list access.
+    /// </summary>
+    public static void EnsureListAccess(GH_Component owner, int index)
+    {
+        if (index < 0 || index >= owner.Params.Input.Count) return;
+        var param = owner.Params.Input[index];
+        if (param.Access != GH_ParamAccess.list)
+            param.Access = GH_ParamAccess.list;
+    }
+
     public static bool TryResolve(
         IGH_DataAccess da,
         int index,
@@ -16,16 +28,25 @@ internal static class TrajectoryMerge
         out TrajectoryGoo goo)
     {
         goo = null!;
-        var list = new List<TrajectoryGoo>();
-        if (!da.GetDataList(index, list) || list.Count == 0)
+        if (index < 0 || index >= owner.Params.Input.Count)
+            return false;
+
+        var param = owner.Params.Input[index];
+
+        // Legacy item access: GetDataList would throw. Read once, then migrate.
+        if (param.Access == GH_ParamAccess.item)
         {
-            // Item access still works when a single TrajectoryGoo is wired as list-of-one.
             TrajectoryGoo? single = null;
             if (!da.GetData(index, ref single) || single?.Value is null)
                 return false;
+            param.Access = GH_ParamAccess.list;
             goo = single;
             return true;
         }
+
+        var list = new List<TrajectoryGoo>();
+        if (!da.GetDataList(index, list) || list.Count == 0)
+            return false;
 
         var valid = new List<TrajectoryGoo>(list.Count);
         foreach (var item in list)

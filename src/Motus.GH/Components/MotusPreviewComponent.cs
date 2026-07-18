@@ -77,6 +77,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     public override void AddedToDocument(GH_Document doc)
     {
         base.AddedToDocument(doc);
+        TrajectoryMerge.EnsureListAccess(this, 0);
         EnsureCustomColorsParam();
         EnsureDebugOutputs();
     }
