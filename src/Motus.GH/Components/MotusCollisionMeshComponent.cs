@@ -35,16 +35,23 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
         da.GetData(2, ref name);
 
         CollisionObject? obj = null;
+        var triangleCount = 0;
         if (geo is GH_Mesh ghm && ghm.Value is { IsValid: true } mesh)
-            obj = CollisionMeshBuilder.FromMesh(mesh, pl, name);
+            obj = CollisionMeshBuilder.FromMesh(mesh, pl, name, out triangleCount);
         else if (geo is GH_Brep ghb && ghb.Value is { IsValid: true } brep)
-            obj = CollisionMeshBuilder.FromBrep(brep, pl, name);
+            obj = CollisionMeshBuilder.FromBrep(brep, pl, name, out triangleCount);
 
         if (obj is null)
         {
             _previewMeshes = [];
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Geometry must be a valid Mesh or Brep.");
             return;
+        }
+
+        if (triangleCount > CollisionMeshBuilder.DenseTriangleWarnThreshold)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"Dense collision mesh ({triangleCount:N0} tris). Decimate or use ColBox/ColSphere for faster planning.");
         }
 
         _previewMeshes = CollisionViewportPreview.MeshesFor(obj);

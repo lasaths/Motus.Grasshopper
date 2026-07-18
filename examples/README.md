@@ -248,5 +248,9 @@ Re-save from Grasshopper after tweaks so the archive matches your installed comp
 
 
 
+`03_collision_rrt.ghx` is **hand-tuned** (Populate 3D / Center Box obstacle layout). `node scripts/generate-examples.mjs` skips overwriting it. Pass `--force-hand-tuned` only if you intentionally want the generator template back.
+
+
+
 External plugin workflows (UR RTDE, VirtualRobot, etc.): [docs/external-plugin-workflows.md](../docs/external-plugin-workflows.md).
 

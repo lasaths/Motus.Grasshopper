@@ -9,7 +9,7 @@ Licensed under [MIT](LICENSE).
 - Rhino 8 with Grasshopper
 - .NET 8 SDK
 
-Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.6**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
+Motus.NET packages (`Motus.Core`, `Motus.Geometry`, `Motus.Presets`, `Motus.OMPL.NET` **0.6.7**) restore from [nuget.org](https://www.nuget.org/profiles/lasaths).
 
 ## Build
 
@@ -52,7 +52,7 @@ Component icons use [Phosphor Icons](docs/icons.md) (duotone, 24px) with per-sub
 |----------|---------|---------|
 | `Rhino8Dir` | `C:\Program Files\Rhino 8` | Grasshopper DLL hints (Windows) |
 | `Rhino8App` | `/Applications/Rhino 8.app` | RhinoCommon / Grasshopper hints (macOS) |
-| `MotusNetVersion` | `0.6.6` in `build/MotusNetPackages.props` | NuGet package version pin |
+| `MotusNetVersion` | `0.6.7` in `build/MotusNetPackages.props` | NuGet package version pin |
 
 ## First workflow
 
@@ -117,9 +117,13 @@ Quick pattern with SRDF:
 - **Plane** `Goal` → TCP-linear LIN motion (`CartesianLinearPathPlanner`).
 - **Motus Joint State** `Goal` → joint-space target (RRT when collision scene is wired).
 
-Motus.Grasshopper pins Motus.NET **0.6.6** via `build/MotusNetPackages.props` (NuGet).
+Motus.Grasshopper pins Motus.NET **0.6.7** via `build/MotusNetPackages.props` (NuGet).
 
 ## Changelog
+
+### 0.6.7 — Motus.NET 0.6.7 (mesh collision perf + Plan UX)
+
+Pins Motus.NET **0.6.7**. Faster managed mesh collision (local meshes, AABB/envelope filters). Plan uses `CollisionCheckerFactory.GetOrCreate`. Manual mode remarks when inputs change without Plan/Auto Plan. ColBrep uses coarser meshing and warns on dense meshes (&gt;20k tris). Generator skips overwriting hand-tuned `examples/03_collision_rrt.ghx`.
 
 ### 0.6.3 — Motus.NET 0.6.3 (sampling planner registry)
 

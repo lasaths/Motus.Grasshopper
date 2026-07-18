@@ -975,6 +975,8 @@ function graph02() {
 }
 
 function graph03() {
+  // Hand-tuned on disk (Populate 3D / Center Box layout). Generator skips overwrite —
+  // see HAND_TUNED. This graph remains the bootstrap template for --force-hand-tuned.
   const robot = ur10eRobot(140, 60);
   const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
   const sphere = motusComponent('colSphere', 140, 380, {});
@@ -1278,6 +1280,10 @@ function graph12() {
 const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10, graph11, graph12];
 const legacy = ['01_basic_planning.ghx', '02_collision_planning.ghx'];
 
+/** Hand-tuned examples kept on disk; generator skips overwrite unless --force-hand-tuned. */
+const HAND_TUNED = new Set(['03_collision_rrt.ghx']);
+const forceHandTuned = process.argv.includes('--force-hand-tuned');
+
 for (const name of legacy) {
   const p = path.join(outDir, name);
   if (fs.existsSync(p)) fs.unlinkSync(p);
@@ -1287,7 +1293,12 @@ for (const buildFn of graphs) {
   const xml = buildFn();
   const meta = lastGraphMeta;
   if (!meta?.fileName) throw new Error(`missing meta for ${buildFn.name}`);
-  fs.writeFileSync(path.join(outDir, meta.fileName), xml, 'utf8');
+  const outPath = path.join(outDir, meta.fileName);
+  if (HAND_TUNED.has(meta.fileName) && fs.existsSync(outPath) && !forceHandTuned) {
+    console.log('skip (hand-tuned)', meta.fileName);
+    continue;
+  }
+  fs.writeFileSync(outPath, xml, 'utf8');
   console.log('wrote', meta.fileName);
 }
 

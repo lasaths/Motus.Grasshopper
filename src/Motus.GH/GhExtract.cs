@@ -431,7 +431,7 @@ internal static class GhExtract
         try
         {
             if (!KinematicsResolver.SupportsModel(robot.Preset, chain)) return null;
-            return CollisionCheckerFactory.Create(robot, chain, attached);
+            return CollisionCheckerFactory.GetOrCreate(robot, chain, attached, scene);
         }
         catch (InvalidOperationException)
         {

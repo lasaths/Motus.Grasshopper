@@ -1,5 +1,4 @@
 using Motus.Core;
-using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System.Collections.Generic;
 
@@ -7,8 +6,14 @@ namespace Motus.GH;
 
 internal static class CollisionMeshBuilder
 {
-    public static CollisionObject? FromMesh(Mesh mesh, Plane plane, string name)
+    public const int DenseTriangleWarnThreshold = 20_000;
+
+    public static CollisionObject? FromMesh(Mesh mesh, Plane plane, string name) =>
+        FromMesh(mesh, plane, name, out _);
+
+    public static CollisionObject? FromMesh(Mesh mesh, Plane plane, string name, out int triangleCount)
     {
+        triangleCount = 0;
         var xform = Transform.PlaneToPlane(Plane.WorldXY, plane);
         var vertices = new List<double[]>(mesh.Vertices.Count);
         foreach (var v in mesh.Vertices)
@@ -39,17 +44,26 @@ internal static class CollisionMeshBuilder
         }
 
         if (indices.Count < 3) return null;
+        triangleCount = indices.Count / 3;
         return CollisionObject.Mesh(name, Frame.Identity, vertices, indices);
     }
 
-    public static CollisionObject? FromBrep(Brep brep, Plane plane, string name)
+    public static CollisionObject? FromBrep(Brep brep, Plane plane, string name) =>
+        FromBrep(brep, plane, name, out _);
+
+    public static CollisionObject? FromBrep(Brep brep, Plane plane, string name, out int triangleCount)
     {
-        var meshes = Mesh.CreateFromBrep(brep, MeshingParameters.Default);
-        if (meshes is null || meshes.Length == 0) return null;
+        // Coarser than Default — obstacle meshes are for collision, not CAD fidelity.
+        var meshes = Mesh.CreateFromBrep(brep, MeshingParameters.FastRenderMesh);
+        if (meshes is null || meshes.Length == 0)
+        {
+            triangleCount = 0;
+            return null;
+        }
 
         var combined = new Mesh();
         foreach (var m in meshes)
             combined.Append(m);
-        return FromMesh(combined, plane, name);
+        return FromMesh(combined, plane, name, out triangleCount);
     }
 }

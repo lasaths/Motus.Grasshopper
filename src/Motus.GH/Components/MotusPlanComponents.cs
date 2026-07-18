@@ -187,7 +187,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         {
             var idleKind = ResolveIdleStatusKind(fingerprint);
             var idleActivity = idleKind == GhExtract.PlanStatusKind.Planning ? activity : null;
-            EmitOutputs(da, idleKind, idleActivity);
+            EmitOutputs(da, idleKind, idleActivity, fingerprint: fingerprint);
             return;
         }
 
@@ -283,7 +283,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         GhExtract.PlanStatusKind statusKind,
         string? activity = null,
         bool emitCache = true,
-        string? statusOverride = null)
+        string? statusOverride = null,
+        string? fingerprint = null)
     {
         if (emitCache)
         {
@@ -297,6 +298,15 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
                     "Trajectory is from previous inputs; replanning in background…");
+            }
+            else if (statusKind == GhExtract.PlanStatusKind.ManualCached &&
+                     fingerprint is not null &&
+                     _lastPlannedFingerprint is not null &&
+                     fingerprint != _lastPlannedFingerprint &&
+                     _cachedGoos is { Count: > 0 })
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    "Inputs changed — click Plan (or enable Auto Plan) to update Trajectory.");
             }
 
             da.SetData(1, statusOverride ?? GhExtract.BuildStatusMessage(_cached, statusKind, activity));
