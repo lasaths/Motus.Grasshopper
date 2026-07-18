@@ -10,6 +10,7 @@ using Motus.GH.Params;
 using Motus.GH.UI;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
+using Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
@@ -36,6 +37,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private DateTime _playStartUtc;
     private double _playStartPosition;
     private bool _playing;
+    private System.Windows.Forms.Timer? _playTimer;
     private double _position;
     private int _index;
     private bool _showStart;
@@ -210,6 +212,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     public override void RemovedFromDocument(GH_Document doc)
     {
+        StopPlayTimer();
         _playing = false;
         base.RemovedFromDocument(doc);
     }
@@ -325,6 +328,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         if (_playing)
         {
+            StopPlayTimer();
             _playing = false;
         }
         else if (_trajectory?.Points.Count > 0)
@@ -334,39 +338,64 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _playStartPosition = 0;
             _playStartUtc = DateTime.UtcNow;
             SyncScrubSlider(0);
+            StartPlayTimer();
         }
         ExpireSolution(true);
     }
 
-    private void SchedulePreviewTick()
+    private void StartPlayTimer()
     {
-        if (!_playing || OnPingDocument() is not GH_Document doc) return;
-        doc.ScheduleSolution(33, _ =>
+        _playTimer ??= new System.Windows.Forms.Timer { Interval = 33 };
+        _playTimer.Tick -= OnPlayTimerTick;
+        _playTimer.Tick += OnPlayTimerTick;
+        if (!_playTimer.Enabled)
+            _playTimer.Start();
+    }
+
+    private void StopPlayTimer()
+    {
+        if (_playTimer is null) return;
+        _playTimer.Stop();
+        _playTimer.Tick -= OnPlayTimerTick;
+    }
+
+    /// <summary>
+    /// Play frames on a UI timer — no ScheduleSolution. Document solves freeze the canvas
+    /// while wall-clock advances, so the old path jumped straight to the final pose.
+    /// </summary>
+    private void OnPlayTimerTick(object? sender, EventArgs e)
+    {
+        if (!_playing || _trajectory is null || _previewPoints.Count == 0)
         {
-            if (!_playing || _trajectory is null || _previewPoints.Count == 0) return;
-            ResolveFrame(out var state, out var elapsed, out var segmentIndex, out var toolState);
-            var duration = _trajectory.DurationSeconds;
-            if (elapsed >= duration)
-            {
-                _playing = false;
-                _position = duration > 0 ? 1 : 0;
-                SyncScrubSlider(_position, expireDownstream: false);
-                ExpireSolution(false);
-                return;
-            }
+            StopPlayTimer();
+            return;
+        }
 
-            if (_meshCache is null)
-            {
-                SyncScrubSlider(_position);
-                ExpireSolution(true);
-                return;
-            }
+        ResolveFrame(out var state, out var elapsed, out _, out var toolState);
+        var duration = _trajectory.DurationSeconds;
+        if (elapsed >= duration)
+        {
+            StopPlayTimer();
+            _playing = false;
+            _position = duration > 0 ? 1 : 0;
+            SyncScrubSlider(_position, expireDownstream: false);
+            OnDisplayExpired(false);
+            ExpireSolution(false);
+            return;
+        }
 
-            _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+        if (_meshCache is null)
+        {
             SyncScrubSlider(_position);
-            ExpirePreview(true);
-            SchedulePreviewTick();
-        });
+            ExpireSolution(true);
+            return;
+        }
+
+        _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+        SyncScrubSlider(_position);
+        ExpirePreview(true);
+        OnDisplayExpired(false);
+        RhinoDoc.ActiveDoc?.Views.Redraw();
     }
 
     private void EnsureMeshCache(RobotContext ctx, RobotCollisionModel? previewGeometry, ToolCapabilities? toolCapabilities)
@@ -418,9 +447,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 "Custom colours mode: wire a colour list (Meshes order) or switch to Override.");
         }
 
-        var trajectoryChanged = !ReferenceEquals(_trajectory, t);
+        var trajectoryChanged = !SameTrajectoryContent(_trajectory, t);
         if (trajectoryChanged)
         {
+            StopPlayTimer();
             _playing = false;
             _position = 0;
             _staticsFor = null;
@@ -461,7 +491,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _previewPoints = previewPoints;
         _previewTrajectory = new Trajectory(ctx.Model, previewPoints);
         ResolveFrame(out var state, out var timeSeconds, out _index, out var toolState);
-        var staticsDirty = !ReferenceEquals(_staticsFor, t);
+        // Concatenate() allocates a new Trajectory each solve — compare content, not reference.
+        var staticsDirty = trajectoryChanged || _staticsFor is null;
         if (staticsDirty)
         {
             var pl = KinematicsPreview.TcpPath(ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
@@ -503,9 +534,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         if (_playing)
         {
+            StartPlayTimer();
             SyncScrubSlider(_position);
             ExpirePreview(true);
-            SchedulePreviewTick();
             return;
         }
         if (IsScrubDragging())
@@ -585,6 +616,34 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (timeline.IsEmpty) return scrubFraction;
         var idx = timeline.NearestDisplayIndex(scrubFraction);
         return timeline.TimeFractions[idx];
+    }
+
+    private static bool SameTrajectoryContent(Trajectory? prior, Trajectory next)
+    {
+        if (prior is null) return false;
+        if (ReferenceEquals(prior, next)) return true;
+        if (prior.Points.Count != next.Points.Count) return false;
+        if (Math.Abs(prior.DurationSeconds - next.DurationSeconds) > 1e-6) return false;
+        if (prior.Points.Count == 0) return true;
+        // Cheap fingerprint: endpoints + midpoint time (Concatenate reallocates each solve).
+        var a0 = prior.Points[0];
+        var b0 = next.Points[0];
+        var a1 = prior.Points[^1];
+        var b1 = next.Points[^1];
+        if (Math.Abs(a0.TimeSeconds - b0.TimeSeconds) > 1e-9 || Math.Abs(a1.TimeSeconds - b1.TimeSeconds) > 1e-9)
+            return false;
+        return JointsNearlyEqual(a0.JointState, b0.JointState) && JointsNearlyEqual(a1.JointState, b1.JointState);
+    }
+
+    private static bool JointsNearlyEqual(JointState a, JointState b)
+    {
+        if (a.AxisCount != b.AxisCount) return false;
+        for (var i = 0; i < a.AxisCount; i++)
+        {
+            if (Math.Abs(a.Positions[i] - b.Positions[i]) > 1e-6)
+                return false;
+        }
+        return true;
     }
 
     private bool TryGetWiredScrub(out MotusScrubSlider scrub)
