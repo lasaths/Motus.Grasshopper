@@ -241,13 +241,6 @@ public sealed class MotusJointStateComponent : MotusComponentBase
         // Joints is list access — never call GetData (throws when the list is empty).
         if (!da.GetDataList(0, vals) || vals.Count == 0) return;
 
-        if (!_useDegrees)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Remark,
-                "Joints are radians (right-click J → Degrees to enter °).");
-        }
-
         var arr = _useDegrees
             ? vals.Select(RhinoMath.ToRadians).ToArray()
             : vals.ToArray();
