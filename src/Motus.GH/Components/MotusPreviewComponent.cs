@@ -26,7 +26,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
     private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
 
-    private PreviewColorMode _colorMode = PreviewColorMode.Override;
+    private PreviewColorMode _colorMode = PreviewColorMode.Urdf;
     private bool _showCustomColors;
     private bool _showDebugOutputs;
     private List<Color> _customColors = [];

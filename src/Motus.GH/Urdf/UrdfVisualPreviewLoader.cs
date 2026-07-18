@@ -90,97 +90,169 @@ internal static class UrdfVisualPreviewLoader
         }
     }
 
-    private static CollisionObject? ParseVisualGeometry(string name, Frame pose, XElement geom, string urdfDirectory)
+    private static List<(CollisionObject Object, Color? Color)> ParseVisualGeometries(
+        string name, Frame pose, XElement geom, string urdfDirectory)
     {
         if (geom.Element("box") is { } box)
         {
             var size = ParseTriple(box.Attribute("size")?.Value, 0.1, 0.1, 0.1);
-            return CollisionObject.Box(name, pose, size.x / 2, size.y / 2, size.z / 2);
+            return [(CollisionObject.Box(name, pose, size.x / 2, size.y / 2, size.z / 2), null)];
         }
         if (geom.Element("cylinder") is { } cyl)
         {
             var radius = ParseDouble(cyl.Attribute("radius")?.Value, 0.05);
             var length = ParseDouble(cyl.Attribute("length")?.Value, 0.1);
-            return CollisionObject.Capsule(name, pose, radius, length / 2);
+            return [(CollisionObject.Capsule(name, pose, radius, length / 2), null)];
         }
         if (geom.Element("sphere") is { } sph)
         {
             var radius = ParseDouble(sph.Attribute("radius")?.Value, 0.05);
-            return CollisionObject.Sphere(name, pose, radius);
+            return [(CollisionObject.Sphere(name, pose, radius), null)];
         }
         if (geom.Element("mesh") is { } mesh)
         {
             var filename = mesh.Attribute("filename")?.Value;
-            if (string.IsNullOrWhiteSpace(filename)) return null;
+            if (string.IsNullOrWhiteSpace(filename)) return [];
             var scale = ParseTriple(mesh.Attribute("scale")?.Value, 1, 1, 1);
             if (Math.Abs(scale.x - scale.y) > 1e-9 || Math.Abs(scale.y - scale.z) > 1e-9)
-                return null; // ponytail: skip non-uniform mesh scales for now.
+                return []; // ponytail: skip non-uniform mesh scales for now.
             var path = ResolveMeshPath(filename, urdfDirectory);
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                return null;
-            var (vertices, indices) =
-                path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase)
-                    ? MeshFileLoader.ReadStlBytes(path, scale.x)
-                    : path.EndsWith(".dae", StringComparison.OrdinalIgnoreCase)
-                        ? MeshFileLoader.ReadCachedDae(path, scale.x, () => ReadDae(path, scale.x))
-                        : (new List<double[]>(), new List<int>());
-            if (vertices.Count == 0 || indices.Count < 3)
-                return null;
-            return CollisionObject.Mesh(name, pose, vertices, indices);
+                return [];
+
+            if (path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
+            {
+                var (vertices, indices) = MeshFileLoader.ReadStlBytes(path, scale.x);
+                if (vertices.Count == 0 || indices.Count < 3) return [];
+                return [(CollisionObject.Mesh(name, pose, vertices, indices), null)];
+            }
+
+            if (!path.EndsWith(".dae", StringComparison.OrdinalIgnoreCase))
+                return [];
+
+            var parts = MeshFileLoader.ReadCachedDaeParts(path, scale.x, () => ReadDaeParts(path, scale.x));
+            var result = new List<(CollisionObject, Color?)>(parts.Count);
+            for (var i = 0; i < parts.Count; i++)
+            {
+                var (vertices, indices, color) = parts[i];
+                if (vertices.Count == 0 || indices.Count < 3) continue;
+                var partName = parts.Count == 1 ? name : $"{name}_{i}";
+                result.Add((CollisionObject.Mesh(partName, pose, vertices, indices), color));
+            }
+            return result;
         }
-        return null;
+        return [];
     }
 
     // UR ROS Collada exports often store mm coordinates while <unit meter="1"/>.
-    private static List<double[]> ScaleVerticesIfMillimeters(List<double[]> vertices)
+    private static bool NeedsMillimeterScale(List<double[]> vertices)
     {
         var max = 0.0;
         foreach (var v in vertices)
             max = Math.Max(max, Math.Max(Math.Abs(v[0]), Math.Max(Math.Abs(v[1]), Math.Abs(v[2]))));
-        if (max <= 10) return vertices;
+        return max > 10;
+    }
+
+    private static List<double[]> ScaleVerticesMillimeters(List<double[]> vertices)
+    {
         const double mmToM = 0.001;
         return vertices.Select(v => new[] { v[0] * mmToM, v[1] * mmToM, v[2] * mmToM }).ToList();
     }
 
-    private static (List<double[]> vertices, List<int> indices) ReadDae(string path, double uniformScale)
+    private static List<(List<double[]> vertices, List<int> indices, Color? color)> ReadDaeParts(
+        string path, double uniformScale)
     {
         var doc = XDocument.Load(path);
         var root = doc.Root;
-        if (root is null) return (new List<double[]>(), new List<int>());
+        if (root is null) return [];
         var ns = root.Name.Namespace;
 
+        var materialColors = ParseDaeMaterialColors(root, ns);
         var library = BuildDaeGeometryLibrary(root, ns, uniformScale);
-        var vertices = new List<double[]>();
-        var indices = new List<int>();
+        // Merge same-material parts so URBlue elbows stay one mesh per colour.
+        var buckets = new Dictionary<string, (List<double[]> verts, List<int> indices, Color? color)>(
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var scene in root.Descendants(ns + "visual_scene"))
         {
             foreach (var node in scene.Elements(ns + "node"))
-                CollectDaeSceneNode(node, ns, library, Transforms.Identity(), vertices, indices);
+                CollectDaeSceneNode(node, ns, library, materialColors, Transforms.Identity(), buckets);
         }
 
-        if (vertices.Count == 0)
+        if (buckets.Count == 0)
         {
-            foreach (var geom in root.Descendants(ns + "geometry"))
+            foreach (var (id, part) in library)
             {
-                var mesh = geom.Element(ns + "mesh");
-                if (mesh is null) continue;
-                var id = geom.Attribute("id")?.Value ?? "";
-                if (library.TryGetValue(id, out var part))
-                    AppendDaeMesh(part.vertices, part.indices, Transforms.Identity(), vertices, indices);
+                var key = part.Material ?? id;
+                Color? color = part.Material is not null && materialColors.TryGetValue(part.Material, out var c)
+                    ? c
+                    : null;
+                AppendDaeMesh(part.Vertices, part.Indices, Transforms.Identity(),
+                    GetOrCreateBucket(buckets, key, color));
             }
         }
 
-        if (vertices.Count > 0 && Math.Abs(uniformScale - 1) < 1e-9)
-            vertices = ScaleVerticesIfMillimeters(vertices);
-
-        return (vertices, indices);
+        var parts = new List<(List<double[]>, List<int>, Color?)>(buckets.Count);
+        var needsMmScale = Math.Abs(uniformScale - 1) < 1e-9 &&
+                           buckets.Values.Any(b => NeedsMillimeterScale(b.verts));
+        foreach (var bucket in buckets.Values)
+        {
+            if (bucket.verts.Count == 0 || bucket.indices.Count < 3) continue;
+            var verts = needsMmScale ? ScaleVerticesMillimeters(bucket.verts) : bucket.verts;
+            parts.Add((verts, bucket.indices, bucket.color));
+        }
+        return parts;
     }
 
-    private static Dictionary<string, (List<double[]> vertices, List<int> indices)> BuildDaeGeometryLibrary(
+    private sealed record DaeGeomPart(List<double[]> Vertices, List<int> Indices, string? Material);
+
+    private static Dictionary<string, Color> ParseDaeMaterialColors(XElement root, XNamespace ns)
+    {
+        var effects = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
+        foreach (var effect in root.Descendants(ns + "effect"))
+        {
+            var id = effect.Attribute("id")?.Value;
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            var rgba = effect.Descendants(ns + "diffuse").Elements(ns + "color").FirstOrDefault()?.Value;
+            if (TryParseRgba(rgba, out var color))
+                effects[id] = color;
+        }
+
+        var materials = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mat in root.Descendants(ns + "material"))
+        {
+            var effectUrl = NormalizeRef(mat.Element(ns + "instance_effect")?.Attribute("url")?.Value);
+            if (effectUrl is null || !effects.TryGetValue(effectUrl, out var color)) continue;
+            var id = mat.Attribute("id")?.Value;
+            var name = mat.Attribute("name")?.Value;
+            if (!string.IsNullOrWhiteSpace(id)) materials[id] = color;
+            if (!string.IsNullOrWhiteSpace(name)) materials[name] = color;
+        }
+        return materials;
+    }
+
+    private static bool TryParseRgba(string? rgba, out Color color)
+    {
+        color = default;
+        if (string.IsNullOrWhiteSpace(rgba)) return false;
+        var parts = rgba.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3) return false;
+        var r = ParseDouble(parts[0], 0);
+        var g = ParseDouble(parts[1], 0);
+        var b = ParseDouble(parts[2], 0);
+        var a = parts.Length > 3 ? ParseDouble(parts[3], 1) : 1;
+        color = Color.FromArgb(
+            (int)Math.Clamp(a * 255, 0, 255),
+            (int)Math.Clamp(r * 255, 0, 255),
+            (int)Math.Clamp(g * 255, 0, 255),
+            (int)Math.Clamp(b * 255, 0, 255));
+        return true;
+    }
+
+    private static Dictionary<string, DaeGeomPart> BuildDaeGeometryLibrary(
         XElement root, XNamespace ns, double uniformScale)
     {
-        var library = new Dictionary<string, (List<double[]>, List<int>)>(StringComparer.OrdinalIgnoreCase);
+        var library = new Dictionary<string, DaeGeomPart>(StringComparer.OrdinalIgnoreCase);
         foreach (var geom in root.Descendants(ns + "geometry"))
         {
             var id = geom.Attribute("id")?.Value;
@@ -194,13 +266,20 @@ internal static class UrdfVisualPreviewLoader
             var partVerts = new List<double[]>();
             var partIndices = new List<int>();
             var vertMap = BuildVerticesMap(mesh, ns);
+            string? material = null;
             foreach (var tri in mesh.Elements(ns + "triangles"))
+            {
+                material ??= tri.Attribute("material")?.Value;
                 AppendDaeTriangles(tri, ns, localVertices, vertMap, partVerts, partIndices);
+            }
             foreach (var poly in mesh.Elements(ns + "polylist"))
+            {
+                material ??= poly.Attribute("material")?.Value;
                 AppendDaePolylist(poly, ns, localVertices, vertMap, partVerts, partIndices);
+            }
 
             if (partVerts.Count > 0 && partIndices.Count >= 3)
-                library[id] = (partVerts, partIndices);
+                library[id] = new DaeGeomPart(partVerts, partIndices, material);
         }
         return library;
     }
@@ -208,10 +287,10 @@ internal static class UrdfVisualPreviewLoader
     private static void CollectDaeSceneNode(
         XElement node,
         XNamespace ns,
-        Dictionary<string, (List<double[]> vertices, List<int> indices)> library,
+        Dictionary<string, DaeGeomPart> library,
+        IReadOnlyDictionary<string, Color> materialColors,
         double[] parentMatrix,
-        List<double[]> outVertices,
-        List<int> outIndices,
+        Dictionary<string, (List<double[]> verts, List<int> indices, Color? color)> buckets,
         int depth = 0)
     {
         if (depth > MaxDaeNodeDepth) return;
@@ -223,31 +302,62 @@ internal static class UrdfVisualPreviewLoader
         {
             var id = NormalizeRef(instance.Attribute("url")?.Value);
             if (id is null || !library.TryGetValue(id, out var part)) continue;
-            AppendDaeMesh(part.vertices, part.indices, world, outVertices, outIndices);
+            var (materialKey, color) = ResolveDaeInstanceMaterial(instance, ns, part.Material, materialColors);
+            AppendDaeMesh(part.Vertices, part.Indices, world, GetOrCreateBucket(buckets, materialKey, color));
         }
 
         foreach (var child in node.Elements(ns + "node"))
-            CollectDaeSceneNode(child, ns, library, world, outVertices, outIndices, depth + 1);
+            CollectDaeSceneNode(child, ns, library, materialColors, world, buckets, depth + 1);
+    }
+
+    private static (string key, Color? color) ResolveDaeInstanceMaterial(
+        XElement instance,
+        XNamespace ns,
+        string? geometryMaterial,
+        IReadOnlyDictionary<string, Color> materialColors)
+    {
+        var binding = instance.Descendants(ns + "instance_material").FirstOrDefault();
+        var target = NormalizeRef(binding?.Attribute("target")?.Value);
+        var symbol = binding?.Attribute("symbol")?.Value;
+        foreach (var key in new[] { target, symbol, geometryMaterial })
+        {
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            if (materialColors.TryGetValue(key, out var color))
+                return (key, color);
+        }
+        return (geometryMaterial ?? target ?? symbol ?? "default", null);
+    }
+
+    private static (List<double[]> verts, List<int> indices, Color? color) GetOrCreateBucket(
+        Dictionary<string, (List<double[]> verts, List<int> indices, Color? color)> buckets,
+        string key,
+        Color? color)
+    {
+        if (!buckets.TryGetValue(key, out var bucket))
+        {
+            bucket = (new List<double[]>(), new List<int>(), color);
+            buckets[key] = bucket;
+        }
+        return bucket;
     }
 
     private static void AppendDaeMesh(
         List<double[]> localVertices,
         List<int> localIndices,
         double[] worldMatrix,
-        List<double[]> outVertices,
-        List<int> outIndices)
+        (List<double[]> verts, List<int> indices, Color? color) bucket)
     {
-        var baseIndex = outVertices.Count;
+        var baseIndex = bucket.verts.Count;
         foreach (var v in localVertices)
         {
             var p = Transforms.TransformPoint(worldMatrix, v[0], v[1], v[2]);
-            outVertices.Add(new[] { p[0], p[1], p[2] });
+            bucket.verts.Add(new[] { p[0], p[1], p[2] });
         }
         for (var i = 0; i + 2 < localIndices.Count; i += 3)
         {
-            outIndices.Add(baseIndex + localIndices[i]);
-            outIndices.Add(baseIndex + localIndices[i + 1]);
-            outIndices.Add(baseIndex + localIndices[i + 2]);
+            bucket.indices.Add(baseIndex + localIndices[i]);
+            bucket.indices.Add(baseIndex + localIndices[i + 1]);
+            bucket.indices.Add(baseIndex + localIndices[i + 2]);
         }
     }
 
@@ -432,9 +542,9 @@ internal static class UrdfVisualPreviewLoader
             var geom = visual.Element("geometry");
             if (geom is null) continue;
             var name = $"{linkName}_vis{visualIdx++}";
-            var obj = ParseVisualGeometry(name, pose, geom, urdfDirectory);
-            if (obj is not null)
-                build.Add(new LinkCollisionGeometry(linkIndex, linkName, obj), UrdfMaterialParser.ResolveVisualColor(visual, materials));
+            var urdfColor = UrdfMaterialParser.ResolveVisualColor(visual, materials);
+            foreach (var (obj, meshColor) in ParseVisualGeometries(name, pose, geom, urdfDirectory))
+                build.Add(new LinkCollisionGeometry(linkIndex, linkName, obj), meshColor ?? urdfColor);
         }
     }
 
@@ -476,9 +586,10 @@ internal static class UrdfVisualPreviewLoader
                     var geom = visual.Element("geometry");
                     if (geom is null) continue;
                     var name = $"{child}_vis{visualIdx++}";
-                    var obj = ParseVisualGeometry(name, ComposeFrames(childToWorld, visPose), geom, urdfDirectory);
-                    if (obj is not null)
-                        build.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj), UrdfMaterialParser.ResolveVisualColor(visual, materials));
+                    var urdfColor = UrdfMaterialParser.ResolveVisualColor(visual, materials);
+                    foreach (var (obj, meshColor) in ParseVisualGeometries(
+                                 name, ComposeFrames(childToWorld, visPose), geom, urdfDirectory))
+                        build.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj), meshColor ?? urdfColor);
                 }
             }
 
