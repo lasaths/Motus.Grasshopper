@@ -474,6 +474,63 @@ internal static class GhExtract
         }
     }
 
+    /// <summary>
+    /// Immediate plane-goal reachability (workspace + IK). Safe to call on every solve —
+    /// no path planning. Joint goals are skipped.
+    /// </summary>
+    public static List<string> CollectPlaneGoalReachErrors(
+        RobotContext ctx,
+        JointState start,
+        IReadOnlyList<(JointState? joints, Plane? plane)> goals)
+    {
+        var errors = new List<string>();
+        var session = ctx.EffectiveModel;
+        if (!goals.Any(g => g.plane is not null))
+            return errors;
+
+        if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
+        {
+            errors.Add($"No kinematics profile for '{session.Preset.ModelName}'.");
+            return errors;
+        }
+
+        CartesianPose? startPose = null;
+        try
+        {
+            var fk = KinematicsResolver.CreateFkSolver(session.Preset, ctx.Chain);
+            startPose = fk.ComputeTcp(start, ctx.Base, ctx.Tool);
+        }
+        catch (InvalidOperationException)
+        {
+            // Workspace check still works without start pose.
+        }
+
+        for (var i = 0; i < goals.Count; i++)
+        {
+            if (goals[i].plane is not { } plane)
+                continue;
+
+            var goal = new CartesianPose(FrameConversion.FromPlane(plane));
+            var workspace = CartesianWorkspace.CheckReach(session.Preset, goal, startPose);
+            if (!workspace.IsWithinReach)
+            {
+                errors.Add($"Goal[{i}]: {workspace.Reason ?? "Goal TCP is outside robot reach."}");
+                continue;
+            }
+
+            var reach = CartesianGoalSolver.TryReachFromStart(session, goal, start, ctx.Chain);
+            if (!reach.Success)
+            {
+                var detail = reach.Errors.Count > 0
+                    ? string.Join("; ", reach.Errors)
+                    : "Goal TCP is not reachable (IK failed).";
+                errors.Add($"Goal[{i}]: {detail}");
+            }
+        }
+
+        return errors;
+    }
+
     /// <summary>Fast-fail before expensive planners when start/goal already intersect obstacles.</summary>
     public static PlanningResult? TryPreflightCollision(
         RobotContext ctx,

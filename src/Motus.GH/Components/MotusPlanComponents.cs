@@ -245,6 +245,24 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         var planningContext = snapshot.PlanningContext;
         var rrtSettings = snapshot.RrtSettings;
 
+        // Immediate reachability for plane goals — do not wait for Plan.
+        var reachErrors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, goals);
+        if (reachErrors.Count > 0)
+        {
+            _run = false;
+            _debounceGen++;
+            _planningPending = false;
+            InvalidateCachedPlan();
+            foreach (var error in reachErrors)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
+            EmitOutputs(
+                da,
+                GhExtract.PlanStatusKind.Manual,
+                emitCache: false,
+                statusOverride: string.Join(" | ", reachErrors));
+            return;
+        }
+
         if (IsOperationInProgress && _activeWorkerFingerprint is not null && _activeWorkerFingerprint != fingerprint)
             RequestCancellation();
 

@@ -73,8 +73,9 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
   - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (registry `ShortName`, e.g. `RrtConnect`; unavailable planners hidden), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
   - `Goal` is joints, no collision → joint-linear plan.
 - Plane goal **Status** errors distinguish: outside reach, goal IK failed, or LIN path failed at intermediate poses.
+- Plane goals run a **workspace + IK reachability check on every solve** (no Plan click). Unreachable targets set Status/errors immediately and clear any cached trajectory.
 - Trajectory output preserves robot chain and frame overrides for preview/export.
-- **Manual mode (default):** toggling inputs does not replan; press **Plan** again.
+- **Manual mode (default):** toggling inputs does not replan; press **Plan** again. Unreachable plane goals still report immediately.
 - **Auto Plan** (right-click menu): replans when inputs change, debounced ~400 ms. Button shows **Replan** (amber) and skips debounce when clicked. Locked components never auto-replan. Status suffixes: `(auto)`, `(auto, cached)`, or `Planning…`. A remark appears while stale trajectories are still on the output.
 - `Status` reports success, errors, or validation warnings.
 - `Warnings` includes runtime capability text from `MotusCapabilities.Describe()` (managed/native OMPL/FCL status).

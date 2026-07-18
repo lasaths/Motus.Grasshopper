@@ -15,6 +15,7 @@ Last automated run: `./scripts/verify-qa.ps1` (build + 26 unit tests + QA smoke 
 - [x] UR5e: joint-linear plan produces trajectory — QA smoke + unit tests
 - [x] URDF load produces robot model — QA smoke (`examples/ur10e/ur10e_minimal.urdf`, `examples/ur10e/ur10e.urdf`, `examples/ur10e/ur10e_robotiq.urdf`)
 - [ ] Motus Plan computes only on the Plan button; re-emits cached on input edits — confirm in GH
+- [ ] Motus Plan plane goal far outside reach: Status/errors appear without pressing Plan; cached trajectory clears
 - [ ] Motus Plan Auto Plan (right-click menu): input edit replans after debounce; Replan button is immediate; setting persists in saved `.gh`
 - [x] Cartesian goal (plane) reaches target via IK — QA smoke + `CartesianPlannerTests`
 - [x] RRT Connect (collision wired) avoids sphere obstacle — QA smoke uses `RobotMeshCollisionChecker` + `RrtConnectTests`
