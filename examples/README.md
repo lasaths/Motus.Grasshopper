@@ -107,6 +107,8 @@ Start (optional) ─────────────────────
 
 ## Editing
 
-Re-save from Grasshopper after tweaks so the archive matches your installed component version. Prefer editing `scripts/generate-examples.mjs` for structural changes, then re-run the generator.
+**Canonical path:** edit `scripts/generate-examples.mjs`, then `node scripts/generate-examples.mjs` (+ `validate-ghx`). Do not hand-layout `.ghx` in Grasshopper — regenerate overwrites it.
+
+Layout rules (see also [CONTEXT.md](../CONTEXT.md)): **band layout** (horizontal stages, no overlapping **Groups**); **Scribble** titles in Consolas; **Note panels** stay to one or two lines.
 
 External plugin / controller handoff: [AGENTS.md](../AGENTS.md).
