@@ -24,6 +24,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     private List<PlanningResult>? _cached;
     private List<TrajectoryGoo>? _cachedGoos;
+    private List<string> _pendingRemarks = [];
     private bool _run;
     private bool _autoPlan;
     private string? _lastPlannedFingerprint;
@@ -175,8 +176,13 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     {
         if (IsReadyToSetData)
         {
+            // Runtime messages must be added during SolveInstance — GH clears them at solution start,
+            // so reporting from CommitWorkerCachedResults (pre-ExpireSolution) never sticks.
             base.SolveInstance(da);
             _activeWorkerFingerprint = null;
+            ReportCachedFailuresIfNeeded();
+            foreach (var remark in _pendingRemarks)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, remark);
             return;
         }
 
@@ -311,10 +317,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         _cached = results.ToList();
         _cachedGoos = goos.ToList();
         _lastPlannedFingerprint = fingerprint;
-
-        ReportPlanningFailures(_cached);
-        foreach (var remark in remarks)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, remark);
+        // Defer runtime messages until the SetData SolveInstance pass (see SolveInstance).
+        _pendingRemarks = remarks.ToList();
     }
 
     internal void ReportCachedFailuresIfNeeded()
@@ -437,6 +441,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
             RequestCancellation();
         _cached = null;
         _cachedGoos = null;
+        _pendingRemarks = [];
         _lastPlannedFingerprint = null;
         _activeWorkerFingerprint = null;
         _planningPending = false;
