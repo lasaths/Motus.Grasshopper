@@ -26,7 +26,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 `Motus Joint State` expects joint values in **URDF chain order** when the robot has `JointNames` metadata (bundled UR presets and URDF loads).
 
-`Motus TCP Pose` runs forward kinematics for a joint state and outputs the TCP as a **Plane** in the robot base frame. Wire it before **Motus Plan** or **Motus Motion Segment** (LIN/CIRC) when you have joint targets but need a Cartesian goal.
+`Motus TCP Pose` runs forward kinematics for a joint state and outputs the TCP as a **Plane** in the robot base frame. Wire it before **Motus Plan** or **Motus Move** (LIN/CIRC) when you have joint targets but need a Cartesian goal.
 
 ### Joint order
 
@@ -44,10 +44,10 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 | Component | Notes |
 |-----------|-------|
-| Motus Plan | One planner for all goals. Click **Plan** to compute, or enable **Auto Plan** from the right-click menu. |
+| Motus Plan (nick **Quick**) | Quick single/multi-goal planner. Plane = TCP LIN; joint = joint-linear or RRT with collision. Click **Plan**, or **Auto Plan** from the right-click menu. |
 | Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [motus-net.md](motus-net.md). |
-| Motus Motion Segment | Build a single PTP/LIN/CIRC/SET/WAIT declarative segment (`MotionSegmentGoo`, execution hint only). |
-| Motus Program Plan | Plan a mixed segment list via `IndustrialMotionPlanner` (click **Plan**). |
+| Motus Move | One PTP/LIN/CIRC/SET/WAIT program line. Type (± ToolMode) are Arup-style on-component dropdowns; pins morph by type. |
+| Motus Program | Plan a Motus Move list via `IndustrialMotionPlanner` (click **Plan**; wire order = program order). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
 | Motus Attach Body | Build an attached body from a collision object in TCP-local frame. |
 
@@ -109,24 +109,24 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 | Component | GUID |
 |-----------|------|
 | Motus RRT Settings | `11d59b15-ffe2-488e-83b8-52eddf772025` |
-| Motus Motion Segment | `7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31` |
-| Motus Program Plan | `8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42` |
+| Motus Move | `7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31` |
+| Motus Program | `8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42` |
 
-`Motus Motion Segment` has a **Type** dropdown (`PTP` / `LIN` / `CIRC` / `SET` / `WAIT`). All inputs stay visible; only the active type is validated:
+`Motus Move` uses **on-component** Type (± ToolMode) dropdowns (Arup-style attributes — not a floating GH Value List). Pins morph to the active type:
 
 | Type | Required | Optional |
 |------|----------|----------|
-| PTP | `Goal` (Joint State) | `Blend` (m), `ToolState`, `ToolMode` |
-| LIN | `Goal` (Plane, TCP pose) | `Step` (m, default 0.005), `Blend`, `ToolState`, `ToolMode` |
-| CIRC | `Via` + `Goal` (Planes) | `Samples` (default 16), `Blend`, `ToolState`, `ToolMode` |
+| PTP | `Goal` (Joint State) | `Blend` (m), `ToolState` |
+| LIN | `Goal` (Plane, TCP pose) | `Step` (m, default 0.005), `Blend`, `ToolState` |
+| CIRC | `Via` + `Goal` (Planes) | `Samples` (default 16), `Blend`, `ToolState` |
 | SET | `ToolState` | `Duration` (s ramp; 0 = instant) |
 | WAIT | `Duration` (s) | — |
 
-**ToolMode** on arm segments: `Hold` (unchanged), `Ramp` (interpolate to `ToolState` over segment), `Instant` (step at segment start). These are execution hints for downstream adapters; Motus does not command hardware.
+**ToolMode** (face dropdown on PTP/LIN/CIRC): `Hold`, `Ramp`, `Instant`. Execution hints for downstream adapters; Motus does not command hardware.
 
 Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/11_gripper_motion_program.ghx`).
 
-`Motus Program Plan` inputs match `Motus Plan` collision/group/attach semantics. Tool state on segments is validated against the robot's wired **Tool** capabilities when present.
+`Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present.
 
 `Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Gripper mesh preview morphs with jaw width when tool capabilities are present.
 

@@ -61,7 +61,7 @@ public sealed class Param_MotusCollisionScene : GH_PersistentParam<CollisionScen
 public sealed class Param_MotusSegment : GH_PersistentParam<MotionSegmentGoo>
 {
     public Param_MotusSegment()
-        : base("Segment", "Seg", "Motus motion segment", "Motus", "Params") { }
+        : base("Segment", "Seg", "Motus Move segment", "Motus", "Params") { }
 
     public override Guid ComponentGuid => new("e55e8488-943e-426f-b205-e8db5f684905");
     public override GH_Exposure Exposure => GH_Exposure.hidden;

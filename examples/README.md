@@ -7,7 +7,7 @@ node scripts/generate-examples.mjs
 node scripts/validate-ghx.mjs
 ```
 
-Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Motus Program Plan**, then **Play** on **Motus Preview**.
+Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Motus Program**, then **Play** on **Motus Preview**.
 
 ## Example index
 
@@ -20,10 +20,10 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 | `05_srdf_group_attach.ghx` | SRDF path, Planning Group, Attach Body on Plan |
 | `06_urdf_load.ghx` | Motus Robot (URDF Path) → plan + preview |
 | `07_frames_and_start.ghx` | Base override + Motus Tool on Robot, Plan Start, Preview ShowStart |
-| `08_motion_program.ghx` | PTP + LIN + CIRC segments → Program Plan → Preview / Export |
+| `08_motion_program.ghx` | PTP + LIN + CIRC Moves → Motus Program → Preview / Export |
 | `09_tool_tcp.ghx` | Motus Tool (TCP + gripper box) → Robot.Tool → Plan → Preview / Export |
 | `10_robotiq_tool.ghx` | Robotiq 2F-85 STL → Load Mesh → Motus Tool → UR10e Plan + Preview |
-| `11_gripper_motion_program.ghx` | PTP + SET gripper close → Program Plan → Preview / Export (toolState on trajectory) |
+| `11_gripper_motion_program.ghx` | PTP + SET gripper close → Motus Program → Preview / Export (toolState on trajectory) |
 | `12_sequential_goals.ghx` | Multiple goals on Plan.Goal list → concatenated Preview / Export |
 
 ## Component coverage
@@ -35,8 +35,8 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 | Motus Joint State | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Motus TCP Pose | | ✓ | | | | | | | | | | |
 | Plane goal (Cartesian LIN) | | ✓ | | | | | | ✓ | | | | ✓ |
-| Motus Motion Segment | | | | | | | | ✓ | | | ✓ | |
-| Motus Program Plan | | | | | | | | ✓ | | | ✓ | |
+| Motus Move | | | | | | | | ✓ | | | ✓ | |
+| Motus Program | | | | | | | | ✓ | | | ✓ | |
 | Motus Plan — Goal list | | | | | | | | | | | | ✓ |
 | Motus Plan — Start | | | | | | | ✓ | ✓ | | | ✓ | ✓ |
 | Motus Plan — Collision | | | ✓ | ✓ | ✓ | | | | | | | |
@@ -61,7 +61,7 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 
 **Plan advanced inputs:** Collision / Group / Attach / RrtSettings are hidden by default. Right-click Motus Plan → Show Collision (etc.), or open examples 03–05 which already include those pins.
 
-**Tool / ToolState:** Motus Tool has an explicit **Cap** dropdown (`None` / `Robotiq2F85`). Motus Tool State accepts **Tool or Robot** on `Tl` (UR10e bundled tool works when you wire the robot). Gripper SET/WAIT uses Program Plan + Motion Segment, not Motus Plan.
+**Tool / ToolState:** Motus Tool has an explicit **Cap** dropdown (`None` / `Robotiq2F85`). Motus Tool State accepts **Tool or Robot** on `Tl` (UR10e bundled tool works when you wire the robot). Gripper SET/WAIT uses Motus Program + Motus Move, not Motus Plan.
 
 **Preview:** Trajectory list from Motus Plan concatenates sequential goals. Debug outputs (Index / Invalid / ToolState / Width) are behind right-click → Show debug outputs.
 
@@ -97,9 +97,9 @@ Preview / Export accept the Trajectory **list** and concatenate sequential goals
 ### Motion program (08)
 
 ```
-Robot + Joint States / Planes → Motion Segment (PTP/LIN/CIRC) ─┐
-                                                                ├→ Program Plan [Plan] → Preview / Export
-Start (optional) ───────────────────────────────────────────────┘
+Robot + Joint States / Planes → Motus Move (PTP/LIN/CIRC ▾) ─┐
+                                                              ├→ Motus Program [Plan] → Preview / Export
+Start (optional) ─────────────────────────────────────────────┘
 ```
 
 ### Collision RRT (03–05)

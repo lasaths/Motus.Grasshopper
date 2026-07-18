@@ -63,8 +63,8 @@ const MOTUS = {
       { name: 'State', nick: 'Js', desc: 'Joint state', optional: false },
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
-  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 104,
-    desc: 'Plan to plane/joint goal; right-click for Collision/Group/Attach/RrtSettings. For gripper SET/WAIT use Program Plan + Motion Segment.',
+  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 74, h: 104,
+    desc: 'Quick planner: plane=LIN, joint=joint-linear/RRT. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
@@ -182,34 +182,31 @@ const MOTUS = {
       { name: 'Force', nick: 'F', desc: 'Grip force ratio 0–1', optional: true, number: 0.5 },
     ],
     outputs: [{ name: 'State', nick: 'Ts', desc: 'End-effector state' }] },
-  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Motion Segment', nick: 'Segment', w: 74, h: 84,
-    desc: 'Build PTP/LIN/CIRC/SET/WAIT motion segment (Type dropdown; type-specific pins appear automatically)',
+  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Move', nick: 'Move', w: 74, h: 100,
+    desc: 'One PTP/LIN/CIRC/SET/WAIT program line (Type/ToolMode on-component dropdowns; pins morph by type)',
     inputs: [
-      { name: 'Type', nick: 'Ty', desc: 'PTP, LIN, CIRC, SET, or WAIT', optional: false, text: 'PTP' },
+      { name: 'Type', nick: 'Ty', desc: 'PTP, LIN, CIRC, SET, or WAIT (prefer on-component dropdown)', optional: false, text: 'PTP' },
       { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: true },
       { name: 'Blend', nick: 'B', desc: 'Blend radius (m, default 0)', optional: true, number: 0 },
-      { name: 'ToolState', nick: 'Ts', desc: 'Optional tool state goal', optional: true },
+      { name: 'ToolState', nick: 'Ts', desc: 'Tool state (SET required; optional on arm moves)', optional: true },
     ],
     typeInputs: {
-      PTP: [{ name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' }],
       LIN: [
         { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005 },
-        { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
       ],
       CIRC: [
         { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true },
         { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16 },
-        { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
       ],
       SET: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
       WAIT: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
     },
     outputs: [{ name: 'Segment', nick: 'Seg', desc: 'Motion segment' }] },
-  progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program Plan', nick: 'ProgPlan', w: 74, h: 144,
-    desc: 'Plan mixed PTP/LIN/CIRC program (click Plan); LIN failures do not fall back to joint paths',
+  progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program', nick: 'Program', w: 74, h: 144,
+    desc: 'Plan Motus Move sequence (click Plan); LIN failures do not fall back to joint paths',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
-      { name: 'Segments', nick: 'Seg', desc: 'List of motion segments', optional: false, access: 1 },
+      { name: 'Segments', nick: 'Seg', desc: 'List of Motus Move segments (wire order = program order)', optional: false, access: 1 },
       { name: 'Start', nick: 'St0', desc: 'Start joint state (defaults to home)', optional: true },
       { name: 'Collision', nick: 'C', desc: 'Collision scene', optional: true },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
@@ -399,8 +396,16 @@ function motusComponent(key, x, y, wireMap, options = {}) {
         inputDefs.push(adv);
     }
   }
-  // Segment type-specific pins.
+  // Move type-specific pins (match Motus Move SyncPinsForType morph).
   const segType = (options.segmentType || options.text?.Type || 'PTP').toString().trim().toUpperCase();
+  if (key === 'segment') {
+    const isArm = segType === 'PTP' || segType === 'LIN' || segType === 'CIRC';
+    inputDefs = inputDefs.filter((inp) => {
+      if (inp.name === 'Goal' || inp.name === 'Blend') return isArm;
+      if (inp.name === 'ToolState') return isArm || segType === 'SET';
+      return true;
+    });
+  }
   if (spec.typeInputs?.[segType])
     inputDefs = [...inputDefs, ...spec.typeInputs[segType]];
   // Adjust height by pin count.
@@ -1186,7 +1191,7 @@ function graph08() {
   ];
   flat._meta = {
     fileName: '08_motion_program.ghx',
-    description: 'Motion program: PTP + LIN + CIRC segments -> Program Plan -> Preview / Export. Click Plan, then drag Motus Scrub or Play.',
+    description: 'Motion program: PTP + LIN + CIRC Moves -> Motus Program -> Preview / Export. Click Plan, then drag Motus Scrub or Play.',
   };
   return buildGraph(flat);
 }
@@ -1267,7 +1272,7 @@ function graph11() {
   const segPtp = motusComponent('segment', 360, 280, {
     Goal: [outRef(ptpGoal.node, 'State')],
     ToolState: [outRef(stateOpen.node, 'State')],
-  }, { text: { Type: 'PTP', ToolMode: 'Hold' } });
+  }, { text: { Type: 'PTP' } });
   const segSet = motusComponent('segment', 360, 420, {
     ToolState: [outRef(stateClosed.node, 'State')],
   }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
@@ -1281,7 +1286,7 @@ function graph11() {
   const objs = [robot, start, ptpGoal, stateOpen, stateClosed, segPtp, segSet, progPlan, scrub, preview, exp];
   objs._meta = {
     fileName: '11_gripper_motion_program.ghx',
-    description: 'Motion program with SET gripper close: UR10e Robotiq -> ToolState(Robot) -> Program Plan -> Preview/Export.',
+    description: 'Motion program with SET gripper close: UR10e Robotiq -> ToolState(Robot) -> Motus Program -> Preview/Export.',
   };
   return buildGraph(objs);
 }

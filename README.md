@@ -6,7 +6,7 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 
 ## Requirements
 
-- Rhino 8 + Grasshopper (Windows or macOS)
+- Rhino 8.19+ + Grasshopper (Windows or macOS) — built against RhinoCommon/Grasshopper `8.19.25132.1001` for SR compatibility
 - .NET 8 SDK
 
 Pins **Motus.NET 0.6.8** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
@@ -41,14 +41,15 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 
 | Variable | Purpose |
 |----------|---------|
-| `Rhino8Dir` | Windows Rhino 8 install (DLL hints) |
+| `RhinoCommonPackageVersion` | NuGet floor for RhinoCommon/Grasshopper (default `8.19.25132.1001`) |
+| `Rhino8Dir` | Windows Rhino 8 install (launch / path hints) |
 | `Rhino8App` | macOS Rhino 8 `.app` path |
 | `MotusNetVersion` | Override NuGet pin (default `0.6.8`) |
 
 ## First plan (3 components)
 
 1. **Motus Robot** — pick a preset (e.g. UR10e)
-2. **Motus Plan** — wire a Rhino **Plane** or **Motus Joint State** to `Goal` (and optionally `Start`), click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**
+2. **Motus Plan** (nick **Quick**) — wire a Rhino **Plane** or **Motus Joint State** to `Goal` (and optionally `Start`), click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**. Plane goals are TCP LIN only.
 3. **Motus Preview** — **Play** to animate; **Motus Export** for JSON/CSV
 
 Component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md). Palette icons: [docs/icons.md](docs/icons.md).
@@ -74,7 +75,7 @@ Example: `examples/03_collision_rrt.ghx`.
 
 ### Motion programs
 
-**Motion Segment** (PTP / LIN / CIRC) → **Program Plan** → Preview / Export. Unlike Plan plane goals, Program Plan does not fall back to joint-space when LIN fails. `SET` / `WAIT` / tool-state values are export hints for downstream controllers.
+**Motus Move** (on-component Type dropdown: PTP / LIN / CIRC / SET / WAIT) → **Motus Program** → Preview / Export. Unlike Plan plane goals, Program does not fall back to joint-space when LIN fails. `SET` / `WAIT` / tool-state values are export hints for downstream controllers.
 
 ### Tools, attach, groups
 

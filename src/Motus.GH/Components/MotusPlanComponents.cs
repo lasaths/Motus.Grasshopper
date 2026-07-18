@@ -38,7 +38,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _showRrtSettings;
 
     public MotusPlanComponent()
-        : base("Motus Plan", "Plan", "Plan motion from a Plane or Joint State start to plane (TCP LIN) or joint goals; click Plan or enable Auto Plan. For gripper SET/WAIT use Motus Program Plan + Motion Segment.", "Plan", "flow-arrow")
+        : base("Motus Plan", "Quick", "Quick planner: plane goals = TCP LIN, joint goals = joint-linear or RRT with collision. Click Plan or enable Auto Plan. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.", "Plan", "flow-arrow")
     {
         _worker = new PlanWorker(this);
         BaseWorker = _worker;
@@ -251,6 +251,10 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         }
 
         GhExtract.RemarkIfDefaultStart(this, snapshot.UsedDefaultStart);
+        if (goals.Any(g => g.plane is not null))
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Remark,
+                "Plane goals use TCP LIN. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.");
 
         var fingerprint = snapshot.Fingerprint;
         var planningContext = snapshot.PlanningContext;

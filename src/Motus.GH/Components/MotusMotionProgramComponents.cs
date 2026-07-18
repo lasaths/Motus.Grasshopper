@@ -1,5 +1,6 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
+using GH_IO.Serialization;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
@@ -7,31 +8,41 @@ using Motus.GH.Params;
 using Motus.GH.UI;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
-using System.Windows.Forms;
 
 namespace Motus.GH.Components;
 
+/// <summary>
+/// Motus Move — one PTP/LIN/CIRC/SET/WAIT line with Arup-style on-component Type (± ToolMode) dropdowns.
+/// </summary>
 public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_VariableParameterComponent
 {
-    private const int CoreInputCount = 4;
-    private string _lastSyncedType = "PTP";
+    private static readonly string[] MotionTypes = ["PTP", "LIN", "CIRC", "SET", "WAIT"];
+    private static readonly string[] ToolModes = ["Hold", "Ramp", "Instant"];
+
+    private string _motionType = "PTP";
+    private string _toolMode = "Hold";
+    private string _lastSyncedType = "";
 
     public MotusMotionSegmentComponent()
         : base(
-            "Motus Motion Segment",
-            "Segment",
-            "Build declarative PTP/LIN/CIRC/SET/WAIT planner segments (execution hints only; no robot commands). Optional ToolState on arm segments.",
+            "Motus Move",
+            "Move",
+            "Build one PTP/LIN/CIRC/SET/WAIT program line (Type dropdown on component). Wire several into Motus Program.",
             "Plan",
             "line-segments") { }
 
+    public override void CreateAttributes() =>
+        m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddTextParameter("Type", "Ty", "PTP, LIN, CIRC, SET, or WAIT", GH_ParamAccess.item, "PTP");
+        // Type kept as a pin for document serialization / external wires; UI is the face dropdown.
+        p.AddTextParameter("Type", "Ty", "PTP, LIN, CIRC, SET, or WAIT (prefer the on-component dropdown)", GH_ParamAccess.item, "PTP");
         p.AddGenericParameter("Goal", "G", "PTP: Joint State; LIN/CIRC: Plane (TCP pose)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Blend", "B", "Blend radius (m, default 0)", GH_ParamAccess.item, 0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddParameter(new Param_MotusToolState(), "ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusToolState(), "ToolState", "Ts", "Tool state (SET required; optional on arm moves)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -43,43 +54,75 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         base.AddedToDocument(doc);
         doc.ScheduleSolution(1, _ =>
         {
-            if (Params.Input[0].SourceCount == 0)
-                GhValueList.AttachDropdown(this, 0, new[] { "PTP", "LIN", "CIRC", "SET", "WAIT" }, "Type");
-            SyncPinsForType(PeekType(), force: true);
+            _motionType = PeekType();
+            SyncTypePin(_motionType);
+            SyncPinsForType(_motionType, force: true);
         });
+    }
+
+    public override bool Write(GH_IWriter writer)
+    {
+        writer.SetString("MotionType", _motionType);
+        writer.SetString("ToolMode", _toolMode);
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        if (reader.ItemExists("MotionType"))
+            _motionType = NormalizeType(reader.GetString("MotionType"));
+        if (reader.ItemExists("ToolMode"))
+            _toolMode = NormalizeToolMode(reader.GetString("ToolMode"));
+        return base.Read(reader);
     }
 
     protected override void BeforeSolveInstance()
     {
-        SyncPinsForType(PeekType());
+        // Wired Type pin still wins (legacy ValueList / panel).
+        if (Params.Input[0].SourceCount > 0)
+            _motionType = PeekType();
+        else
+            SyncTypePin(_motionType);
+
+        SyncPinsForType(_motionType);
         base.BeforeSolveInstance();
     }
 
-    public bool CanInsertParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input && index >= CoreInputCount;
+    public bool CanInsertParameter(GH_ParameterSide side, int index) => false;
 
-    public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input && index >= CoreInputCount;
+    public bool CanRemoveParameter(GH_ParameterSide side, int index) => false;
 
     public IGH_Param CreateParameter(GH_ParameterSide side, int index) =>
         new Param_Number { Name = "Step", NickName = "St", Optional = true };
 
-    public bool DestroyParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input && index >= CoreInputCount;
+    public bool DestroyParameter(GH_ParameterSide side, int index) => false;
 
     public void VariableParameterMaintenance() { }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        var typeText = "PTP";
-        if (!da.GetData(0, ref typeText) || !TryParseSegmentType(typeText, out var segmentType))
+        var typeText = _motionType;
+        if (Params.Input[0].SourceCount > 0)
+        {
+            typeText = "PTP";
+            if (!da.GetData(0, ref typeText) || !TryParseSegmentType(typeText, out _))
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Type must be PTP, LIN, CIRC, SET, or WAIT.");
+                return;
+            }
+            _motionType = NormalizeType(typeText);
+        }
+
+        if (!TryParseSegmentType(_motionType, out var segmentType))
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Type must be PTP, LIN, CIRC, SET, or WAIT.");
             return;
         }
 
         var blend = 0.0;
-        da.GetData(IndexOf("Blend"), ref blend);
+        var blendIdx = IndexOf("Blend");
+        if (blendIdx >= 0)
+            da.GetData(blendIdx, ref blend);
         if (blend < 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Blend must be >= 0.");
@@ -87,9 +130,11 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         }
 
         TryReadToolState(da, IndexOf("ToolState"), out var toolState);
-        var toolMode = ToolStateMode.Hold;
-        var toolModeIdx = IndexOf("ToolMode");
-        if (toolModeIdx >= 0 && !TryReadToolMode(da, toolModeIdx, ref toolMode)) return;
+        if (!TryParseToolMode(_toolMode, out var toolMode))
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "ToolMode must be Hold, Ramp, or Instant.");
+            return;
+        }
 
         var duration = 0.0;
         var durationIdx = IndexOf("Duration");
@@ -100,6 +145,8 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Duration must be >= 0.");
             return;
         }
+
+        Message = _motionType;
 
         switch (segmentType)
         {
@@ -134,6 +181,50 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         }
     }
 
+    private DropDownAttributes.Model BuildDropdownModel()
+    {
+        var type = NormalizeType(_motionType);
+        var isArm = type is "PTP" or "LIN" or "CIRC";
+        if (isArm)
+        {
+            return new DropDownAttributes.Model(
+                ["Type", "ToolMode"],
+                [MotionTypes, ToolModes],
+                [type, NormalizeToolMode(_toolMode)]);
+        }
+
+        return new DropDownAttributes.Model(
+            ["Type"],
+            [MotionTypes],
+            [type]);
+    }
+
+    private void OnDropdownSelect(int listIndex, int itemIndex)
+    {
+        if (listIndex == 0)
+        {
+            if (itemIndex < 0 || itemIndex >= MotionTypes.Length) return;
+            var next = MotionTypes[itemIndex];
+            if (next == _motionType) return;
+            RecordUndoEvent("Move Type");
+            _motionType = next;
+            SyncTypePin(_motionType);
+            SyncPinsForType(_motionType, force: true);
+            ExpireSolution(true);
+            return;
+        }
+
+        if (listIndex == 1)
+        {
+            if (itemIndex < 0 || itemIndex >= ToolModes.Length) return;
+            var next = ToolModes[itemIndex];
+            if (next == _toolMode) return;
+            RecordUndoEvent("Move ToolMode");
+            _toolMode = next;
+            ExpireSolution(true);
+        }
+    }
+
     private string PeekType()
     {
         var param = Params.Input[0];
@@ -142,31 +233,83 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             var list = param.VolatileData.get_Branch(branch);
             if (list is null || list.Count == 0) continue;
             if (list[0] is Grasshopper.Kernel.Types.GH_String gs && !string.IsNullOrWhiteSpace(gs.Value))
-                return gs.Value.Trim().ToUpperInvariant();
+                return NormalizeType(gs.Value);
             if (list[0] is Grasshopper.Kernel.Types.IGH_Goo goo && goo.CastTo<string>(out var s) && !string.IsNullOrWhiteSpace(s))
-                return s.Trim().ToUpperInvariant();
+                return NormalizeType(s);
         }
 
         if (param is Param_String ps && ps.PersistentDataCount > 0)
         {
             var v = ps.PersistentData.get_FirstItem(false);
             if (v is not null && !string.IsNullOrWhiteSpace(v.Value))
-                return v.Value.Trim().ToUpperInvariant();
+                return NormalizeType(v.Value);
         }
 
-        return "PTP";
+        return NormalizeType(_motionType);
+    }
+
+    private void SyncTypePin(string typeUpper)
+    {
+        if (Params.Input[0] is not Param_String ps) return;
+        if (ps.SourceCount > 0) return;
+        var current = ps.PersistentDataCount > 0 ? ps.PersistentData.get_FirstItem(false)?.Value : null;
+        if (string.Equals(current, typeUpper, StringComparison.OrdinalIgnoreCase)) return;
+        ps.PersistentData.Clear();
+        ps.SetPersistentData(typeUpper);
     }
 
     private void SyncPinsForType(string typeUpper, bool force = false)
     {
+        typeUpper = NormalizeType(typeUpper);
         if (!force && typeUpper == _lastSyncedType) return;
+
+        var prevArm = _lastSyncedType is "PTP" or "LIN" or "CIRC";
+        var isArm = typeUpper is "PTP" or "LIN" or "CIRC";
         _lastSyncedType = typeUpper;
 
+        var wantGoal = isArm;
+        var wantBlend = isArm;
+        var wantToolState = isArm || typeUpper == "SET";
         var wantStep = typeUpper == "LIN";
         var wantVia = typeUpper == "CIRC";
         var wantSamples = typeUpper == "CIRC";
-        var wantToolMode = typeUpper is "PTP" or "LIN" or "CIRC";
         var wantDuration = typeUpper is "SET" or "WAIT";
+
+        SetPinPresent("Goal", wantGoal, () => new Param_GenericObject
+        {
+            Name = "Goal",
+            NickName = "G",
+            Description = "PTP: Joint State; LIN/CIRC: Plane (TCP pose)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        });
+
+        SetPinPresent("Blend", wantBlend, () => new Param_Number
+        {
+            Name = "Blend",
+            NickName = "B",
+            Description = "Blend radius (m, default 0)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        }, setDefault: p =>
+        {
+            if (p is Param_Number pn)
+                pn.SetPersistentData(0.0);
+        });
+
+        SetPinPresent("ToolState", wantToolState, () => new Param_MotusToolState
+        {
+            Name = "ToolState",
+            NickName = "Ts",
+            Description = typeUpper == "SET"
+                ? "SET: tool state goal (required)"
+                : "Optional tool state on arm move",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        });
+
+        // Remove legacy ToolMode pin if an older document still has it.
+        SetPinPresent("ToolMode", false, () => new Param_String());
 
         SetPinPresent("Step", wantStep, () => new Param_Number
         {
@@ -203,19 +346,6 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
                 pi.SetPersistentData(16);
         });
 
-        SetPinPresent("ToolMode", wantToolMode, () => new Param_String
-        {
-            Name = "ToolMode",
-            NickName = "Tm",
-            Description = "Hold, Ramp, or Instant interpolation hint (arm segments)",
-            Access = GH_ParamAccess.item,
-            Optional = true
-        }, setDefault: p =>
-        {
-            if (p is Param_String ps)
-                ps.SetPersistentData("Hold");
-        });
-
         SetPinPresent("Duration", wantDuration, () => new Param_Number
         {
             Name = "Duration",
@@ -230,13 +360,8 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         });
 
         Params.OnParametersChanged();
-
-        var toolModeIdx = IndexOf("ToolMode");
-        if (toolModeIdx >= 0 && Params.Input[toolModeIdx].SourceCount == 0 && OnPingDocument() is GH_Document doc)
-        {
-            doc.ScheduleSolution(1, _ =>
-                GhValueList.AttachDropdown(this, toolModeIdx, new[] { "Hold", "Ramp", "Instant" }, "ToolMode"));
-        }
+        if (force || prevArm != isArm)
+            CreateAttributes();
     }
 
     private void SetPinPresent(string name, bool show, Func<IGH_Param> factory, Action<IGH_Param>? setDefault = null)
@@ -270,27 +395,6 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         if (!da.GetData(index, ref goo) || goo?.Value is null) return true;
         state = goo.Value;
         return true;
-    }
-
-    private bool TryReadToolMode(IGH_DataAccess da, int index, ref ToolStateMode mode)
-    {
-        var text = "Hold";
-        if (!da.GetData(index, ref text)) return true;
-        switch (text.Trim().ToUpperInvariant())
-        {
-            case "HOLD":
-                mode = ToolStateMode.Hold;
-                return true;
-            case "RAMP":
-                mode = ToolStateMode.Ramp;
-                return true;
-            case "INSTANT":
-                mode = ToolStateMode.Instant;
-                return true;
-            default:
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "ToolMode must be Hold, Ramp, or Instant.");
-                return false;
-        }
     }
 
     private bool TryBuildPtp(
@@ -391,6 +495,42 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         return true;
     }
 
+    private static string NormalizeType(string? raw)
+    {
+        var t = (raw ?? "PTP").Trim().ToUpperInvariant();
+        return t is "PTP" or "LIN" or "CIRC" or "SET" or "WAIT" ? t : "PTP";
+    }
+
+    private static string NormalizeToolMode(string? raw)
+    {
+        var t = (raw ?? "Hold").Trim();
+        return t.ToUpperInvariant() switch
+        {
+            "RAMP" => "Ramp",
+            "INSTANT" => "Instant",
+            _ => "Hold"
+        };
+    }
+
+    private static bool TryParseToolMode(string raw, out ToolStateMode mode)
+    {
+        switch (raw.Trim().ToUpperInvariant())
+        {
+            case "HOLD":
+                mode = ToolStateMode.Hold;
+                return true;
+            case "RAMP":
+                mode = ToolStateMode.Ramp;
+                return true;
+            case "INSTANT":
+                mode = ToolStateMode.Instant;
+                return true;
+            default:
+                mode = ToolStateMode.Hold;
+                return false;
+        }
+    }
+
     private static bool TryParseSegmentType(string raw, out MotionPrimitiveType type)
     {
         switch (raw.Trim().ToUpperInvariant())
@@ -429,9 +569,9 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     public MotusProgramPlanComponent()
         : base(
-            "Motus Program Plan",
-            "ProgPlan",
-            "Plan a mixed PTP/LIN/CIRC motion program (click Plan). Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
+            "Motus Program",
+            "Program",
+            "Plan a mixed Motus Move sequence (PTP/LIN/CIRC/SET/WAIT). Click Plan. Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
             "Plan",
             "stack") { }
 
@@ -441,7 +581,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddParameter(new Param_MotusSegment(), "Segments", "Seg", "List of motion segments", GH_ParamAccess.list);
+        p.AddParameter(new Param_MotusSegment(), "Segments", "Seg", "List of Motus Move segments (wire order = program order)", GH_ParamAccess.list);
         p.AddParameter(new Param_MotusJointState(), "Start", "St0", "Start joint state (defaults to home)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddParameter(new Param_MotusCollisionScene(), "Collision", "C", "Collision scene", GH_ParamAccess.item);
