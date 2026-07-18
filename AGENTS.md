@@ -46,7 +46,7 @@ Managed (no full native): JointLinear, Cartesian LIN, IndustrialMotion, managed 
 
 ## Controller handoff (Motus Waypoints)
 
-`Motus Trajectory Data` joints are `{axis → waypoints}`. Controllers like UR Write MoveJ need `{waypoint → q[n]}`.
+Controllers like UR Write MoveJ need `{waypoint → q[n]}` from **Motus Waypoints**.
 
 **Motus Waypoints** (`src/Motus.GH/Components/MotusComponents.cs`):
 
@@ -61,7 +61,7 @@ Managed (no full native): JointLinear, Cartesian LIN, IndustrialMotion, managed 
 Primary: Plan → Waypoints `Q` → UR Write MoveJ → Run.  
 Do **not** MoveL FK planes from joint-space RRT. Warns if `AxisCount ≠ 6`. No Play/Session on Motus side.
 
-Trajectory Data / Export JSON-CSV stay for parametric graphs and scripts.
+**Motus Export** JSON/CSV stays for scripts and PlanBundle-style handoff.
 
 ## Icons
 

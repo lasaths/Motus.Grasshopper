@@ -130,7 +130,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 
 `Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Gripper mesh preview morphs with jaw width when tool capabilities are present.
 
-`Motus Trajectory Data` adds **ToolStates** (JSON per waypoint) when present. **Motus Export** JSON includes `contractVersion`, `diagnostics`, optional `provenance`, and tool metadata (`toolState`, `toolCapabilities`) for downstream consumers.
+**Motus Export** JSON includes `contractVersion`, `diagnostics`, optional `provenance`, and tool metadata (`toolState`, `toolCapabilities`) for downstream consumers.
 
 ## Collision
 
@@ -166,8 +166,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 
 | Component | Output |
 |-----------|--------|
-| Motus Trajectory Data | TCP `Planes`, waypoint `Times`, per-axis `Joints` tree (`{axis → waypoints}`); viewport preview of TCP path with thinned start/end-emphasized axes (default GH plane fans hidden) |
-| Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` |
+| Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` (default GH plane fans on `P` hidden; path viz on Motus Preview) |
 | Motus Export | `Json` and `Csv` strings |
 
 **Motus Waypoints** reshapes a planned trajectory for live controllers (e.g. UR Write). It does not connect to or command robots.

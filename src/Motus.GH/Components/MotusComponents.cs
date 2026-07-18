@@ -295,152 +295,6 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("f1a2b3c4-d5e6-4789-a123-4567890abcde");
 }
 
-public sealed class MotusTrajectoryDataComponent : MotusComponentBase
-{
-    private const double AxisLength = 0.04;
-    private const double EndAxisLength = 0.07;
-    private const int MaxPreviewAxes = 12;
-    private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
-
-    private List<Plane> _previewPlanes = [];
-    private List<int> _previewAxisIndices = [];
-    private Polyline? _previewPath;
-
-    public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
-
-    public override void AddedToDocument(GH_Document doc)
-    {
-        base.AddedToDocument(doc);
-        TrajectoryMerge.EnsureListAccess(this, 0);
-        HideDefaultPlanePreview();
-    }
-
-    public override bool Read(GH_IReader reader)
-    {
-        var ok = base.Read(reader);
-        HideDefaultPlanePreview();
-        return ok;
-    }
-
-    protected override void RegisterInputParams(GH_InputParamManager p) =>
-        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
-    protected override void RegisterOutputParams(GH_OutputParamManager p)
-    {
-        p.AddPlaneParameter("Planes", "P", "TCP planes via FK", GH_ParamAccess.list);
-        p.AddNumberParameter("Times", "Tm", "Elapsed time at each waypoint (seconds)", GH_ParamAccess.list);
-        p.AddNumberParameter("Joints", "J", "Joint angles (rad); branch {i} = axis i, items = waypoints", GH_ParamAccess.tree);
-        p.AddTextParameter("ToolStates", "Ts", "Tool state JSON per waypoint", GH_ParamAccess.list);
-        p[p.ParamCount - 1].Optional = true;
-        HideDefaultPlanePreview();
-    }
-
-    /// <summary>Default GH_Plane fans occlude the robot; custom wires own the viewport preview.</summary>
-    private void HideDefaultPlanePreview()
-    {
-        if (Params.Output.Count > 0 && Params.Output[0] is IGH_PreviewObject preview)
-            preview.Hidden = true;
-    }
-    protected override void SolveInstance(IGH_DataAccess da)
-    {
-        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo))
-        {
-            ClearPreview();
-            return;
-        }
-        var t = trajGoo.Value!;
-        var ctx = trajGoo.Context();
-        if (t.Points.Count == 0)
-        {
-            ClearPreview();
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points.");
-            return;
-        }
-
-        var planes = t.Points.Select(pt =>
-            KinematicsPreview.TcpPlane(ctx.EffectiveModel, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool)).ToList();
-        var times = t.Points.Select(p => p.TimeSeconds).ToList();
-        var tree = new GH_Structure<GH_Number>();
-        for (var j = 0; j < t.Robot.Preset.AxisCount; j++)
-        {
-            var path = new GH_Path(j);
-            foreach (var pt in t.Points)
-                tree.Append(new GH_Number(pt.JointState.Positions[j]), path);
-        }
-        da.SetDataList(0, planes);
-        da.SetDataList(1, times);
-        da.SetDataTree(2, tree);
-        var toolStates = t.Points.Select(p =>
-            p.ToolState is null
-                ? string.Empty
-                : System.Text.Json.JsonSerializer.Serialize(p.ToolState.Values)).ToList();
-        da.SetDataList(3, toolStates);
-
-        _previewPlanes = planes;
-        _previewAxisIndices = PreviewAxisIndices(planes.Count);
-        _previewPath = planes.Count >= 2 ? new Polyline(planes.Select(pl => pl.Origin)) : null;
-        ExpirePreview(true);
-    }
-
-    public override BoundingBox ClippingBox
-    {
-        get
-        {
-            var bb = BoundingBox.Empty;
-            if (_previewPath is { Count: > 0 })
-                bb.Union(_previewPath.BoundingBox);
-            foreach (var i in _previewAxisIndices)
-            {
-                if ((uint)i >= (uint)_previewPlanes.Count) continue;
-                var pl = _previewPlanes[i];
-                var len = i == 0 || i == _previewPlanes.Count - 1 ? EndAxisLength : AxisLength;
-                bb.Union(pl.Origin);
-                bb.Union(pl.Origin + pl.XAxis * len);
-                bb.Union(pl.Origin + pl.YAxis * len);
-                bb.Union(pl.Origin + pl.ZAxis * len);
-            }
-            return bb.IsValid ? bb : BoundingBox.Unset;
-        }
-    }
-
-    public override void DrawViewportWires(IGH_PreviewArgs args)
-    {
-        if (Locked) return;
-        if (_previewPath is { Count: >= 2 })
-            args.Display.DrawPolyline(_previewPath, PathColor, 2);
-        var last = _previewPlanes.Count - 1;
-        foreach (var i in _previewAxisIndices)
-        {
-            if ((uint)i >= (uint)_previewPlanes.Count) continue;
-            var pl = _previewPlanes[i];
-            var end = i == 0 || i == last;
-            var len = end ? EndAxisLength : AxisLength;
-            var weight = end ? 3 : 1;
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.XAxis * len, Color.Red, weight);
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.YAxis * len, Color.Lime, weight);
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.ZAxis * len, Color.Blue, weight);
-        }
-    }
-
-    /// <summary>Thin viewport axes to ≤<see cref="MaxPreviewAxes"/>; always keep first and last.</summary>
-    private static List<int> PreviewAxisIndices(int count)
-    {
-        if (count <= MaxPreviewAxes)
-            return MotusWaypointsComponent.SelectDecimateIndices(count, 1);
-        var step = Math.Max(1, (int)Math.Ceiling((count - 1) / (double)(MaxPreviewAxes - 1)));
-        return MotusWaypointsComponent.SelectDecimateIndices(count, step);
-    }
-
-    private void ClearPreview()
-    {
-        _previewPlanes = [];
-        _previewAxisIndices = [];
-        _previewPath = null;
-        ExpirePreview(true);
-    }
-
-    public override Guid ComponentGuid => new Guid("a72b5cfa-5cf5-4e54-a5cd-943e2aae82da");
-}
-
 /// <summary>
 /// Reshapes a Motus trajectory into controller-oriented trees: waypoint-major joints and TCP planes.
 /// Does not connect to or command robots — wire outputs into a downstream control plugin.
@@ -460,6 +314,14 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
     {
         base.AddedToDocument(doc);
         TrajectoryMerge.EnsureListAccess(this, 0);
+        HideDefaultPlanePreview();
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        var ok = base.Read(reader);
+        HideDefaultPlanePreview();
+        return ok;
     }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -496,6 +358,15 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
             "Tm",
             "Elapsed time at each waypoint (seconds)",
             GH_ParamAccess.list);
+        HideDefaultPlanePreview();
+    }
+
+    /// <summary>Default GH_Plane fans occlude the robot; Motus Preview owns path viz.</summary>
+    private void HideDefaultPlanePreview()
+    {
+        // Planes is output index 1 (after Joints Q).
+        if (Params.Output.Count > 1 && Params.Output[1] is IGH_PreviewObject preview)
+            preview.Hidden = true;
     }
 
     protected override void SolveInstance(IGH_DataAccess da)

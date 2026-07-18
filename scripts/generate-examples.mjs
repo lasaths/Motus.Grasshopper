@@ -132,13 +132,15 @@ const MOTUS = {
       { name: 'Csv', nick: 'C', desc: 'Trajectory CSV' },
       { name: 'Validation', nick: 'Val', desc: 'Validation summary when Validate=true', optional: true },
     ] },
-  trajData: { guid: 'a72b5cfa-5cf5-4e54-a5cd-943e2aae82da', name: 'Motus Trajectory Data', nick: 'Data', w: 74, h: 84,
-    inputs: [{ name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory (list concatenates sequential goals)', optional: false, access: 1 }],
+  waypoints: { guid: '133ba1e0-5b0e-46f7-92e8-31aaa7e60a55', name: 'Motus Waypoints', nick: 'Waypoints', w: 74, h: 84,
+    inputs: [
+      { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory (list concatenates sequential goals)', optional: false, access: 1 },
+      { name: 'Decimate', nick: 'D', desc: 'Keep every Nth waypoint (always keeps first and last). 1 = all', optional: true, number: 1, typeId: PTYPE.integer },
+    ],
     outputs: [
+      { name: 'Joints', nick: 'Q', desc: 'Joint angles (rad); one branch per waypoint', access: 1 },
       { name: 'Planes', nick: 'P', desc: 'TCP plane per waypoint' },
       { name: 'Times', nick: 'Tm', desc: 'Waypoint times (seconds)' },
-      { name: 'Joints', nick: 'J', desc: 'Per-axis joint values', access: 1 },
-      { name: 'ToolStates', nick: 'Ts', desc: 'Tool state JSON per waypoint', optional: true },
     ] },
   rrtSettings: { guid: '11d59b15-ffe2-488e-83b8-52eddf772025', name: 'Motus RRT Settings', nick: 'RrtSet', w: 74, h: 104,
     inputs: [
@@ -584,6 +586,9 @@ function motusComponent(key, x, y, wireMap, options = {}) {
   const moveFlags = key === 'segment' ? [
     item('MotionType', 'gh_string', '10', esc(segType)),
     item('ToolMode', 'gh_string', '10', esc(options.toolMode || 'Hold')),
+    // Explicit pivot — Motus Move pin-morph used to wipe Attributes.Pivot on load.
+    item('CanvasPivotX', 'gh_double', '6', String(x + spec.w / 2)),
+    item('CanvasPivotY', 'gh_double', '6', String(y + spec.h / 2)),
   ] : [];
   // Motus Preview Write() fields — required for Scrub wire restore + ShowStart.
   // Examples default SS/ShowStart on (ghost start pose); pass bools.ShowStart:false to opt out.
@@ -677,7 +682,7 @@ function motusScrub(x, y, value = 0, w = MOTUS.scrub.w) {
                     ${item('NickName', 'gh_string', '10', spec.nick)}
                     ${item('Optional', 'gh_bool', '1', 'false')}
                     ${item('ScrubValue', 'gh_double', '6', String(value))}
-                    ${item('SnapToKeyframes', 'gh_bool', '1', 'true')}
+                    ${item('SnapToKeyframes', 'gh_bool', '1', 'false')}
                     ${item('SourceCount', 'gh_int32', '3', '0')}
                   </items>
                   <chunks count="2">
@@ -1301,7 +1306,7 @@ function ur10eRobot(x, y) {
   return motusComponent('ur10e', x, y, {}, { hidden: true });
 }
 
-/** 01 — quick plan: sequential joint + TCP Pose LIN + Export / TrajData / Preview (was 01+02+12). */
+/** 01 — quick plan: sequential joint + TCP Pose LIN + Export / Waypoints / Preview (was 01+02+12). */
 function graph01() {
   // Bands: title → robot | goals → plan/preview (right). Clear Y gaps between groups.
   const title = nativeScribble(40, -60, '01  Quick plan', 28);
@@ -1327,20 +1332,20 @@ function graph01() {
     Start: [outRef(start.node, 'State')],
   });
   const { scrub, preview } = previewWithScrub(560, 200, outRef(plan.node, 'Trajectory'));
-  const trajData = motusComponent('trajData', 560 + PLAN_PREVIEW_DX, 380, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const waypoints = motusComponent('waypoints', 560 + PLAN_PREVIEW_DX, 380, { Trajectory: [outRef(plan.node, 'Trajectory')] });
   const exp = motusComponent('export', 560 + PLAN_PREVIEW_DX, 540, { Trajectory: [outRef(plan.node, 'Trajectory')] });
   const gRobot = nativeGroup('Robot + start', [robot, start], GROUP_COLOUR.robot);
   const gGoals = nativeGroup('Goals (merge → Plan)', [goalJoint, tcp, { xml: uz.xml, node: uz.node }, ptLin, plLin, goalsMerge], GROUP_COLOUR.goals);
-  const gOut = nativeGroup('Plan + preview', [plan, scrub, preview, trajData, exp], GROUP_COLOUR.preview);
+  const gOut = nativeGroup('Plan + preview', [plan, scrub, preview, waypoints, exp], GROUP_COLOUR.preview);
   const objs = [
     title, note, robot, start, goalJoint, tcp,
     { xml: uz.xml }, { xml: ptLin.xml }, { xml: plLin.xml }, goalsMerge,
-    plan, scrub, preview, trajData, exp,
+    plan, scrub, preview, waypoints, exp,
     gRobot, gGoals, gOut,
   ];
   objs._meta = {
     fileName: '01_quick_plan.ghx',
-    description: 'Quick plan: sequential Joint State + TCP Pose LIN + Plane goal (via Merge) -> Preview / Export / Trajectory Data. Auto Plan on; drag Motus Scrub or Play.',
+    description: 'Quick plan: sequential Joint State + TCP Pose LIN + Plane goal (via Merge) -> Preview / Export / Waypoints. Auto Plan on; drag Motus Scrub or Play.',
   };
   return buildGraph(objs);
 }

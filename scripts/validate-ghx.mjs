@@ -22,7 +22,7 @@ const MOTUS_COMPONENTS = new Map([
   ['d4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', 'Motus Preview'],
   ['e1f2a3b4-c5d6-4789-a012-3456789abc01', 'Motus Scrub'],
   ['0a443b6f-605b-48e3-843c-cd0a709f8379', 'Motus Export'],
-  ['a72b5cfa-5cf5-4e54-a5cd-943e2aae82da', 'Motus Trajectory Data'],
+  ['133ba1e0-5b0e-46f7-92e8-31aaa7e60a55', 'Motus Waypoints'],
   ['c1a2b3c4-d5e6-4789-a012-3456789abcde', 'Motus Collision Sphere'],
   ['d2b3c4d5-e6f7-4890-b123-456789abcdef', 'Motus Collision Box'],
   ['f4d5e6f7-a8b9-4012-d345-6789abcdef01', 'Motus Collision Mesh'],

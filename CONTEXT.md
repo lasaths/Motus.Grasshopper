@@ -41,8 +41,8 @@ A Motus planned path (joint waypoints + timing) produced by Motus Plan or Motus 
 _Avoid_: path (ambiguous with TCP path curve), motion program (that is the Move sequence)
 
 **Waypoints export**:
-Controller-oriented joint tree `{waypoint → q[n]}` from Motus Waypoints — distinct from Trajectory Data’s `{axis → waypoints}`.
-_Avoid_: calling Trajectory Data the MoveJ feed
+Controller-oriented joint tree `{waypoint → q[n]}` from Motus Waypoints.
+_Avoid_: treating FK TCP planes as a MoveL feed for joint-space / RRT paths
 
 ## Example dialogue
 

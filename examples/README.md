@@ -13,7 +13,7 @@ Open any file in Rhino 8 / Grasshopper. Each example uses **Scribble** titles an
 
 | File | What it demonstrates |
 |------|----------------------|
-| `01_quick_plan.ghx` | Sequential goals via **Merge** (joint + TCP Pose LIN + plane), Preview, Export, Trajectory Data |
+| `01_quick_plan.ghx` | Sequential goals via **Merge** (joint + TCP Pose LIN + plane), Preview, Export, Waypoints |
 | `02_collision_srdf.ghx` | ColSphere + ColBox via **Merge** → ColScene (SRDF) + Attach + RRT → Plan (Group pin present but unwired; wire Planning Group after Motus.OMPL fix + Rhino restart) |
 | `03_urdf_tool_frames.ghx` | Motus Robot URDF + Base + Robotiq Tool (Load Mesh) + Start + Preview ShowStart |
 | `04_motion_program.ghx` | PTP + LIN + CIRC + SET via **Merge** → Motus Program → Preview / Export |
@@ -48,7 +48,7 @@ Open any file in Rhino 8 / Grasshopper. Each example uses **Scribble** titles an
 | Motus Preview | ✓ | ✓ | ✓ | ✓ |
 | Preview ShowStart | | | ✓ | |
 | Motus Export | ✓ | | ✓ | ✓ |
-| Motus Trajectory Data | ✓ | | | |
+| Motus Waypoints | ✓ | | | |
 | Robot Base / Tool override | | | ✓ | |
 
 **Col Mesh:** wire any Rhino mesh or Brep into **Motus Collision Mesh** the same way **02** wires sphere + box into **ColScene** `Objects`.
@@ -67,7 +67,7 @@ Open any file in Rhino 8 / Grasshopper. Each example uses **Scribble** titles an
 
 ```
 UR10e + Start ─┐
-Joint State ───┼→ Plan.Goal (list) [Auto Plan] → Preview / Export / TrajData
+Joint State ───┼→ Plan.Goal (list) [Auto Plan] → Preview / Export / Waypoints
 TCP Pose ──────┤
 Plane ─────────┘
 ```
