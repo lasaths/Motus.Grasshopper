@@ -166,7 +166,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 
 | Component | Output |
 |-----------|--------|
-| Motus Trajectory Data | TCP `Planes`, waypoint `Times`, per-axis `Joints` tree (`{axis → waypoints}`); viewport preview of TCP path and waypoint plane axes |
+| Motus Trajectory Data | TCP `Planes`, waypoint `Times`, per-axis `Joints` tree (`{axis → waypoints}`); viewport preview of TCP path with thinned start/end-emphasized axes (default GH plane fans hidden) |
 | Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` |
 | Motus Export | `Json` and `Csv` strings |
 

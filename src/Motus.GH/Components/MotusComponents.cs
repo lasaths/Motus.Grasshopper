@@ -304,10 +304,13 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 {
-    private const double AxisLength = 0.05;
+    private const double AxisLength = 0.04;
+    private const double EndAxisLength = 0.07;
+    private const int MaxPreviewAxes = 12;
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
 
     private List<Plane> _previewPlanes = [];
+    private List<int> _previewAxisIndices = [];
     private Polyline? _previewPath;
 
     public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
@@ -316,6 +319,14 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
     {
         base.AddedToDocument(doc);
         TrajectoryMerge.EnsureListAccess(this, 0);
+        HideDefaultPlanePreview();
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        var ok = base.Read(reader);
+        HideDefaultPlanePreview();
+        return ok;
     }
 
     protected override void RegisterInputParams(GH_InputParamManager p) =>
@@ -327,6 +338,14 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         p.AddNumberParameter("Joints", "J", "Joint angles (rad); branch {i} = axis i, items = waypoints", GH_ParamAccess.tree);
         p.AddTextParameter("ToolStates", "Ts", "Tool state JSON per waypoint", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
+        HideDefaultPlanePreview();
+    }
+
+    /// <summary>Default GH_Plane fans occlude the robot; custom wires own the viewport preview.</summary>
+    private void HideDefaultPlanePreview()
+    {
+        if (Params.Output.Count > 0 && Params.Output[0] is IGH_PreviewObject preview)
+            preview.Hidden = true;
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -364,6 +383,7 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         da.SetDataList(3, toolStates);
 
         _previewPlanes = planes;
+        _previewAxisIndices = PreviewAxisIndices(planes.Count);
         _previewPath = planes.Count >= 2 ? new Polyline(planes.Select(pl => pl.Origin)) : null;
         ExpirePreview(true);
     }
@@ -375,12 +395,15 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
             var bb = BoundingBox.Empty;
             if (_previewPath is { Count: > 0 })
                 bb.Union(_previewPath.BoundingBox);
-            foreach (var pl in _previewPlanes)
+            foreach (var i in _previewAxisIndices)
             {
+                if ((uint)i >= (uint)_previewPlanes.Count) continue;
+                var pl = _previewPlanes[i];
+                var len = i == 0 || i == _previewPlanes.Count - 1 ? EndAxisLength : AxisLength;
                 bb.Union(pl.Origin);
-                bb.Union(pl.Origin + pl.XAxis * AxisLength);
-                bb.Union(pl.Origin + pl.YAxis * AxisLength);
-                bb.Union(pl.Origin + pl.ZAxis * AxisLength);
+                bb.Union(pl.Origin + pl.XAxis * len);
+                bb.Union(pl.Origin + pl.YAxis * len);
+                bb.Union(pl.Origin + pl.ZAxis * len);
             }
             return bb.IsValid ? bb : BoundingBox.Unset;
         }
@@ -391,17 +414,33 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
         if (Locked) return;
         if (_previewPath is { Count: >= 2 })
             args.Display.DrawPolyline(_previewPath, PathColor, 2);
-        foreach (var pl in _previewPlanes)
+        var last = _previewPlanes.Count - 1;
+        foreach (var i in _previewAxisIndices)
         {
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.XAxis * AxisLength, Color.Red, 2);
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.YAxis * AxisLength, Color.Lime, 2);
-            args.Display.DrawLine(pl.Origin, pl.Origin + pl.ZAxis * AxisLength, Color.Blue, 2);
+            if ((uint)i >= (uint)_previewPlanes.Count) continue;
+            var pl = _previewPlanes[i];
+            var end = i == 0 || i == last;
+            var len = end ? EndAxisLength : AxisLength;
+            var weight = end ? 3 : 1;
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.XAxis * len, Color.Red, weight);
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.YAxis * len, Color.Lime, weight);
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.ZAxis * len, Color.Blue, weight);
         }
+    }
+
+    /// <summary>Thin viewport axes to ≤<see cref="MaxPreviewAxes"/>; always keep first and last.</summary>
+    private static List<int> PreviewAxisIndices(int count)
+    {
+        if (count <= MaxPreviewAxes)
+            return MotusWaypointsComponent.SelectDecimateIndices(count, 1);
+        var step = Math.Max(1, (int)Math.Ceiling((count - 1) / (double)(MaxPreviewAxes - 1)));
+        return MotusWaypointsComponent.SelectDecimateIndices(count, step);
     }
 
     private void ClearPreview()
     {
         _previewPlanes = [];
+        _previewAxisIndices = [];
         _previewPath = null;
         ExpirePreview(true);
     }
