@@ -65,6 +65,9 @@ internal static class RobotViewportPreview
     var geometry = ctx.EffectiveModel.CollisionModel;
     if (geometry is null) return [];
 
+    if (KinematicsPreview.PreviewMeshCache.TryCreate(ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool) is { } cache)
+      return cache.MeshesFor(home);
+
     return KinematicsPreview
       .LinkMeshes(ctx.EffectiveModel, home, geometry, ctx.Chain, ctx.Base, ctx.Tool)
       .ToList();

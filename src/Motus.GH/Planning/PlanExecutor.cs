@@ -147,9 +147,11 @@ internal static class PlanExecutor
     {
         if (segment.Points.Count == 0) return acc;
         if (acc is null)
-            return new Trajectory(robot, segment.Points.ToList());
+            return new Trajectory(robot, segment.Points);
 
-        var points = acc.Points.ToList();
+        // Mutate via new list sized for growth — avoid O(N²) ToList() on every goal append.
+        var points = new List<TrajectoryPoint>(acc.Points.Count + segment.Points.Count);
+        points.AddRange(acc.Points);
         var timeOffset = points[^1].TimeSeconds;
         for (var i = 1; i < segment.Points.Count; i++)
         {

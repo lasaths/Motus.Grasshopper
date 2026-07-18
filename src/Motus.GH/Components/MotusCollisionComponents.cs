@@ -13,9 +13,24 @@ using System.Linq;
 
 namespace Motus.GH.Components;
 
+internal static class CollisionNameUtil
+{
+    public static string Resolve(GH_Component owner, int nameIndex, string name, string defaultName)
+    {
+        if (nameIndex >= 0 && nameIndex < owner.Params.Input.Count && owner.Params.Input[nameIndex].SourceCount > 0)
+            return string.IsNullOrWhiteSpace(name) ? $"{defaultName}_{ShortId(owner)}" : name;
+        if (string.IsNullOrWhiteSpace(name) || string.Equals(name, defaultName, StringComparison.Ordinal))
+            return $"{defaultName}_{ShortId(owner)}";
+        return name;
+    }
+
+    private static string ShortId(GH_Component owner) => owner.InstanceGuid.ToString("N")[..4];
+}
+
 public sealed class MotusCollisionSphereComponent : MotusComponentBase
 {
     private List<Mesh> _previewMeshes = new();
+    private string? _previewKey;
 
     public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision", "sphere") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -32,9 +47,15 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
         var name = "sphere";
         if (!da.GetData(0, ref pt) || !da.GetData(1, ref r)) return;
         da.GetData(2, ref name);
+        name = CollisionNameUtil.Resolve(this, 2, name, "sphere");
         var frame = new Frame(pt.X, pt.Y, pt.Z);
         var obj = CollisionObject.Sphere(name, frame, r);
-        _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        var key = $"{pt.X:R},{pt.Y:R},{pt.Z:R}|{r:R}|{name}";
+        if (_previewKey != key)
+        {
+            _previewKey = key;
+            _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        }
         da.SetData(0, new CollisionObjectGoo(obj));
     }
 
@@ -51,6 +72,7 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
 public sealed class MotusCollisionBoxComponent : MotusComponentBase
 {
     private List<Mesh> _previewMeshes = new();
+    private string? _previewKey;
 
     public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -69,8 +91,14 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
         var name = "box";
         if (!da.GetData(0, ref pl) || !da.GetData(1, ref hx) || !da.GetData(2, ref hy) || !da.GetData(3, ref hz)) return;
         da.GetData(4, ref name);
+        name = CollisionNameUtil.Resolve(this, 4, name, "box");
         var obj = CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz);
-        _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        var key = $"{pl.OriginX:R},{pl.OriginY:R},{pl.OriginZ:R}|{hx:R},{hy:R},{hz:R}|{name}|{obj.ContentHash}";
+        if (_previewKey != key)
+        {
+            _previewKey = key;
+            _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
+        }
         da.SetData(0, new CollisionObjectGoo(obj));
     }
 
@@ -87,6 +115,12 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
 public sealed class MotusCollisionSceneComponent : MotusComponentBase
 {
     private List<Mesh> _previewMeshes = new();
+    private string? _previewKey;
+    private string? _srdfCachePath;
+    private long _srdfCacheTicks;
+    private CollisionScene? _srdfBaseScene;
+    private List<PlanningGroup>? _srdfGroups;
+    private List<string>? _srdfEndEffectors;
 
     public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs/groups", "Collision", "circles-three-plus") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -97,7 +131,7 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Scene", "Sc", "Collision scene", GH_ParamAccess.item);
+        p.AddParameter(new Motus.GH.Params.Param_MotusCollisionScene(), "Scene", "Sc", "Collision scene", GH_ParamAccess.item);
         p.AddGenericParameter("Groups", "G", "Planning groups from SRDF (optional)", GH_ParamAccess.list);
         p.AddTextParameter("EndEffectors", "EE", "End-effector map from SRDF as name=parent_link entries", GH_ParamAccess.list);
     }
@@ -127,14 +161,24 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
             {
                 try
                 {
-                    var doc = System.Xml.Linq.XDocument.Load(srdfPath);
-                    var pairs = SrdfLoader.LoadAllowedPairs(doc);
-                    scene = SrdfLoader.MergeAllowedPairs(scene, pairs);
-                    groups = SrdfLoader.LoadGroups(doc).ToList();
-                    endEffectors = SrdfLoader.LoadEndEffectors(doc)
-                        .Select(kv => $"{kv.Key}={kv.Value}")
-                        .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
+                    var ticks = File.GetLastWriteTimeUtc(srdfPath).Ticks;
+                    if (_srdfCachePath != srdfPath || _srdfCacheTicks != ticks || _srdfGroups is null)
+                    {
+                        var doc = System.Xml.Linq.XDocument.Load(srdfPath);
+                        var pairs = SrdfLoader.LoadAllowedPairs(doc);
+                        _srdfBaseScene = SrdfLoader.MergeAllowedPairs(new CollisionScene(), pairs);
+                        _srdfGroups = SrdfLoader.LoadGroups(doc).ToList();
+                        _srdfEndEffectors = SrdfLoader.LoadEndEffectors(doc)
+                            .Select(kv => $"{kv.Key}={kv.Value}")
+                            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        _srdfCachePath = srdfPath;
+                        _srdfCacheTicks = ticks;
+                    }
+
+                    scene = SrdfLoader.MergeAllowedPairs(scene, _srdfBaseScene!.AllowedPairs);
+                    groups = _srdfGroups!;
+                    endEffectors = _srdfEndEffectors!;
                 }
                 catch (Exception ex)
                 {
@@ -145,7 +189,13 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
         da.SetData(0, new CollisionSceneGoo(scene));
         da.SetDataList(1, groups.Select(g => new PlanningGroupGoo(g)));
         da.SetDataList(2, endEffectors);
-        _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
+
+        var previewKey = string.Join("|", objects.Select(o => $"{o.Name}:{o.ContentHash}:{o.Pose.X:R},{o.Pose.Y:R},{o.Pose.Z:R}"));
+        if (_previewKey != previewKey)
+        {
+            _previewKey = previewKey;
+            _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
+        }
     }
 
     public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);

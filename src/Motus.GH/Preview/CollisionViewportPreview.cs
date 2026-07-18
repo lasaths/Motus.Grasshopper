@@ -10,6 +10,7 @@ namespace Motus.GH.Preview;
 internal static class CollisionViewportPreview
 {
     private static readonly Color ObstacleColor = Color.FromArgb(160, 220, 70, 70);
+    private static readonly DisplayMaterial ObstacleMaterial = new(ObstacleColor) { Transparency = 0.25 };
 
     public static List<Mesh> MeshesFor(CollisionObject obj)
     {
@@ -31,8 +32,7 @@ internal static class CollisionViewportPreview
     public static void DrawMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes)
     {
         if (meshes.Count == 0) return;
-        var mat = new DisplayMaterial(ObstacleColor) { Transparency = 0.25 };
         foreach (var mesh in meshes)
-            args.Display.DrawMeshShaded(mesh, mat);
+            args.Display.DrawMeshShaded(mesh, ObstacleMaterial);
     }
 }
