@@ -1,3 +1,4 @@
+using System.Windows.Forms;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
 using GH_IO.Serialization;
@@ -562,21 +563,48 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
 public sealed class MotusProgramPlanComponent : MotusComponentBase
 {
     private const double MaxJointStep = 0.05;
+    private const int AutoPlanDebounceMs = 400;
 
     private PlanningResult? _cached;
     private TrajectoryGoo? _cachedGoo;
     private bool _run;
+    private bool _autoPlan;
+    private bool _autoPlanAttempted;
+    private int _debounceGen;
 
     public MotusProgramPlanComponent()
         : base(
             "Motus Program",
             "Program",
-            "Plan a mixed Motus Move sequence (PTP/LIN/CIRC/SET/WAIT). Click Plan. Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
+            "Plan a mixed Motus Move sequence (PTP/LIN/CIRC/SET/WAIT). Click Plan or enable Auto Plan. Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
             "Plan",
             "stack") { }
 
     public override void CreateAttributes() =>
-        m_attributes = new ButtonAttributes(this, () => "Plan", () => false, RequestRun);
+        m_attributes = new ButtonAttributes(
+            this,
+            () => _autoPlan ? "Replan" : "Plan",
+            () => _autoPlan,
+            RequestRun);
+
+    public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
+    {
+        Menu_AppendItem(menu, "Auto Plan", AutoPlanMenuClick, true, _autoPlan);
+        base.AppendAdditionalMenuItems(menu);
+    }
+
+    public override bool Write(GH_IWriter writer)
+    {
+        writer.SetBoolean("AutoPlan", _autoPlan);
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        if (reader.ItemExists("AutoPlan"))
+            _autoPlan = reader.GetBoolean("AutoPlan");
+        return base.Read(reader);
+    }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -605,6 +633,33 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         ExpireSolution(true);
     }
 
+    private void AutoPlanMenuClick(object? sender, EventArgs e)
+    {
+        RecordUndoEvent("Auto Plan");
+        _autoPlan = !_autoPlan;
+        _debounceGen++;
+        if (_autoPlan)
+        {
+            _cached = null;
+            _cachedGoo = null;
+            _autoPlanAttempted = false;
+        }
+
+        ExpireSolution(true);
+    }
+
+    private void ScheduleDebouncedPlan()
+    {
+        var gen = ++_debounceGen;
+        if (OnPingDocument() is not GH_Document doc) return;
+        doc.ScheduleSolution(AutoPlanDebounceMs, _ =>
+        {
+            if (gen != _debounceGen || Locked || !_autoPlan) return;
+            _run = true;
+            ExpireSolution(false);
+        });
+    }
+
     protected override void SolveInstance(IGH_DataAccess da)
     {
         if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo)) return;
@@ -612,8 +667,19 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         if (!_run)
         {
+            // First open / empty cache: schedule once (segments are new objects each solve).
+            if (_autoPlan && !Locked && !_autoPlanAttempted && _cached is null &&
+                GhExtract.TryMotionSegments(da, 1, out var pending, out _) &&
+                pending.Count > 0)
+            {
+                _autoPlanAttempted = true;
+                ScheduleDebouncedPlan();
+            }
+
             if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
-            da.SetData(1, _cached is null ? "Press Plan to compute." : GhExtract.BuildProgramStatusMessage(_cached, true));
+            da.SetData(1, _cached is null
+                ? (_autoPlan ? "Auto Plan pending…" : "Press Plan to compute.")
+                : GhExtract.BuildProgramStatusMessage(_cached, true));
             if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
             return;
         }

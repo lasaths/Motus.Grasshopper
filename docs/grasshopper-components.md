@@ -62,7 +62,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - optional `Attach` (list of attached bodies)
 - optional `RrtSettings` (**Motus RRT Settings** output — joint goals + collision only)
 
-- Each `Goal` item is either a **Plane** (Cartesian TCP LIN) or a **Joint State**. Wire multiple sources into the list input (or use **Merge**) to chain waypoints; see `examples/12_sequential_goals.ghx`.
+- Each `Goal` item is either a **Plane** (Cartesian TCP LIN) or a **Joint State**. Wire multiple sources into the list input (or use **Merge**) to chain waypoints; see `examples/01_quick_plan.ghx`.
 - `Start` is optional (Plane or Joint State); unwired it uses the viewer home pose or zeros.
 - `Step` applies only to plane goals. Long TCP moves auto-scale step size (max ~150 waypoints) so planning stays bounded.
 - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
@@ -89,7 +89,7 @@ The white **TCP Path** in **Motus Preview** is an FK polyline between trajectory
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Red sphere visible, plan ignores it | `ColScene` not wired to **Motus Plan** `Collision` | `ColSphere` → `ColScene` → `Plan.Collision` |
-| Plane goal, Status Success, TCP pierces sphere | LIN validates **link capsules**, not the TCP point | Expected for plane goals; use **Joint State** goals + `Collision` for RRT avoidance (`examples/03_collision_rrt.ghx`) |
+| Plane goal, Status Success, TCP pierces sphere | LIN validates **link capsules**, not the TCP point | Expected for plane goals; use **Joint State** goals + `Collision` for RRT avoidance (`examples/02_collision_srdf.ghx`) |
 | Warning: joint-space fallback | LIN failed; path is not a straight TCP line | Use a nearer `Start`, a **Joint State** goal, or accept the joint-linear path |
 | Joint goal, no avoidance | No collision scene on `Plan` | Wire `ColScene`; without it joint goals use joint-linear interpolation only |
 
@@ -124,7 +124,7 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 
 **ToolMode** (face dropdown on PTP/LIN/CIRC): `Hold`, `Ramp`, `Instant`. Execution hints for downstream adapters; Motus does not command hardware.
 
-Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/11_gripper_motion_program.ghx`).
+Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/04_motion_program.ghx`).
 
 `Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present.
 

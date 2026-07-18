@@ -638,7 +638,7 @@ if (robotiqSession.CollisionModel?.ToolGeometry?.MeshVertices is not { Count: > 
     Fail("Robotiq tool mesh should merge into session collision model");
 Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
 
-// Example 02 cartesian: home -> FK plane of GOAL_JOINTS (matches 02_cartesian_planning.ghx)
+// Cartesian: home -> FK plane of GOAL_JOINTS (matches examples/01_quick_plan.ghx TCP Pose branch)
 {
     var ex02Path = Path.Combine(resources, "ur10e_robotiq", "ur10e_robotiq.urdf");
     var ex02Bundle = UrdfRobotLoader.Load(ex02Path, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "ur10e_robotiq" });

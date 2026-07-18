@@ -71,16 +71,16 @@ Robot ──► Plan [Plan] ──► Preview [Play]
 
 Prefer **ColMesh → ColScene → Plan** over wiring raw Mesh/Brep into Plan. Dense meshes (&gt;20k tris) warn at ColMesh — decimate or use primitives for speed.
 
-Example: `examples/03_collision_rrt.ghx`.
+Example: `examples/02_collision_srdf.ghx`.
 
 ### Motion programs
 
-**Motus Move** (on-component Type dropdown: PTP / LIN / CIRC / SET / WAIT) → **Motus Program** → Preview / Export. Unlike Plan plane goals, Program does not fall back to joint-space when LIN fails. `SET` / `WAIT` / tool-state values are export hints for downstream controllers.
+**Motus Move** (on-component Type dropdown: PTP / LIN / CIRC / SET / WAIT) → **Motus Program** → Preview / Export. Unlike Plan plane goals, Program does not fall back to joint-space when LIN fails. `SET` / `WAIT` / tool-state values are export hints for downstream controllers. See `examples/04_motion_program.ghx`.
 
 ### Tools, attach, groups
 
-- **Motus Tool** on Robot for TCP / collision geometry (e.g. Robotiq examples 09–11)
-- **Attach Body** + **Planning Group** on Plan (enable pins via right-click); SRDF path on **ColScene** for allowed pairs and groups — see `examples/05_srdf_group_attach.ghx`
+- **Motus Tool** on Robot for TCP / collision geometry — see `examples/03_urdf_tool_frames.ghx`
+- **Attach Body** + **Planning Group** on Plan (enable pins via right-click); SRDF path on **ColScene** for allowed pairs and groups — see `examples/02_collision_srdf.ghx`
 
 ### Cartesian vs joint goals
 
@@ -93,7 +93,7 @@ Example: `examples/03_collision_rrt.ghx`.
 
 ## Examples
 
-Twelve definitions in [`examples/`](examples/README.md) cover planning, collision, SRDF/attach, URDF, tools, and motion programs.
+Four lean definitions in [`examples/`](examples/README.md) cover planning, collision, SRDF/attach, URDF, tools, and motion programs.
 
 ```bash
 node scripts/generate-examples.mjs

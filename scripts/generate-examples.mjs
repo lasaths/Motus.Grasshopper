@@ -9,20 +9,46 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(__dirname, '../examples');
+const repoRoot = path.resolve(__dirname, '..');
+const outDir = path.resolve(repoRoot, 'examples');
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';
-const csproj = fs.readFileSync(path.resolve(__dirname, '../src/Motus.GH/Motus.GH.csproj'), 'utf8');
-const props = fs.readFileSync(path.resolve(__dirname, '../build/MotusNetPackages.props'), 'utf8');
+const csproj = fs.readFileSync(path.resolve(repoRoot, 'src/Motus.GH/Motus.GH.csproj'), 'utf8');
+const props = fs.readFileSync(path.resolve(repoRoot, 'build/MotusNetPackages.props'), 'utf8');
 const MOTUS_NET_VERSION = props.match(/<MotusNetVersion[^>]*>([^<]+)<\/MotusNetVersion>/)?.[1]?.trim() ?? '0.6.6';
 const PLUGIN_VERSION = csproj.match(/<Version>([^<]+)<\/Version>/)?.[1] ?? MOTUS_NET_VERSION;
 const PLUGIN_ASSEMBLY_VERSION = `${PLUGIN_VERSION}.0`;
+const absPath = (...parts) => path.resolve(repoRoot, ...parts);
 
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
-const UR10E_START_DEG = '0\n-90\n0\n-90\n0\n0';
-const UR10E_GOAL_DEG = '0\n-80\n0\n-90\n0\n0';
-const BUNDLED_URDF = 'resources/robots/ur10e_robotiq/ur10e_robotiq.urdf';
+/** Collision-free home-ish start for obstacle demos (away from table/box). */
+const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
+const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
+
+/** GH / Motus param type GUIDs (ComponentGuid). Required for IGH_VariableParameterComponent ParameterData. */
+const PTYPE = {
+  generic: '8ec86459-bf01-4409-baee-174d0d2b13d0',
+  number: '3e8ca6be-fda8-4aaf-b5c0-3c54c8bb7312',
+  integer: '2e3ab970-8545-46bb-836c-1c11e5610bce',
+  string: '3ede854e-c753-40eb-84cb-b48008f14fd4',
+  boolean: 'cb95db89-6165-43b6-9c41-5702bc5bf137',
+  mesh: '1e936df3-0eea-4246-8549-514cb8862b7a',
+  line: '8529dbdf-9b6f-42e9-8e1f-c7a2bde56a70',
+  curve: 'd5967b9f-e8ee-436b-a8ad-29fdcecf32d5',
+  plane: '4f8984c4-7c7a-4d69-b0a2-183cbb330d20',
+  point: 'fbac3e32-f100-4292-8692-77240a42fd1a',
+  robot: 'a11e8488-943e-426f-b205-e8db5f684901',
+  trajectory: 'b22e8488-943e-426f-b205-e8db5f684902',
+  jointState: 'c33e8488-943e-426f-b205-e8db5f684903',
+  colScene: 'd44e8488-943e-426f-b205-e8db5f684904',
+  segment: 'e55e8488-943e-426f-b205-e8db5f684905',
+  tool: 'f66e8488-943e-426f-b205-e8db5f684906',
+  toolState: 'a77e8488-943e-426f-b205-e8db5f684907',
+};
+
+/** Components that implement IGH_VariableParameterComponent — GH loads these via ParameterData only. */
+const USE_PARAMETER_DATA = new Set(['plan', 'preview', 'segment']);
 
 const MOTUS = {
   robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 104,
@@ -66,34 +92,34 @@ const MOTUS = {
   plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 74, h: 104,
     desc: 'Quick planner: plane=LIN, joint=joint-linear/RRT. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.',
     inputs: [
-      { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
-      { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
-      { name: 'Start', nick: 'St0', desc: 'Optional start joint state (defaults to home)', optional: true },
-      { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005 },
+      { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false, typeId: PTYPE.robot },
+      { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1, typeId: PTYPE.generic },
+      { name: 'Start', nick: 'St0', desc: 'Start as Plane (IK) or Joint State (defaults to home/zeros)', optional: true, typeId: PTYPE.generic },
+      { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005, typeId: PTYPE.number },
     ],
     advancedInputs: [
-      { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT; plane goals validate LIN against scene', optional: true },
-      { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
-      { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1 },
-      { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true },
+      { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT; plane goals validate LIN against scene', optional: true, typeId: PTYPE.colScene },
+      { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true, typeId: PTYPE.generic },
+      { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1, typeId: PTYPE.generic },
+      { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true, typeId: PTYPE.generic },
     ],
     outputs: [
-      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories' },
-      { name: 'Status', nick: 'Msg', desc: 'Planning status' },
-      { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories', access: 1, typeId: PTYPE.trajectory },
+      { name: 'Status', nick: 'Msg', desc: 'Planning status', typeId: PTYPE.string },
+      { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings', access: 1, typeId: PTYPE.string },
     ] },
   preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
     inputs: [
-      { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory from Motus Plan (list concatenates sequential goals)', optional: false, access: 1 },
-      { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false },
-      { name: 'Position', nick: 'P', desc: 'Optional normalized playback position 0–1 (Motus Scrub)', optional: true },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory from Motus Plan (list concatenates sequential goals)', optional: false, access: 1, typeId: PTYPE.trajectory },
+      { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false, typeId: PTYPE.boolean },
+      { name: 'Position', nick: 'P', desc: 'Optional normalized playback position 0–1 (Motus Scrub)', optional: true, typeId: PTYPE.number },
     ],
     outputs: [
-      { name: 'Meshes', nick: 'M', desc: 'Link meshes at the current frame' },
-      { name: 'Links', nick: 'L', desc: 'Link lines at the current frame' },
-      { name: 'TCP Path', nick: 'Path', desc: 'Full TCP polyline via FK' },
-      { name: 'State', nick: 'Js', desc: 'Joint state at the current frame' },
-      { name: 'Time', nick: 'Tm', desc: 'Elapsed trajectory time at current frame (seconds)' },
+      { name: 'Meshes', nick: 'M', desc: 'Link meshes at the current frame', access: 1, typeId: PTYPE.mesh },
+      { name: 'Links', nick: 'L', desc: 'Link lines at the current frame', access: 1, typeId: PTYPE.line },
+      { name: 'TCP Path', nick: 'Path', desc: 'Full TCP polyline via FK', typeId: PTYPE.curve },
+      { name: 'State', nick: 'Js', desc: 'Joint state at the current frame', typeId: PTYPE.jointState },
+      { name: 'Time', nick: 'Tm', desc: 'Elapsed trajectory time at current frame (seconds)', typeId: PTYPE.number },
     ] },
   export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 84,
     inputs: [
@@ -185,25 +211,25 @@ const MOTUS = {
   segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Move', nick: 'Move', w: 74, h: 100,
     desc: 'One PTP/LIN/CIRC/SET/WAIT program line (Type/ToolMode on-component dropdowns; pins morph by type)',
     inputs: [
-      { name: 'Type', nick: 'Ty', desc: 'PTP, LIN, CIRC, SET, or WAIT (prefer on-component dropdown)', optional: false, text: 'PTP' },
-      { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: true },
-      { name: 'Blend', nick: 'B', desc: 'Blend radius (m, default 0)', optional: true, number: 0 },
-      { name: 'ToolState', nick: 'Ts', desc: 'Tool state (SET required; optional on arm moves)', optional: true },
+      { name: 'Type', nick: 'Ty', desc: 'PTP, LIN, CIRC, SET, or WAIT (prefer on-component dropdown)', optional: false, text: 'PTP', typeId: PTYPE.string },
+      { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: true, typeId: PTYPE.generic },
+      { name: 'Blend', nick: 'B', desc: 'Blend radius (m, default 0)', optional: true, number: 0, typeId: PTYPE.number },
+      { name: 'ToolState', nick: 'Ts', desc: 'Tool state (SET required; optional on arm moves)', optional: true, typeId: PTYPE.toolState },
     ],
     typeInputs: {
       LIN: [
-        { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005 },
+        { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005, typeId: PTYPE.number },
       ],
       CIRC: [
-        { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true },
-        { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16 },
+        { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true, typeId: PTYPE.plane },
+        { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16, typeId: PTYPE.integer },
       ],
-      SET: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
-      WAIT: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
+      SET: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0, typeId: PTYPE.number }],
+      WAIT: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0, typeId: PTYPE.number }],
     },
-    outputs: [{ name: 'Segment', nick: 'Seg', desc: 'Motion segment' }] },
+    outputs: [{ name: 'Segment', nick: 'Seg', desc: 'Motion segment', typeId: PTYPE.segment }] },
   progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program', nick: 'Program', w: 74, h: 144,
-    desc: 'Plan Motus Move sequence (click Plan); LIN failures do not fall back to joint paths',
+    desc: 'Plan Motus Move sequence (Auto Plan or click Plan); LIN failures do not fall back to joint paths',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Segments', nick: 'Seg', desc: 'List of Motus Move segments (wire order = program order)', optional: false, access: 1 },
@@ -221,19 +247,18 @@ const MOTUS = {
 };
 
 const NATIVE = {
-  valueList: { guid: '00027467-0d24-4fa7-b178-8dc0ac5f42ec', name: 'Value List', nick: 'Model', w: 163, h: 22, outputs: ['Value'] },
   panel: { guid: '59e0b89a-e487-49f8-bab8-b5bab16be14c', name: 'Panel', w: 160, h: 60 },
-  constructPoint: { guid: '2e78b80c-5c6e-4dcc-9b49-4a7cde34af52', name: 'Construct Point', nick: 'Pt', w: 44, h: 44,
+  // GUIDs verified live against Rhino 8 / Grasshopper (placeholders mean stale GUIDs).
+  constructPoint: { guid: '3581f42a-9592-4549-bd6b-1c0fc39d067b', name: 'Construct Point', nick: 'Pt', w: 44, h: 44,
     inputs: ['X', 'Y', 'Z'], outputs: ['Point'] },
-  unitZ: { guid: '1bbd9fdd-9aea-4f6e-92af-2311b107d8c9', name: 'Unit Z', nick: 'Z', w: 44, h: 22, outputs: ['Vector'] },
-  unitX: { guid: '7e6bff32-67ee-4da3-b9ab-7c1921b5f1d4', name: 'Unit X', nick: 'X', w: 44, h: 22, outputs: ['Vector'] },
-  plane: { guid: '35abd9fb-7453-458e-9c86-8bf9f94becc8', name: 'Plane', nick: 'Pln', w: 44, h: 44,
-    inputs: ['Origin', 'Normal'], outputs: ['Plane'] },
-  xyPlane: { guid: '1bbf3dec-0ddd-49b8-aba3-ddde6bb8de4e', name: 'XY Plane', nick: 'XY', w: 44, h: 22, outputs: ['Plane'] },
+  unitZ: { guid: '9103c240-a6a9-4223-9b42-dbd19bf38e2b', name: 'Unit Z', nick: 'Z', w: 44, h: 22, outputs: ['Vector'] },
+  unitX: { guid: '79f9fbb3-8f1d-4d9a-88a9-f7961b1012cd', name: 'Unit X', nick: 'X', w: 44, h: 22, outputs: ['Vector'] },
+  plane: { guid: 'cfb6b17f-ca82-4f5d-b604-d4f69f569de3', name: 'Plane Normal', nick: 'Pl', w: 44, h: 44,
+    inputs: ['Origin', 'Z-Axis'], outputs: ['Plane'] },
+  xyPlane: { guid: '17b7152b-d30d-4d50-b9ef-c9fe25576fc2', name: 'XY Plane', nick: 'XY', w: 44, h: 22, outputs: ['Plane'] },
   filePath: { guid: '06953bda-1d37-4d58-9b38-4b3c74e54c8f', name: 'File Path', nick: 'Path', w: 50, h: 24 },
   move: { guid: '4f7cd4e3-9b20-41d8-9c00-2940fe7f3aa0', name: 'Move', nick: 'Move', w: 44, h: 44,
     inputs: ['Geometry', 'Motion'], outputs: ['Geometry'] },
-  vectorZ: { guid: '2a1b5b5079e4413c8c48c6e2fb4c1a42', name: 'Unit Z', nick: 'Z', w: 44, h: 22, outputs: ['Vector'] },
 };
 
 function id() {
@@ -383,6 +408,93 @@ function paramOutput(def, index, px, py, compW) {
                     </chunk>`;
 }
 
+function paramAttrBounds(px, py, w = 19, h = 20) {
+  return `<chunk name="Attributes">
+                              <items count="2">
+                                ${item('Bounds', 'gh_drawing_rectanglef', '35', `\n                                  <X>${px}</X>\n                                  <Y>${py}</Y>\n                                  <W>${w}</W>\n                                  <H>${h}</H>\n                                `)}
+                                ${item('Pivot', 'gh_drawing_pointf', '31', `\n                                  <X>${px + w / 2}</X>\n                                  <Y>${py + h / 2}</Y>\n                                `)}
+                              </items>
+                            </chunk>`;
+}
+
+function parameterDataChunk(inputs, outputs, x, y, compW, wireMapSafe, options) {
+  const idItems = [
+    item('InputCount', 'gh_int32', '3', String(inputs.length)),
+    ...inputs.map((inp, i) => `                        <item name="InputId" index="${i}" type_name="gh_guid" type_code="9">${inp.typeId}</item>`),
+    item('OutputCount', 'gh_int32', '3', String(outputs.length)),
+    ...outputs.map((out, i) => `                        <item name="OutputId" index="${i}" type_name="gh_guid" type_code="9">${out.typeId}</item>`),
+  ];
+  const inChunks = inputs.map((inp, i) => {
+    const sources = (wireMapSafe[inp.name] ?? []).map((ref) => ref._guid);
+    const srcItems = sources.map((s, si) => sourceItem(si, s));
+    const access = inp.access === 1 ? item('Access', 'gh_int32', '3', '1') : '';
+    const optional = item('Optional', 'gh_bool', '1', inp.optional ? 'true' : 'false');
+    let persistent = null;
+    if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
+    else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
+    else if (inp.number !== undefined && !sources.length) persistent = persistentNumbers([inp.number]);
+    else if (inp.text !== undefined && !sources.length) persistent = persistentText(inp.text);
+    else if (inp.point && !sources.length) persistent = persistentNumbers(inp.point);
+    const nested = [paramAttrBounds(x + 2, y + 2 + i * 20)];
+    if (persistent) nested.push(persistent);
+    if (inp.angle) {
+      nested.push(`<chunk name="FixedSettings">
+                              <items count="${inp.useDegrees ? 2 : 1}">
+                                ${item('Angle', 'gh_bool', '1', 'true')}
+                                ${inp.useDegrees ? item('UseDegrees', 'gh_bool', '1', 'true') : ''}
+                              </items>
+                            </chunk>`);
+    }
+    const items = [
+      access,
+      item('Description', 'gh_string', '10', esc(inp.desc ?? inp.name)),
+      item('InstanceGuid', 'gh_guid', '9', inp._guid),
+      item('Name', 'gh_string', '10', inp.name),
+      item('NickName', 'gh_string', '10', inp.nick ?? inp.name),
+      optional,
+      ...srcItems,
+      item('SourceCount', 'gh_int32', '3', String(sources.length)),
+    ].filter(Boolean);
+    return `<chunk name="InputParam" index="${i}">
+                          <items count="${items.length}">
+                            ${items.join('\n                            ')}
+                          </items>
+                          <chunks count="${nested.length}">
+                            ${nested.join('\n                            ')}
+                          </chunks>
+                        </chunk>`;
+  });
+  const outChunks = outputs.map((out, i) => {
+    const access = out.access === 1 ? item('Access', 'gh_int32', '3', '1') : '';
+    const items = [
+      access,
+      item('Description', 'gh_string', '10', esc(out.desc ?? out.name)),
+      item('InstanceGuid', 'gh_guid', '9', out._guid),
+      item('Name', 'gh_string', '10', out.name),
+      item('NickName', 'gh_string', '10', out.nick ?? out.name),
+      item('Optional', 'gh_bool', '1', 'false'),
+      item('SourceCount', 'gh_int32', '3', '0'),
+    ].filter(Boolean);
+    return `<chunk name="OutputParam" index="${i}">
+                          <items count="${items.length}">
+                            ${items.join('\n                            ')}
+                          </items>
+                          <chunks count="1">
+                            ${paramAttrBounds(x + compW - 18, y + 2 + i * 20, 16, 20)}
+                          </chunks>
+                        </chunk>`;
+  });
+  const paramChunks = [...inChunks, ...outChunks];
+  return `<chunk name="ParameterData">
+                      <items count="${idItems.length}">
+                        ${idItems.join('\n                        ')}
+                      </items>
+                      <chunks count="${paramChunks.length}">
+                        ${paramChunks.join('\n                        ')}
+                      </chunks>
+                    </chunk>`;
+}
+
 function motusComponent(key, x, y, wireMap, options = {}) {
   const spec = structuredClone(MOTUS[key]);
   const instance = id();
@@ -419,36 +531,64 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     if (options.bools?.[inp.name] !== undefined) copy.bool = options.bools[inp.name];
     if (options.angle?.[inp.name] !== undefined) copy.angle = true;
     if (options.useDegrees?.[inp.name] !== undefined) copy.useDegrees = options.useDegrees[inp.name];
+    if (!copy.typeId && USE_PARAMETER_DATA.has(key))
+      throw new Error(`missing typeId for ${key}.${inp.name}`);
     return copy;
   });
-  const outputs = spec.outputs.map((out) => ({ ...out, _guid: id() }));
-  const inChunks = inputs.map((inp, i) => {
-    const sources = (wireMapSafe[inp.name] ?? []).map((ref) => ref._guid);
-    let persistent = null;
-    if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
-    else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
-    else if (inp.number !== undefined && !sources.length) persistent = persistentNumbers([inp.number]);
-    else if (inp.text !== undefined && !sources.length) persistent = persistentText(inp.text);
-    else if (inp.point && !sources.length) persistent = persistentNumbers(inp.point);
-    return paramInput(inp, i, x, y, spec.w, sources, persistent);
+  const outputs = spec.outputs.map((out) => {
+    const copy = { ...out, _guid: id() };
+    if (!copy.typeId && USE_PARAMETER_DATA.has(key))
+      throw new Error(`missing typeId for ${key} output ${out.name}`);
+    return copy;
   });
-  const outChunks = outputs.map((out, i) => paramOutput(out, i, x, y, spec.w));
   const node = { key, instance, inputs, outputs, spec };
   const advancedNames = new Set((spec.advancedInputs ?? []).map((a) => a.name));
   const presentAdvanced = inputs.filter((i) => advancedNames.has(i.name)).map((i) => i.name);
   const planFlags = key === 'plan' ? [
+    item('AutoPlan', 'gh_bool', '1', options.autoPlan === false ? 'false' : 'true'),
     item('ShowCollision', 'gh_bool', '1', presentAdvanced.includes('Collision') ? 'true' : 'false'),
     item('ShowGroup', 'gh_bool', '1', presentAdvanced.includes('Group') ? 'true' : 'false'),
     item('ShowAttach', 'gh_bool', '1', presentAdvanced.includes('Attach') ? 'true' : 'false'),
     item('ShowRrtSettings', 'gh_bool', '1', presentAdvanced.includes('RrtSettings') ? 'true' : 'false'),
   ] : [];
+  const progFlags = key === 'progPlan' ? [
+    item('AutoPlan', 'gh_bool', '1', options.autoPlan === false ? 'false' : 'true'),
+  ] : [];
+  const moveFlags = key === 'segment' ? [
+    item('MotionType', 'gh_string', '10', esc(segType)),
+    item('ToolMode', 'gh_string', '10', esc(options.toolMode || 'Hold')),
+  ] : [];
   const containerItems = [
     item('Description', 'gh_string', '10', esc(spec.desc ?? spec.name)),
     item('InstanceGuid', 'gh_guid', '9', instance),
+    ...moveFlags,
     item('Name', 'gh_string', '10', spec.name),
     item('NickName', 'gh_string', '10', spec.nick),
     ...planFlags,
+    ...progFlags,
   ];
+
+  let containerChunks;
+  if (USE_PARAMETER_DATA.has(key)) {
+    containerChunks = `${bounds(x, y, spec.w, spec.h)}
+                    ${parameterDataChunk(inputs, outputs, x, y, spec.w, wireMapSafe, options)}`;
+  } else {
+    const inChunks = inputs.map((inp, i) => {
+      const sources = (wireMapSafe[inp.name] ?? []).map((ref) => ref._guid);
+      let persistent = null;
+      if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
+      else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
+      else if (inp.number !== undefined && !sources.length) persistent = persistentNumbers([inp.number]);
+      else if (inp.text !== undefined && !sources.length) persistent = persistentText(inp.text);
+      else if (inp.point && !sources.length) persistent = persistentNumbers(inp.point);
+      return paramInput(inp, i, x, y, spec.w, sources, persistent);
+    });
+    const outChunks = outputs.map((out, i) => paramOutput(out, i, x, y, spec.w));
+    containerChunks = `${bounds(x, y, spec.w, spec.h)}
+                    ${inChunks.join('\n                    ')}
+                    ${outChunks.join('\n                    ')}`;
+  }
+  const chunkCount = USE_PARAMETER_DATA.has(key) ? 2 : (1 + inputs.length + outputs.length);
   return { xml: `<chunk name="Object" index="PLACEHOLDER">
               <items count="3">
                 ${item('GUID', 'gh_guid', '9', spec.guid)}
@@ -460,47 +600,8 @@ function motusComponent(key, x, y, wireMap, options = {}) {
                   <items count="${containerItems.length}">
                     ${containerItems.join('\n                    ')}
                   </items>
-                  <chunks count="${1 + inputs.length + outputs.length}">
-                    ${bounds(x, y, spec.w, spec.h)}
-                    ${inChunks.join('\n                    ')}
-                    ${outChunks.join('\n                    ')}
-                  </chunks>
-                </chunk>
-              </chunks>
-            </chunk>`, node };
-}
-
-function valueList(x, y, selected = 'UR10e') {
-  const instance = id();
-  // Value List is a native GH_Param: InstanceGuid is the wire target (no param_output chunk).
-  const items = MODELS.map((name, i) => `<chunk name="ListItem" index="${i}">
-                      <items count="3">
-                        ${item('Expression', 'gh_string', '10', `"${name}"`)}
-                        ${item('Name', 'gh_string', '10', name)}
-                        ${item('Selected', 'gh_bool', '1', name === selected ? 'true' : 'false')}
-                      </items>
-                    </chunk>`).join('\n                    ');
-  const node = { key: 'valueList', instance, outputs: [{ name: 'Value', _guid: instance }] };
-  return { xml: `<chunk name="Object" index="PLACEHOLDER">
-              <items count="2">
-                ${item('GUID', 'gh_guid', '9', NATIVE.valueList.guid)}
-                ${item('Name', 'gh_string', '10', 'Value List')}
-              </items>
-              <chunks count="1">
-                <chunk name="Container">
-                  <items count="8">
-                    ${item('Description', 'gh_string', '10', 'Provides a list of preset values to choose from')}
-                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
-                    ${item('ListCount', 'gh_int32', '3', String(MODELS.length))}
-                    ${item('ListMode', 'gh_int32', '3', '1')}
-                    ${item('Name', 'gh_string', '10', 'Value List')}
-                    ${item('NickName', 'gh_string', '10', 'Model')}
-                    ${item('Optional', 'gh_bool', '1', 'false')}
-                    ${item('SourceCount', 'gh_int32', '3', '0')}
-                  </items>
-                  <chunks count="${MODELS.length + 1}">
-                    ${items}
-                    ${bounds(x, y, NATIVE.valueList.w, NATIVE.valueList.h)}
+                  <chunks count="${chunkCount}">
+                    ${containerChunks}
                   </chunks>
                 </chunk>
               </chunks>
@@ -548,7 +649,9 @@ function motusScrub(x, y, value = 0, w = MOTUS.scrub.w) {
 }
 
 function previewWithScrub(x, y, trajectoryRef, options = {}) {
-  const scrub = motusScrub(x - 260, y + 10, options.scrubValue ?? 0, options.scrubWidth ?? 280);
+  // Scrub sits above Preview (same column) so it never overlaps Motus Plan to the left.
+  const scrubW = options.scrubWidth ?? 220;
+  const scrub = motusScrub(x, y - 52, options.scrubValue ?? 0, scrubW);
   const previewInputs = {
     Trajectory: [trajectoryRef],
     Position: [outRef(scrub.node, 'Number')],
@@ -779,22 +882,22 @@ function nativePlane(x, y, originRef, normalRef) {
   return { xml: `<chunk name="Object" index="PLACEHOLDER">
               <items count="2">
                 ${item('GUID', 'gh_guid', '9', NATIVE.plane.guid)}
-                ${item('Name', 'gh_string', '10', 'Plane')}
+                ${item('Name', 'gh_string', '10', 'Plane Normal')}
               </items>
               <chunks count="1">
                 <chunk name="Container">
                   <items count="5">
-                    ${item('Description', 'gh_string', '10', 'Create a plane from origin and normal')}
+                    ${item('Description', 'gh_string', '10', 'Create a plane from an origin point and a Z-axis vector')}
                     ${item('InstanceGuid', 'gh_guid', '9', instance)}
-                    ${item('Name', 'gh_string', '10', 'Plane')}
-                    ${item('NickName', 'gh_string', '10', 'Goal')}
+                    ${item('Name', 'gh_string', '10', 'Plane Normal')}
+                    ${item('NickName', 'gh_string', '10', 'Pl')}
                     ${item('SourceCount', 'gh_int32', '3', '0')}
                   </items>
                   <chunks count="4">
                     ${bounds(x, y, 44, 44)}
                     <chunk name="param_input" index="0">
                       <items count="7">
-                        ${item('Description', 'gh_string', '10', 'Plane origin')}
+                        ${item('Description', 'gh_string', '10', 'Origin of plane')}
                         ${item('InstanceGuid', 'gh_guid', '9', inOrigin)}
                         ${item('Name', 'gh_string', '10', 'Origin')}
                         ${item('NickName', 'gh_string', '10', 'O')}
@@ -806,10 +909,10 @@ function nativePlane(x, y, originRef, normalRef) {
                     </chunk>
                     <chunk name="param_input" index="1">
                       <items count="7">
-                        ${item('Description', 'gh_string', '10', 'Plane normal')}
+                        ${item('Description', 'gh_string', '10', 'Z-Axis direction of plane')}
                         ${item('InstanceGuid', 'gh_guid', '9', inNormal)}
-                        ${item('Name', 'gh_string', '10', 'Normal')}
-                        ${item('NickName', 'gh_string', '10', 'N')}
+                        ${item('Name', 'gh_string', '10', 'Z-Axis')}
+                        ${item('NickName', 'gh_string', '10', 'Z')}
                         ${item('Optional', 'gh_bool', '1', 'false')}
                         ${sourceItem(0, normalRef._guid)}
                         ${item('SourceCount', 'gh_int32', '3', '1')}
@@ -818,10 +921,10 @@ function nativePlane(x, y, originRef, normalRef) {
                     </chunk>
                     <chunk name="param_output" index="0">
                       <items count="6">
-                        ${item('Description', 'gh_string', '10', 'Plane')}
+                        ${item('Description', 'gh_string', '10', 'Plane definition')}
                         ${item('InstanceGuid', 'gh_guid', '9', outGuid)}
                         ${item('Name', 'gh_string', '10', 'Plane')}
-                        ${item('NickName', 'gh_string', '10', 'Pl')}
+                        ${item('NickName', 'gh_string', '10', 'P')}
                         ${item('Optional', 'gh_bool', '1', 'false')}
                         ${item('SourceCount', 'gh_int32', '3', '0')}
                       </items>
@@ -978,357 +1081,215 @@ function ur10eRobot(x, y) {
   return motusComponent('ur10e', x, y, {});
 }
 
+/** 01 — quick plan: sequential joint + TCP Pose LIN + Export / TrajData / Preview (was 01+02+12). */
 function graph01() {
-  const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 420, 140, {
+  const robot = ur10eRobot(40, 40);
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: MOTION_START });
+  const goalJoint = motusComponent('joints', 40, 320, {}, { jointValues: GOAL_JOINTS });
+  const tcp = motusComponent('tcpPose', 240, 220, {
     Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(joints.node, 'State')],
+    State: [outRef(goalJoint.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(620, 120, outRef(plan.node, 'Trajectory'));
-  const trajData = motusComponent('trajData', 620, 260, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const exp = motusComponent('export', 620, 380, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [robot, joints, plan, scrub, preview, trajData, exp];
+  const uz = nativeUnitZ(40, 460);
+  const ptLin = nativeConstructPoint(40, 520, [0.48, 0.18, 0.48]);
+  const plLin = nativePlane(200, 520, ptLin.node.outputs[0], uz.node.outputs[0]);
+  const plan = motusComponent('plan', 440, 200, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [
+      outRef(goalJoint.node, 'State'),
+      outRef(tcp.node, 'Plane'),
+      outRef(plLin.node, 'Plane'),
+    ],
+    Start: [outRef(start.node, 'State')],
+  });
+  const { scrub, preview } = previewWithScrub(720, 200, outRef(plan.node, 'Trajectory'));
+  const trajData = motusComponent('trajData', 720, 360, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const exp = motusComponent('export', 720, 520, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const objs = [
+    robot, start, goalJoint, tcp,
+    { xml: uz.xml }, { xml: ptLin.xml }, { xml: plLin.xml },
+    plan, scrub, preview, trajData, exp,
+  ];
   objs._meta = {
-    fileName: '01_joint_planning.ghx',
-    description: 'Joint-linear planning: UR10e Robotiq + Joint State -> Plan -> Preview / Export / Trajectory Data. Click Plan, then drag Motus Scrub or Play.',
+    fileName: '01_quick_plan.ghx',
+    description: 'Quick plan: sequential Joint State + TCP Pose LIN + Plane goal -> Preview / Export / Trajectory Data. Auto Plan on; drag Motus Scrub or Play.',
   };
   return buildGraph(objs);
 }
 
+/** 02 — collision RRT + shapes + SRDF/group/attach (was 03+04+05). */
 function graph02() {
-  const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
-  const tcp = motusComponent('tcpPose', 300, 140, {
-    Robot: [outRef(robot.node, 'Robot')],
-    State: [outRef(joints.node, 'State')],
+  const robot = ur10eRobot(40, 40);
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: COLLISION_START });
+  const goal = motusComponent('joints', 40, 320, {}, { jointValues: COLLISION_GOAL });
+  // Obstacles clear of start/goal, but sit on the straight-line mid path.
+  const sphereCenter = nativeConstructPoint(40, 460, [0.45, 0.35, 0.55]);
+  const sphere = motusComponent('colSphere', 220, 460, {
+    Center: [outRef(sphereCenter.node, 'Point')],
+  }, { text: { Name: 'block' }, numbers: { Radius: 0.12 } });
+  const boxOrigin = nativeConstructPoint(40, 620, [0.70, 0.20, 0.20]);
+  const uz = nativeUnitZ(40, 560);
+  const boxPlane = nativePlane(200, 620, boxOrigin.node.outputs[0], uz.node.outputs[0]);
+  const box = motusComponent('colBox', 380, 600, { Plane: [outRef(boxPlane.node, 'Plane')] }, {
+    text: { Name: 'table' },
+    numbers: { HalfX: 0.18, HalfY: 0.12, HalfZ: 0.04 },
   });
-  const plan = motusComponent('plan', 480, 140, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(tcp.node, 'Plane')],
-  });
-  const { scrub, preview } = previewWithScrub(680, 140, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, joints, tcp, plan, scrub, preview];
-  objs._meta = {
-    fileName: '02_cartesian_planning.ghx',
-    description: 'Cartesian TCP LIN: Joint State -> TCP Pose (FK plane) -> Plan. Click Plan, then drag Motus Scrub or Play on Preview.',
-  };
-  return buildGraph(objs);
-}
-
-function graph03() {
-  // Hand-tuned on disk (Populate 3D / Center Box layout). Generator skips overwrite —
-  // see HAND_TUNED. This graph remains the bootstrap template for --force-hand-tuned.
-  const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 220, {}, { jointValues: GOAL_JOINTS });
-  const sphere = motusComponent('colSphere', 140, 380, {});
-  const scene = motusComponent('colScene', 300, 380, { Objects: [outRef(sphere.node, 'Object')] });
-  const rrt = motusComponent('rrtSettings', 300, 500, {});
-  const plan = motusComponent('plan', 480, 180, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(joints.node, 'State')],
-    Collision: [outRef(scene.node, 'Scene')],
-    RrtSettings: [outRef(rrt.node, 'Settings')],
-  });
-  const { scrub, preview } = previewWithScrub(680, 160, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, joints, sphere, scene, rrt, plan, scrub, preview];
-  objs._meta = {
-    fileName: '03_collision_rrt.ghx',
-    description: 'Collision-aware RRT: ColSphere -> ColScene -> Plan.Collision with Motus RRT Settings on joint goal. Click Plan, then drag Motus Scrub or Play.',
-  };
-  return buildGraph(objs);
-}
-
-function graph04() {
-  const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 200, {}, { jointValues: GOAL_JOINTS });
-  const sphere = motusComponent('colSphere', 140, 360, {}, { text: { Name: 'sphere' } });
-  const xy = nativeXYPlane(140, 480);
-  const box = motusComponent('colBox', 300, 460, { Plane: [outRef(xy.node, 'Plane')] });
-  const scene = motusComponent('colScene', 460, 400, {
+  const srdfPanel = nativePanel(-40, 780, absPath('examples/srdf/table_base.srdf'), 'Srdf', 280, 44);
+  const scene = motusComponent('colScene', 580, 460, {
     Objects: [outRef(sphere.node, 'Object'), outRef(box.node, 'Object')],
-  });
-  const plan = motusComponent('plan', 620, 180, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(joints.node, 'State')],
-    Collision: [outRef(scene.node, 'Scene')],
-  });
-  const { scrub, preview } = previewWithScrub(820, 160, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, joints, sphere, xy, box, scene, plan, scrub, preview];
-  objs._meta = {
-    fileName: '04_collision_shapes.ghx',
-    description: 'Multiple obstacle shapes: ColSphere + ColBox -> ColScene -> Plan (RRT). Wire your own mesh into ColMesh the same way.',
-  };
-  return buildGraph(objs);
-}
-
-function graph05() {
-  const robot = ur10eRobot(140, 60);
-  const joints = motusComponent('joints', 140, 200, {}, { jointValues: GOAL_JOINTS });
-  const tableCenter = nativeConstructPoint(140, 340, [0.35, 0.15, 0.35]);
-  const sphere = motusComponent('colSphere', 140, 360, {
-    Center: [outRef(tableCenter.node, 'Point')],
-  }, { text: { Name: 'table' } });
-  const srdfPanel = nativePanel(-55, 410, 'examples/srdf/table_base.srdf', 'Srdf', 220, 44);
-  const scene = motusComponent('colScene', 300, 360, {
-    Objects: [outRef(sphere.node, 'Object')],
     Srdf: [outRef(srdfPanel.node, 'Text')],
   });
-  const group = motusComponent('group', 460, 360, { Group: [outRef(scene.node, 'Groups')] });
-  const graspCenter = nativeConstructPoint(140, 500, [0, 0, 0.08]);
-  const grasp = motusComponent('colSphere', 140, 520, {
+  const group = motusComponent('group', 760, 460, { Group: [outRef(scene.node, 'Groups')] });
+  // Small TCP-local grasp body (center near origin; Attach poses it at TCP).
+  const graspCenter = nativeConstructPoint(40, 860, [0, 0, 0.02]);
+  const grasp = motusComponent('colSphere', 220, 860, {
     Center: [outRef(graspCenter.node, 'Point')],
-  }, {
-    text: { Name: 'grasp' },
-    numbers: { Radius: 0.05 },
-  });
-  const attach = motusComponent('attach', 300, 520, { Object: [outRef(grasp.node, 'Object')] }, { text: { Name: 'grasp' } });
-  const plan = motusComponent('plan', 620, 200, {
+  }, { text: { Name: 'grasp' }, numbers: { Radius: 0.03 } });
+  const attach = motusComponent('attach', 400, 860, { Object: [outRef(grasp.node, 'Object')] }, { text: { Name: 'grasp' } });
+  const rrt = motusComponent('rrtSettings', 580, 660, {});
+  const plan = motusComponent('plan', 960, 260, {
     Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(joints.node, 'State')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
     Collision: [outRef(scene.node, 'Scene')],
     Group: [outRef(group.node, 'Group')],
     Attach: [outRef(attach.node, 'Attach')],
+    RrtSettings: [outRef(rrt.node, 'Settings')],
   });
-  const { scrub, preview } = previewWithScrub(820, 180, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, joints, { xml: tableCenter.xml }, sphere, srdfPanel, scene, group, { xml: graspCenter.xml }, grasp, attach, plan, scrub, preview];
+  const { scrub, preview } = previewWithScrub(1180, 260, outRef(plan.node, 'Trajectory'));
+  const objs = [
+    robot, start, goal,
+    { xml: sphereCenter.xml }, sphere,
+    { xml: boxOrigin.xml }, { xml: uz.xml }, { xml: boxPlane.xml }, box,
+    srdfPanel, scene, group,
+    { xml: graspCenter.xml }, grasp, attach, rrt, plan, scrub, preview,
+  ];
   objs._meta = {
-    fileName: '05_srdf_group_attach.ghx',
-    description: 'SRDF allowed pairs + Planning Group + Attach Body on Plan. Set Srdf panel to your absolute path if needed.',
+    fileName: '02_collision_srdf.ghx',
+    description: 'Collision RRT: ColSphere + ColBox -> ColScene (SRDF) + Group + Attach + RRT Settings -> Plan. Wire ColMesh the same way as sphere/box. Auto Plan on.',
   };
   return buildGraph(objs);
 }
 
-function graph06() {
-  const urdfFile = nativeFilePath(40, 80, BUNDLED_URDF);
-  const robot = motusComponent('robot', 147, 80, {
-    Path: [outRef(urdfFile.node, 'Path')],
-  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
-  const goalPanel = nativePanel(35, 246, UR10E_GOAL_DEG, 'Goal°', 160, 100);
-  const startPanel = nativePanel(148, 383, UR10E_START_DEG, 'Start°', 160, 100);
-  const goalJoints = motusComponent('joints', 214, 202, {
-    Joints: [outRef(goalPanel.node, 'Text')],
-  }, { useDegrees: { Joints: true } });
-  const startJoints = motusComponent('joints', 292, 304, {
-    Joints: [outRef(startPanel.node, 'Text')],
-  }, { useDegrees: { Joints: true } });
-  const plan = motusComponent('plan', 416, 174, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(goalJoints.node, 'State')],
-    Start: [outRef(startJoints.node, 'State')],
+/** 03 — URDF load + base/tool frames + Robotiq mesh (was 06+07+09+10). */
+function graph03() {
+  // Bundled URDF with collision meshes (examples/ur10e/ur10e.urdf expects meshes/ beside it — use package URDF).
+  const urdfFile = nativeFilePath(-220, 40, absPath('resources/robots/ur10e_robotiq/ur10e_robotiq.urdf'));
+  const basePl = nativeXYPlane(-40, 180);
+  const tcpPt = nativeConstructPoint(-40, 280, [0, 0, 0.1633]);
+  const ux = nativeUnitX(-40, 360);
+  const tcpPl = nativePlane(140, 280, tcpPt.node.outputs[0], ux.node.outputs[0]);
+  const meshPath = nativeFilePath(-40, 460, absPath('resources/tools/robotiq_2f85_tcp_local.stl'), '*.stl|*.stl|All files|*.*');
+  const loadMesh = motusComponent('loadMesh', 180, 440, {
+    Path: [outRef(meshPath.node, 'Path')],
   });
-  const { scrub, preview } = previewWithScrub(618, 110, outRef(plan.node, 'Trajectory'));
-  const objs = [robot, plan, scrub, preview, urdfFile, startJoints, goalPanel, goalJoints, startPanel];
-  objs._meta = {
-    fileName: '06_urdf_load.ghx',
-    description: 'Motus Robot URDF load: bundled ur10e_robotiq.urdf path + explicit Start on Plan.',
-  };
-  return buildGraph(objs);
-}
-
-function graph07() {
-  const urdfFile = nativeFilePath(-180, 60, BUNDLED_URDF);
-  const basePl = nativeXYPlane(40, 200);
-  const tcpPl = nativeXYPlane(40, 280);
-  const tool = motusComponent('tool', 160, 200, { TCP: [outRef(tcpPl.node, 'Plane')] }, { text: { Name: 'offset' } });
-  const robot = motusComponent('robot', 340, 80, {
+  const tool = motusComponent('tool', 360, 300, {
+    TCP: [outRef(tcpPl.node, 'Plane')],
+    Geometry: [outRef(loadMesh.node, 'Mesh')],
+  }, { text: { Name: 'robotiq_2f85', Capabilities: 'Robotiq2F85' } });
+  const robot = motusComponent('robot', 560, 60, {
     Path: [outRef(urdfFile.node, 'Path')],
     Base: [outRef(basePl.node, 'Plane')],
     Tool: [outRef(tool.node, 'Tool')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
-  const start = motusComponent('joints', 340, 220, {}, { jointValues: START_JOINTS });
-  const goal = motusComponent('joints', 340, 340, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 560, 200, {
+  const start = motusComponent('joints', 560, 260, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 560, 400, {}, { jointValues: GOAL_JOINTS });
+  const plan = motusComponent('plan', 780, 220, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goal.node, 'State')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(760, 180, outRef(plan.node, 'Trajectory'), {
+  const { scrub, preview } = previewWithScrub(1000, 220, outRef(plan.node, 'Trajectory'), {
     preview: { bools: { ShowStart: true } },
   });
-  const objs = [urdfFile, basePl, tcpPl, tool, robot, start, goal, plan, scrub, preview];
+  const exp = motusComponent('export', 1000, 400, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const objs = [
+    urdfFile, basePl,
+    { xml: tcpPt.xml }, { xml: ux.xml }, { xml: tcpPl.xml },
+    meshPath, loadMesh, tool, robot, start, goal, plan, scrub, preview, exp,
+  ];
   objs._meta = {
-    fileName: '07_frames_and_start.ghx',
-    description: 'Motus Robot: URDF path + Base override + Motus Tool, explicit Start on Plan, ShowStart ghost on Preview.',
+    fileName: '03_urdf_tool_frames.ghx',
+    description: 'Motus Robot URDF + Base override + Robotiq Tool (Load Mesh, Cap=Robotiq2F85) + Start + Preview ShowStart. Auto Plan on.',
   };
   return buildGraph(objs);
 }
 
-function graph08() {
-  const robot = ur10eRobot(140, 60);
-  const start = motusComponent('joints', 140, 200, {}, { jointValues: MOTION_START });
-  const ptpGoal = motusComponent('joints', 140, 320, {}, { jointValues: GOAL_JOINTS });
-  const segPtp = motusComponent('segment', 340, 60, {
+/** 04 — motion program: PTP + LIN + CIRC + SET gripper (was 08+11). */
+function graph04() {
+  const robot = ur10eRobot(40, 40);
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: MOTION_START });
+  const ptpGoal = motusComponent('joints', 40, 320, {}, { jointValues: GOAL_JOINTS });
+  const stateOpen = motusComponent('toolState', 40, 900, {
+    Tool: [outRef(robot.node, 'Robot')],
+  }, { text: { Preset: 'Open' } });
+  const stateClosed = motusComponent('toolState', 200, 900, {
+    Tool: [outRef(robot.node, 'Robot')],
+  }, { text: { Preset: 'Closed' } });
+  const segPtp = motusComponent('segment', 420, 40, {
     Goal: [outRef(ptpGoal.node, 'State')],
+    ToolState: [outRef(stateOpen.node, 'State')],
   }, { text: { Type: 'PTP' } });
-  const ptLin = nativeConstructPoint(140, 480, [0.45, 0.15, 0.45]);
-  const uz = nativeUnitZ(140, 420);
-  const plLin = nativePlane(260, 480, ptLin.node.outputs[0], uz.node.outputs[0]);
-  const segLin = motusComponent('segment', 340, 240, {
+  const ptLin = nativeConstructPoint(40, 520, [0.45, 0.15, 0.45]);
+  const uz = nativeUnitZ(40, 460);
+  const plLin = nativePlane(200, 520, ptLin.node.outputs[0], uz.node.outputs[0]);
+  const segLin = motusComponent('segment', 420, 220, {
     Goal: [outRef(plLin.node, 'Plane')],
   }, { text: { Type: 'LIN' } });
-  const ptVia = nativeConstructPoint(140, 600, [0.453, 0.152, 0.45]);
-  const ptGoal = nativeConstructPoint(140, 680, [0.45, 0.154, 0.45]);
-  const plVia = nativePlane(260, 600, ptVia.node.outputs[0], uz.node.outputs[0]);
-  const plGoal = nativePlane(260, 680, ptGoal.node.outputs[0], uz.node.outputs[0]);
-  const segCirc = motusComponent('segment', 340, 420, {
+  const ptVia = nativeConstructPoint(40, 680, [0.453, 0.152, 0.45]);
+  const ptGoal = nativeConstructPoint(40, 780, [0.45, 0.154, 0.45]);
+  const plVia = nativePlane(200, 680, ptVia.node.outputs[0], uz.node.outputs[0]);
+  const plGoal = nativePlane(200, 780, ptGoal.node.outputs[0], uz.node.outputs[0]);
+  const segCirc = motusComponent('segment', 420, 420, {
     Goal: [outRef(plGoal.node, 'Plane')],
     Via: [outRef(plVia.node, 'Plane')],
   }, { text: { Type: 'CIRC' } });
-  const progPlan = motusComponent('progPlan', 520, 200, {
+  const segSet = motusComponent('segment', 420, 640, {
+    ToolState: [outRef(stateClosed.node, 'State')],
+  }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
+  const progPlan = motusComponent('progPlan', 640, 280, {
     Robot: [outRef(robot.node, 'Robot')],
-    Segments: [outRef(segPtp.node, 'Segment'), outRef(segLin.node, 'Segment'), outRef(segCirc.node, 'Segment')],
+    Segments: [
+      outRef(segPtp.node, 'Segment'),
+      outRef(segLin.node, 'Segment'),
+      outRef(segCirc.node, 'Segment'),
+      outRef(segSet.node, 'Segment'),
+    ],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(720, 180, outRef(progPlan.node, 'Trajectory'));
-  const exp = motusComponent('export', 720, 320, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(880, 280, outRef(progPlan.node, 'Trajectory'));
+  const exp = motusComponent('export', 880, 460, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
   const flat = [
-    robot, start, ptpGoal, segPtp,
+    robot, start, ptpGoal, stateOpen, stateClosed, segPtp,
     { xml: ptLin.xml }, { xml: uz.xml }, { xml: plLin.xml },
     segLin,
     { xml: ptVia.xml }, { xml: ptGoal.xml }, { xml: plVia.xml }, { xml: plGoal.xml },
-    segCirc, progPlan, scrub, preview, exp,
+    segCirc, segSet, progPlan, scrub, preview, exp,
   ];
   flat._meta = {
-    fileName: '08_motion_program.ghx',
-    description: 'Motion program: PTP + LIN + CIRC Moves -> Motus Program -> Preview / Export. Click Plan, then drag Motus Scrub or Play.',
+    fileName: '04_motion_program.ghx',
+    description: 'Motion program: PTP + LIN + CIRC + SET gripper -> Motus Program -> Preview / Export. Auto Plan on; drag Motus Scrub or Play.',
   };
   return buildGraph(flat);
 }
 
-function graph09() {
-  const urdfFile = nativeFilePath(-180, 60, 'examples/ur10e/ur10e.urdf');
-  const tcpPl = nativeXYPlane(40, 200);
-  const gripper = motusComponent('colBox', 40, 320, {}, {
-    numbers: { HalfX: 0.02, HalfY: 0.02, HalfZ: 0.04 },
-    text: { Name: 'gripper_geom' },
-  });
-  const tool = motusComponent('tool', 200, 260, {
-    TCP: [outRef(tcpPl.node, 'Plane')],
-    Geometry: [outRef(gripper.node, 'Object')],
-  }, { text: { Name: 'gripper', Capabilities: 'None' } });
-  const robot = motusComponent('robot', 380, 80, {
-    Path: [outRef(urdfFile.node, 'Path')],
-    Tool: [outRef(tool.node, 'Tool')],
-  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
-  const goal = motusComponent('joints', 380, 220, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 580, 160, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(goal.node, 'State')],
-  });
-  const { scrub, preview } = previewWithScrub(780, 140, outRef(plan.node, 'Trajectory'));
-  const exp = motusComponent('export', 780, 280, {
-    Trajectory: [outRef(plan.node, 'Trajectory')],
-  });
-  const objs = [urdfFile, tcpPl, gripper, tool, robot, goal, plan, scrub, preview, exp];
-  objs._meta = {
-    fileName: '09_tool_tcp.ghx',
-    description: 'Motus Robot (ur10e.urdf) + Motus Tool (TCP + gripper box) -> Plan -> Preview/Export.',
-  };
-  return buildGraph(objs);
-}
-
-function graph10() {
-  const urdfFile = nativeFilePath(-180, 60, 'examples/ur10e/ur10e.urdf');
-  const tcpPt = nativeConstructPoint(40, 200, [0, 0, 0.1633]);
-  const ux = nativeUnitX(40, 260);
-  const tcpPl = nativePlane(160, 200, tcpPt.node.outputs[0], ux.node.outputs[0]);
-  const meshPath = nativeFilePath(40, 340, 'examples/ur10e/meshes/robotiq_2f85/robotiq_2f85_tcp_local.stl', '*.stl|*.stl|All files|*.*');
-  const loadMesh = motusComponent('loadMesh', 200, 320, {
-    Path: [outRef(meshPath.node, 'Path')],
-  });
-  const tool = motusComponent('tool', 380, 260, {
-    TCP: [outRef(tcpPl.node, 'Plane')],
-    Geometry: [outRef(loadMesh.node, 'Mesh')],
-  }, { text: { Name: 'robotiq_2f85', Capabilities: 'Robotiq2F85' } });
-  const robot = motusComponent('robot', 540, 80, {
-    Path: [outRef(urdfFile.node, 'Path')],
-    Tool: [outRef(tool.node, 'Tool')],
-  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
-  const goal = motusComponent('joints', 540, 220, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 740, 160, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(goal.node, 'State')],
-  });
-  const { scrub, preview } = previewWithScrub(940, 140, outRef(plan.node, 'Trajectory'));
-  const objs = [urdfFile, tcpPt, ux, tcpPl, meshPath, loadMesh, tool, robot, goal, plan, scrub, preview];
-  objs._meta = {
-    fileName: '10_robotiq_tool.ghx',
-    description: 'Motus Robot (ur10e.urdf) + Robotiq mesh via Motus Tool -> Plan + Preview.',
-  };
-  return buildGraph(objs);
-}
-
-function graph11() {
-  const robot = motusComponent('ur10e', 40, 120);
-  const start = motusComponent('joints', 40, 260, {}, { jointValues: MOTION_START });
-  const ptpGoal = motusComponent('joints', 40, 360, {}, { jointValues: MOTION_START });
-  const stateOpen = motusComponent('toolState', 200, 420, {
-    Tool: [outRef(robot.node, 'Robot')],
-  }, { text: { Preset: 'Open' } });
-  const stateClosed = motusComponent('toolState', 200, 520, {
-    Tool: [outRef(robot.node, 'Robot')],
-  }, { text: { Preset: 'Closed' } });
-  const segPtp = motusComponent('segment', 360, 280, {
-    Goal: [outRef(ptpGoal.node, 'State')],
-    ToolState: [outRef(stateOpen.node, 'State')],
-  }, { text: { Type: 'PTP' } });
-  const segSet = motusComponent('segment', 360, 420, {
-    ToolState: [outRef(stateClosed.node, 'State')],
-  }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
-  const progPlan = motusComponent('progPlan', 540, 200, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Segments: [outRef(segPtp.node, 'Segment'), outRef(segSet.node, 'Segment')],
-    Start: [outRef(start.node, 'State')],
-  });
-  const { scrub, preview } = previewWithScrub(740, 180, outRef(progPlan.node, 'Trajectory'));
-  const exp = motusComponent('export', 740, 320, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
-  const objs = [robot, start, ptpGoal, stateOpen, stateClosed, segPtp, segSet, progPlan, scrub, preview, exp];
-  objs._meta = {
-    fileName: '11_gripper_motion_program.ghx',
-    description: 'Motion program with SET gripper close: UR10e Robotiq -> ToolState(Robot) -> Motus Program -> Preview/Export.',
-  };
-  return buildGraph(objs);
-}
-
-function graph12() {
-  const robot = ur10eRobot(140, 60);
-  const start = motusComponent('joints', 140, 200, {}, { jointValues: MOTION_START });
-  const goalJoint = motusComponent('joints', 140, 320, {}, { jointValues: GOAL_JOINTS });
-  const uz = nativeUnitZ(140, 420);
-  const ptLin1 = nativeConstructPoint(140, 480, [0.45, 0.15, 0.45]);
-  const ptLin2 = nativeConstructPoint(140, 560, [0.48, 0.18, 0.48]);
-  const plLin1 = nativePlane(260, 480, ptLin1.node.outputs[0], uz.node.outputs[0]);
-  const plLin2 = nativePlane(260, 560, ptLin2.node.outputs[0], uz.node.outputs[0]);
-  const plan = motusComponent('plan', 480, 180, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [
-      outRef(goalJoint.node, 'State'),
-      outRef(plLin1.node, 'Plane'),
-      outRef(plLin2.node, 'Plane'),
-    ],
-    Start: [outRef(start.node, 'State')],
-  });
-  const { scrub, preview } = previewWithScrub(680, 160, outRef(plan.node, 'Trajectory'));
-  const exp = motusComponent('export', 680, 300, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const objs = [
-    robot, start, goalJoint,
-    { xml: uz.xml }, { xml: ptLin1.xml }, { xml: ptLin2.xml }, { xml: plLin1.xml }, { xml: plLin2.xml },
-    plan, scrub, preview, exp,
-  ];
-  objs._meta = {
-    fileName: '12_sequential_goals.ghx',
-    description: 'Sequential goals: Joint State + two Plane goals wired to Plan.Goal (list) -> one chained trajectory. Click Plan, then drag Motus Scrub or Play.',
-  };
-  return buildGraph(objs);
-}
-
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10, graph11, graph12];
-const legacy = ['01_basic_planning.ghx', '02_collision_planning.ghx'];
-
-/** Hand-tuned examples kept on disk; generator skips overwrite unless --force-hand-tuned. */
-const HAND_TUNED = new Set(['03_collision_rrt.ghx']);
-const forceHandTuned = process.argv.includes('--force-hand-tuned');
+const graphs = [graph01, graph02, graph03, graph04];
+const legacy = [
+  '01_basic_planning.ghx',
+  '02_collision_planning.ghx',
+  '01_joint_planning.ghx',
+  '02_cartesian_planning.ghx',
+  '03_collision_rrt.ghx',
+  '04_collision_shapes.ghx',
+  '05_srdf_group_attach.ghx',
+  '06_urdf_load.ghx',
+  '07_frames_and_start.ghx',
+  '08_motion_program.ghx',
+  '09_tool_tcp.ghx',
+  '10_robotiq_tool.ghx',
+  '11_gripper_motion_program.ghx',
+  '12_sequential_goals.ghx',
+];
 
 for (const name of legacy) {
   const p = path.join(outDir, name);
@@ -1340,10 +1301,6 @@ for (const buildFn of graphs) {
   const meta = lastGraphMeta;
   if (!meta?.fileName) throw new Error(`missing meta for ${buildFn.name}`);
   const outPath = path.join(outDir, meta.fileName);
-  if (HAND_TUNED.has(meta.fileName) && fs.existsSync(outPath) && !forceHandTuned) {
-    console.log('skip (hand-tuned)', meta.fileName);
-    continue;
-  }
   fs.writeFileSync(outPath, xml, 'utf8');
   console.log('wrote', meta.fileName);
 }
