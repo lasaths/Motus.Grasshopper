@@ -39,7 +39,8 @@ internal static class RobotViewportPreview
         ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
         goo.Tool);
     if (geometry is not null &&
-        KinematicsPreview.PreviewMeshCache.TryCreate(ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool) is { } cache)
+        KinematicsPreview.PreviewMeshCache.TryCreate(
+            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities) is { } cache)
     {
       meshes = cache.MeshesFor(home);
     }
