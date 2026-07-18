@@ -48,7 +48,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 ## First plan (3 components)
 
 1. **Motus Robot** — pick a preset (e.g. UR10e)
-2. **Motus Plan** — wire a Rhino **Plane** or **Motus Joint State** to `Goal`, click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**
+2. **Motus Plan** — wire a Rhino **Plane** or **Motus Joint State** to `Goal` (and optionally `Start`), click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**
 3. **Motus Preview** — **Play** to animate; **Motus Export** for JSON/CSV
 
 Component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md). Palette icons: [docs/icons.md](docs/icons.md).
@@ -83,10 +83,12 @@ Example: `examples/03_collision_rrt.ghx`.
 
 ### Cartesian vs joint goals
 
-| Goal type | Motion |
-|-----------|--------|
-| Plane | TCP-linear LIN |
-| Joint State | Joint-space (RRT when Collision is wired) |
+| Type | Motion |
+|------|--------|
+| Plane goal | TCP-linear LIN |
+| Joint State goal | Joint-space (RRT when Collision is wired) |
+| Plane start | IK to joints (same multi-seed path as plane goals), then plan |
+| Joint State start | Used as-is |
 
 ## Examples
 

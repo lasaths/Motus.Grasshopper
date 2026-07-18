@@ -120,6 +120,71 @@ internal static class GhExtract
         return HomePoseLookup.HomeOrZeros(robot);
     }
 
+    /// <summary>
+    /// Start as Joint State, Plane (IK → joints), or unwired home/zeros.
+    /// Plane IK seeds from home — same multi-seed path as plane goals.
+    /// </summary>
+    public static bool TryStartOrHome(
+        IGH_DataAccess da,
+        int index,
+        RobotContext ctx,
+        out JointState start,
+        out bool usedDefaultHome,
+        out string? error)
+    {
+        var session = ctx.EffectiveModel;
+        start = HomePoseLookup.HomeOrZeros(session);
+        usedDefaultHome = true;
+        error = null;
+        if (index < 0)
+            return true;
+
+        IGH_Goo? goo = null;
+        if (!da.GetData(index, ref goo) || goo is null)
+            return true;
+
+        usedDefaultHome = false;
+
+        if (goo is JointStateGoo js && js.Value is not null)
+        {
+            start = js.Value;
+            return true;
+        }
+
+        if (goo.CastTo<Plane>(out var plane))
+        {
+            if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
+            {
+                error = $"No kinematics profile for '{session.Preset.ModelName}'.";
+                return false;
+            }
+
+            var pose = new CartesianPose(FrameConversion.FromPlane(plane));
+            var workspace = CartesianWorkspace.CheckReach(session.Preset, pose, startPose: null);
+            if (!workspace.IsWithinReach)
+            {
+                error = $"Start: {workspace.Reason ?? "Start TCP is outside robot reach."}";
+                return false;
+            }
+
+            var seed = HomePoseLookup.HomeOrZeros(session);
+            var reach = CartesianGoalSolver.TryReachFromStart(session, pose, seed, ctx.Chain);
+            if (!reach.Success || reach.Solution is null)
+            {
+                error = reach.Errors.Count > 0
+                    ? $"Start: {string.Join("; ", reach.Errors)}"
+                    : "Start: TCP is not reachable (IK failed).";
+                return false;
+            }
+
+            start = reach.Solution;
+            return true;
+        }
+
+        error = "Start is not supported. Provide a Plane or a Joint State.";
+        return false;
+    }
+
     public static void RemarkIfDefaultStart(GH_Component owner, bool usedDefaultHome)
     {
         if (usedDefaultHome)

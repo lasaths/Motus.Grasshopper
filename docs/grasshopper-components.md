@@ -38,7 +38,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 ### Home pose
 
-`Motus Plan` optional `Start` defaults to UR10e home (hardcoded) when the robot matches UR10e, otherwise all zeros.
+`Motus Plan` optional `Start` accepts a **Plane** (IK → joints) or **Joint State**. Unwired, it defaults to UR10e home (hardcoded) when the robot matches UR10e, otherwise all zeros.
 
 ## Plan
 
@@ -63,7 +63,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - optional `RrtSettings` (**Motus RRT Settings** output — joint goals + collision only)
 
 - Each `Goal` item is either a **Plane** (Cartesian TCP LIN) or a **Joint State**. Wire multiple sources into the list input (or use **Merge**) to chain waypoints; see `examples/12_sequential_goals.ghx`.
-- `Start` is optional; unwired it uses the viewer home pose or zeros.
+- `Start` is optional (Plane or Joint State); unwired it uses the viewer home pose or zeros.
 - `Step` applies only to plane goals. Long TCP moves auto-scale step size (max ~150 waypoints) so planning stays bounded.
 - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.

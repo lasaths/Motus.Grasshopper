@@ -37,7 +37,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _showRrtSettings;
 
     public MotusPlanComponent()
-        : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan. For gripper SET/WAIT use Motus Program Plan + Motion Segment.", "Plan", "flow-arrow")
+        : base("Motus Plan", "Plan", "Plan motion from a Plane or Joint State start to plane (TCP LIN) or joint goals; click Plan or enable Auto Plan. For gripper SET/WAIT use Motus Program Plan + Motion Segment.", "Plan", "flow-arrow")
     {
         _worker = new PlanWorker(this);
         BaseWorker = _worker;
@@ -64,7 +64,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     {
         p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
         p.AddGenericParameter("Goal", "G", "Targets as Planes (TCP LIN) or Joint States", GH_ParamAccess.list);
-        p.AddParameter(new Param_MotusJointState(), "Start", "St0", "Start joint state (defaults to home/zeros)", GH_ParamAccess.item);
+        p.AddGenericParameter("Start", "St0", "Start as Plane (IK) or Joint State (defaults to home/zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
         p[p.ParamCount - 1].Optional = true;
@@ -233,9 +233,14 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         else if (collision.Warning is not null)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
-        if (!PlanInputSnapshot.TryCollect(da, this, out var snapshot) || snapshot is null)
+        if (!PlanInputSnapshot.TryCollect(da, this, out var snapshot, out var collectError) || snapshot is null)
         {
             InvalidateCachedPlan();
+            if (collectError is not null)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collectError);
+                EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: collectError);
+            }
             return;
         }
 

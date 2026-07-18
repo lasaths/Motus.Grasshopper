@@ -33,9 +33,11 @@ internal sealed class PlanInputSnapshot
     public static bool TryCollect(
         IGH_DataAccess da,
         MotusPlanComponent owner,
-        out PlanInputSnapshot? snapshot)
+        out PlanInputSnapshot? snapshot,
+        out string? error)
     {
         snapshot = null;
+        error = null;
 
         var robotIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Robot);
         var goalIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Goal);
@@ -58,7 +60,8 @@ internal sealed class PlanInputSnapshot
         if (!GhExtract.TryGoals(da, goalIdx, out var goals, out _))
             return false;
 
-        var start = GhExtract.StartOrHome(da, startIdx, context.Model, out var usedDefaultStart);
+        if (!GhExtract.TryStartOrHome(da, startIdx, context, out var start, out var usedDefaultStart, out error))
+            return false;
         var linStep = MotusPlanComponent.DefaultLinStepMeters;
         var stepInput = linStep;
         if (stepIdx >= 0 && da.GetData(stepIdx, ref stepInput))

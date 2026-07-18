@@ -94,9 +94,11 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
 
         Goals.Clear();
 
-        if (!PlanInputSnapshot.TryCollect(da, _owner, out var snapshot) || snapshot is null)
+        if (!PlanInputSnapshot.TryCollect(da, _owner, out var snapshot, out var collectError) || snapshot is null)
         {
             SkipWork = true;
+            if (collectError is not null)
+                CompletionMessage = collectError;
             return;
         }
 
