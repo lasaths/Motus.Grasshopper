@@ -16,7 +16,7 @@ namespace Motus.GH.Params;
 /// </summary>
 public sealed class MotusScrubSlider : GH_NumberSlider
 {
-    private static readonly Color Accent = Color.FromArgb(0, 196, 154);
+    private static readonly Color Accent = MotusPalette.Model;
 
     public MotusScrubSlider()
     {
@@ -146,7 +146,7 @@ public sealed class MotusScrubSlider : GH_NumberSlider
         Slider.GripDisplay = GH_SliderGripDisplay.Shape;
         Slider.TickDisplay = (GH_SliderTickDisplay)0;
         Slider.RailFullColour = Color.FromArgb(102, Accent);
-        Slider.RailEmptyColour = Color.FromArgb(52, 72, 72, 78);
+        Slider.RailEmptyColour = Color.FromArgb(52, MotusPalette.Chrome);
         Slider.GripTopColour = Accent;
     }
 }

@@ -1,5 +1,6 @@
 using Grasshopper.Kernel;
 using Motus.Core;
+using Motus.GH.Resources;
 using Motus.GH.Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
@@ -9,7 +10,7 @@ namespace Motus.GH.Preview;
 
 internal static class CollisionViewportPreview
 {
-    private static readonly Color ObstacleColor = Color.FromArgb(160, 220, 70, 70);
+    private static readonly Color ObstacleColor = Color.FromArgb(160, MotusPalette.Collision);
     private static readonly DisplayMaterial ObstacleMaterial = new(ObstacleColor) { Transparency = 0.25 };
 
     public static List<Mesh> MeshesFor(CollisionObject obj)

@@ -7,6 +7,7 @@ using Grasshopper.Kernel.Special;
 using Motus.GH.Components;
 using Motus.GH.Params;
 using Motus.GH.Preview;
+using Motus.GH.Resources;
 
 namespace Motus.GH.UI;
 
@@ -15,8 +16,8 @@ namespace Motus.GH.UI;
 /// </summary>
 public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
 {
-    private static readonly Color Accent = Color.FromArgb(0, 196, 154);
-    private static readonly Color TickColor = Color.FromArgb(78, 120, 120, 128);
+    private static readonly Color Accent = MotusPalette.Model;
+    private static readonly Color TickColor = Color.FromArgb(78, MotusPalette.Chrome);
     private static readonly Color TickActive = Color.FromArgb(180, Accent);
 
     public MotusScrubSliderAttributes(MotusScrubSlider owner) : base(owner) { }

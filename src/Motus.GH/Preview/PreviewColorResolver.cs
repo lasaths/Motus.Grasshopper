@@ -1,6 +1,7 @@
 using System.Drawing;
 using Motus.Core;
 using Motus.Geometry;
+using Motus.GH.Resources;
 
 namespace Motus.GH.Preview;
 
@@ -13,7 +14,7 @@ public enum PreviewColorMode
 
 public static class PreviewColorResolver
 {
-    private static readonly Color OverrideCurrent = Color.FromArgb(200, 0, 196, 154);
+    private static readonly Color OverrideCurrent = Color.FromArgb(200, MotusPalette.Model);
     private static readonly Color OverrideStart = Color.FromArgb(90, 220, 220, 220);
     private static readonly Color UrdfFallback = Color.FromArgb(200, 200, 200, 200);
 

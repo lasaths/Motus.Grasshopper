@@ -65,14 +65,13 @@ Trajectory Data / Export JSON-CSV stay for parametric graphs and scripts.
 
 ## Icons
 
-Phosphor 24×24 duotone PNGs in `src/Motus.GH/Resources/icons/`; tinted in `MotusIcon.cs` by subcategory (Model teal, Plan sky, Collision orange, Preview purple, Export amber). Fetch example:
+Phosphor 24×24 duotone PNGs in `src/Motus.GH/Resources/icons/`; tinted in `MotusIcon.cs` / `MotusPalette` by subcategory (Model `#00DB87`, Plan `#787DFA`, Collision peach, Preview lavender, Export `#AFFC41`; chrome `#0A2E33`). Fetch via `.agents/skills/phosphor-icons` CLI:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/phosphor-icons/core/main/assets/duotone/path-duotone.svg" -o /tmp/i.svg
-rsvg-convert -w 24 -h 24 /tmp/i.svg -o src/Motus.GH/Resources/icons/path-duotone.png
+node ../phosphor-icons-mcp/dist/cli.js icon path --weight duotone --format png --size 24 --dir src/Motus.GH/Resources/icons
 ```
 
-Icon name in component ctor maps to `{name}-duotone.png` (e.g. Waypoints → `path`).
+Icon name in component ctor maps to `{name}-duotone.png` (e.g. Waypoints → `path`). No Phosphor `mesh` — Collision Mesh uses `polygon`.
 
 ## Manual Rhino checks (not covered by qa-smoke)
 

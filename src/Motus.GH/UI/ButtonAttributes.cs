@@ -6,6 +6,7 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Attributes;
+using Motus.GH.Resources;
 
 namespace Motus.GH.UI;
 
@@ -50,8 +51,8 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
         if (channel != GH_CanvasChannel.Objects) return;
 
         var active = _isActive();
-        // Green = ready to play, amber = currently playing. Avoid red (reads as a GH error state).
-        var baseColor = active ? Color.FromArgb(0xF5, 0x9E, 0x0B) : Color.FromArgb(0x2E, 0xA0, 0x43);
+        // Emerald = ready; dark teal = active/playing. Avoid red (reads as a GH error state).
+        var baseColor = active ? MotusPalette.Chrome : MotusPalette.Model;
         var fill = _mouseDown ? Darken(baseColor, 0.18) : _mouseOver ? Lighten(baseColor, 0.12) : baseColor;
 
         using var path = RoundedRect(_buttonBounds, 3);

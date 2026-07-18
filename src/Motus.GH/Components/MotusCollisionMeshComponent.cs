@@ -15,7 +15,7 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
     private List<Mesh> _previewMeshes = new();
     private string? _previewKey;
 
-    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "mesh") { }
+    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "polygon") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {

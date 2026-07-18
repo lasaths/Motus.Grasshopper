@@ -5,6 +5,7 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Attributes;
+using Motus.GH.Resources;
 
 namespace Motus.GH.UI;
 
@@ -83,10 +84,10 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
         Bounds = new RectangleF(Bounds.X, Bounds.Y, Bounds.Width, y - Bounds.Y + s);
     }
 
-    // Same Motus green as ButtonAttributes Plan chrome.
-    private static readonly Color Accent = Color.FromArgb(0x2E, 0xA0, 0x43);
-    private static readonly Color AccentDark = Color.FromArgb(0x1E, 0x6B, 0x2C);
-    private static readonly Color MenuFill = Color.FromArgb(0xEC, 0xF8, 0xEF);
+    // Same Motus emerald / chrome as ButtonAttributes Plan chrome.
+    private static readonly Color Accent = MotusPalette.Model;
+    private static readonly Color AccentDark = MotusPalette.Chrome;
+    private static readonly Color MenuFill = MotusPalette.MenuFill;
 
     protected override void Render(GH_Canvas canvas, Graphics graphics, GH_CanvasChannel channel)
     {
