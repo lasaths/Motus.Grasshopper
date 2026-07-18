@@ -22,7 +22,7 @@ public sealed class MotusScrubSlider : GH_NumberSlider
     {
         Name = "Motus Scrub";
         NickName = "Scrub";
-        Description = "Normalized playback position (0–1) for Motus Preview; snaps to trajectory keyframes when wired";
+        Description = "Normalized playback position (0–1) for Motus Preview; right-click to enable keyframe snap";
         Category = "Motus";
         SubCategory = "Preview";
         ApplyScrubDefaults();
@@ -36,7 +36,7 @@ public sealed class MotusScrubSlider : GH_NumberSlider
 
     protected override Bitmap Icon => MotusIcon.Get("sliders-horizontal", MotusIcon.SubcategoryColor("Preview"));
 
-    internal bool SnapToKeyframes { get; private set; } = true;
+    internal bool SnapToKeyframes { get; private set; } = false;
 
     public override bool Write(GH_IWriter writer)
     {

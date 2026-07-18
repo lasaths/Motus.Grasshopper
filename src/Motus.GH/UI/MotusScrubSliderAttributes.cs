@@ -106,7 +106,7 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
         if (timeline.IsEmpty)
             return $"{t:0.000} · wire Preview for keyframes";
         var idx = timeline.NearestDisplayIndex(t);
-        var time = timeline.IsEmpty ? timeline.TimeAt(t) : timeline.WaypointTimes[idx];
+        var time = timeline.TimeAt(t);
         var dur = timeline.DurationSeconds;
         return $"{t * 100:0}% · {time:0.00} / {dur:0.00} s · keyframe {idx + 1}/{timeline.Count}";
     }

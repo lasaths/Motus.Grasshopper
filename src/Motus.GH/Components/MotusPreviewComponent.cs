@@ -620,13 +620,16 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _position = Math.Clamp(positionFromWire, 0, 1);
     }
 
+    /// <summary>
+    /// Scrub slider is display-space (even keyframe ticks). Playback position is time-space.
+    /// Snap only affects magnetic pull on the slider — mapping always interpolates.
+    /// </summary>
     private static double MapScrubToTimeFraction(MotusScrubSlider? scrub, double scrubFraction)
     {
-        if (scrub is null || !scrub.SnapToKeyframes) return scrubFraction;
+        if (scrub is null) return scrubFraction;
         var timeline = scrub.ResolveTimeline();
         if (timeline.IsEmpty) return scrubFraction;
-        var idx = timeline.NearestDisplayIndex(scrubFraction);
-        return timeline.TimeFractions[idx];
+        return timeline.DisplayToTimeFraction(scrubFraction);
     }
 
     private static bool SameTrajectoryContent(Trajectory? prior, Trajectory next)
@@ -719,10 +722,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private void SyncScrubSlider(double position, bool expireDownstream = false)
     {
         if (Params.Input[2].Sources.FirstOrDefault() is not MotusScrubSlider scrub) return;
+        var timeline = scrub.ResolveTimeline();
+        var display = timeline.IsEmpty ? position : timeline.TimeToDisplayFraction(position);
         scrub.BeginSyncFromPreview();
         try
         {
-            scrub.SetScrubValue(position, expireDownstream);
+            scrub.SetScrubValue(display, expireDownstream);
             scrub.OnDisplayExpired(false);
         }
         finally
