@@ -9,7 +9,7 @@ public abstract class MotusAsyncComponentBase : GH_AsyncComponent
     private readonly string _iconName;
     private readonly string _subcategory;
 
-    protected MotusAsyncComponentBase(string name, string nickname, string desc, string sub, string iconName = "cube")
+    protected MotusAsyncComponentBase(string name, string nickname, string desc, string sub, string iconName)
         : base(name, nickname, desc, "Motus", sub)
     {
         _subcategory = sub;

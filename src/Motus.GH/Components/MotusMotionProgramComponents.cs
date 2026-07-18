@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
@@ -33,13 +34,22 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             "Plan",
             "line-segments") { }
 
+    private PointF? _canvasPivot;
+
     public override void CreateAttributes()
     {
         // Pin morph / dropdown rebuild must not dump the component to (0,0).
-        var pivot = Attributes?.Pivot;
+        var pivot = _canvasPivot;
+        if (pivot is null && Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                pivot = p;
+        }
+
         m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
-        if (pivot.HasValue)
-            m_attributes.Pivot = pivot.Value;
+        if (pivot is { } keep)
+            m_attributes.Pivot = keep;
     }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -66,6 +76,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             SyncTypePin(_motionType);
             // Keep canvas Bounds/Pivot from Read — recreating attributes here zeros pivots.
             SyncPinsForType(_motionType, force: true, recreateAttributes: false);
+            RestoreCanvasPivot();
         });
     }
 
@@ -73,6 +84,12 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
     {
         writer.SetString("MotionType", _motionType);
         writer.SetString("ToolMode", _toolMode);
+        if (Attributes is not null)
+        {
+            writer.SetDouble("CanvasPivotX", Attributes.Pivot.X);
+            writer.SetDouble("CanvasPivotY", Attributes.Pivot.Y);
+        }
+
         return base.Write(writer);
     }
 
@@ -82,9 +99,32 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             _motionType = NormalizeType(reader.GetString("MotionType"));
         if (reader.ItemExists("ToolMode"))
             _toolMode = NormalizeToolMode(reader.GetString("ToolMode"));
-        // Morph pins to match MotionType before ParameterData hydrate (SET has fewer pins than RegisterInputParams).
-        SyncPinsForType(_motionType, force: true, recreateAttributes: false);
-        return base.Read(reader);
+        if (reader.ItemExists("CanvasPivotX") && reader.ItemExists("CanvasPivotY"))
+        {
+            _canvasPivot = new PointF(
+                (float)reader.GetDouble("CanvasPivotX"),
+                (float)reader.GetDouble("CanvasPivotY"));
+        }
+
+        // Do not SyncPins before base.Read — OnParametersChanged there wipes Attributes.Pivot to (0,0).
+        // ParameterData + IGH_VariableParameterComponent hydrate type-specific pins using CreateParameter.
+        _lastSyncedType = _motionType;
+        var ok = base.Read(reader);
+        if (Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                _canvasPivot = p;
+        }
+
+        RestoreCanvasPivot();
+        return ok;
+    }
+
+    private void RestoreCanvasPivot()
+    {
+        if (_canvasPivot is not { } p || Attributes is null) return;
+        Attributes.Pivot = p;
     }
 
     protected override void BeforeSolveInstance()
@@ -345,7 +385,8 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         var wantSamples = typeUpper == "CIRC";
         var wantDuration = typeUpper is "SET" or "WAIT";
 
-        SetPinPresent("Goal", wantGoal, () => new Param_GenericObject
+        var changed = false;
+        changed |= SetPinPresent("Goal", wantGoal, () => new Param_GenericObject
         {
             Name = "Goal",
             NickName = "G",
@@ -354,7 +395,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             Optional = true
         });
 
-        SetPinPresent("Blend", wantBlend, () => new Param_Number
+        changed |= SetPinPresent("Blend", wantBlend, () => new Param_Number
         {
             Name = "Blend",
             NickName = "B",
@@ -367,7 +408,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
                 pn.SetPersistentData(0.0);
         });
 
-        SetPinPresent("ToolState", wantToolState, () => new Param_MotusToolState
+        changed |= SetPinPresent("ToolState", wantToolState, () => new Param_MotusToolState
         {
             Name = "ToolState",
             NickName = "Ts",
@@ -379,9 +420,9 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         });
 
         // Remove legacy ToolMode pin if an older document still has it.
-        SetPinPresent("ToolMode", false, () => new Param_String());
+        changed |= SetPinPresent("ToolMode", false, () => new Param_String());
 
-        SetPinPresent("Step", wantStep, () => new Param_Number
+        changed |= SetPinPresent("Step", wantStep, () => new Param_Number
         {
             Name = "Step",
             NickName = "St",
@@ -394,7 +435,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
                 pn.SetPersistentData(0.005);
         });
 
-        SetPinPresent("Via", wantVia, () => new Param_Plane
+        changed |= SetPinPresent("Via", wantVia, () => new Param_Plane
         {
             Name = "Via",
             NickName = "V",
@@ -403,7 +444,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             Optional = true
         });
 
-        SetPinPresent("Samples", wantSamples, () => new Param_Integer
+        changed |= SetPinPresent("Samples", wantSamples, () => new Param_Integer
         {
             Name = "Samples",
             NickName = "N",
@@ -416,7 +457,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
                 pi.SetPersistentData(16);
         });
 
-        SetPinPresent("Duration", wantDuration, () => new Param_Number
+        changed |= SetPinPresent("Duration", wantDuration, () => new Param_Number
         {
             Name = "Duration",
             NickName = "D",
@@ -429,12 +470,20 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
                 pn.SetPersistentData(0.0);
         });
 
+        if (!changed) return;
+
+        var pivot = Attributes?.Pivot;
+        if (pivot is { } p && (p.X != 0 || p.Y != 0))
+            _canvasPivot = p;
+
         Params.OnParametersChanged();
         if (recreateAttributes && (force || prevArm != isArm))
             CreateAttributes();
+        else
+            RestoreCanvasPivot();
     }
 
-    private void SetPinPresent(string name, bool show, Func<IGH_Param> factory, Action<IGH_Param>? setDefault = null)
+    private bool SetPinPresent(string name, bool show, Func<IGH_Param> factory, Action<IGH_Param>? setDefault = null)
     {
         var existing = IndexOf(name);
         if (show && existing < 0)
@@ -442,9 +491,16 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             var param = factory();
             setDefault?.Invoke(param);
             Params.RegisterInputParam(param);
+            return true;
         }
-        else if (!show && existing >= 0)
+
+        if (!show && existing >= 0)
+        {
             Params.UnregisterInputParameter(Params.Input[existing]);
+            return true;
+        }
+
+        return false;
     }
 
     private int IndexOf(string name)

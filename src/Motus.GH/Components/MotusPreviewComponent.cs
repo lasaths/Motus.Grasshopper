@@ -598,8 +598,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         else
             elapsed = _position * duration;
 
-        state = TrajectoryInterpolation.AtTime(PreviewTrajectory(), elapsed, out index);
-        toolState = TrajectoryInterpolation.AtTimeToolState(_trajectory, elapsed);
+        state = TrajectorySampler.AtTime(PreviewTrajectory(), elapsed, out index);
+        toolState = TrajectorySampler.AtTimeToolState(_trajectory, elapsed);
         timeSeconds = elapsed;
         _index = index;
     }

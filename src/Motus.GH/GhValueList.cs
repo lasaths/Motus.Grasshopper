@@ -26,7 +26,26 @@ internal static class GhValueList
         foreach (var item in items)
             list.ListItems.Add(new GH_ValueListItem(item, $"\"{item}\""));
 
+        // Keep document persistent value (e.g. Closed) instead of always selecting the first item.
+        var selected = ReadPersistentText(owner.Params.Input[inputIndex]);
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            for (var i = 0; i < list.ListItems.Count; i++)
+            {
+                if (!list.ListItems[i].Name.Equals(selected, StringComparison.OrdinalIgnoreCase)) continue;
+                list.SelectItem(i);
+                break;
+            }
+        }
+
         doc.AddObject(list, false);
         owner.Params.Input[inputIndex].AddSource(list);
+    }
+
+    private static string? ReadPersistentText(IGH_Param param)
+    {
+        if (param is not Grasshopper.Kernel.Parameters.Param_String ps || ps.PersistentDataCount <= 0)
+            return null;
+        return ps.PersistentData.get_FirstItem(false)?.Value;
     }
 }

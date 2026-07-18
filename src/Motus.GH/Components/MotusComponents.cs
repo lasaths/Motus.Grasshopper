@@ -27,7 +27,7 @@ public abstract class MotusComponentBase : GH_Component
     private readonly string _iconName;
     private readonly string _subcategory;
 
-    protected MotusComponentBase(string name, string nickname, string desc, string sub, string iconName = "cube")
+    protected MotusComponentBase(string name, string nickname, string desc, string sub, string iconName)
         : base(name, nickname, desc, "Motus", sub)
     {
         _subcategory = sub;
@@ -46,7 +46,7 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     private string? _previewKey;
     private bool _showCollisionPreview;
 
-    protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName = "cube")
+    protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName)
         : base(name, nickname, desc, "Model", iconName) { }
 
     protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)

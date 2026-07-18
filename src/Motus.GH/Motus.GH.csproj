@@ -26,7 +26,7 @@
     <DebugSymbols>true</DebugSymbols>
     <Optimize>false</Optimize>
     <StartProgram>$(Rhino8Dir)\System\Rhino.exe</StartProgram>
-    <StartArguments>/netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\examples\03_collision_rrt.ghx')) _enter"</StartArguments>
+    <StartArguments>/netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\examples\01_quick_plan.ghx')) _enter"</StartArguments>
     <StartAction>Program</StartAction>
   </PropertyGroup>
 
@@ -34,7 +34,7 @@
     <DebugSymbols>true</DebugSymbols>
     <Optimize>false</Optimize>
     <StartProgram>$(Rhino8App)/Contents/MacOS/Rhinoceros</StartProgram>
-    <StartArguments>-netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../examples/03_collision_rrt.ghx')) _enter"</StartArguments>
+    <StartArguments>-netcore /nosplash /runscript="-_Grasshopper editor load document open $([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../examples/01_quick_plan.ghx')) _enter"</StartArguments>
     <StartAction>Program</StartAction>
   </PropertyGroup>
 
