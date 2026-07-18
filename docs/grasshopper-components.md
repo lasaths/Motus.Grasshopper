@@ -45,7 +45,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Component | Notes |
 |-----------|-------|
 | Motus Plan (nick **Quick**) | Quick single/multi-goal planner. Plane = TCP LIN; joint = joint-linear or RRT with collision. Click **Plan**, or **Auto Plan** from the right-click menu. |
-| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [motus-net.md](motus-net.md). |
+| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [AGENTS.md](../AGENTS.md). |
 | Motus Move | One PTP/LIN/CIRC/SET/WAIT program line. Type (± ToolMode) are Arup-style on-component dropdowns; pins morph by type. |
 | Motus Program | Plan a Motus Move list via `IndustrialMotionPlanner` (click **Plan**; wire order = program order). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
@@ -166,8 +166,18 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 
 | Component | Output |
 |-----------|--------|
-| Motus Trajectory Data | TCP `Planes`, waypoint `Times`, per-axis `Joints` tree |
+| Motus Trajectory Data | TCP `Planes`, waypoint `Times`, per-axis `Joints` tree (`{axis → waypoints}`); viewport preview of TCP path and waypoint plane axes |
+| Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` |
 | Motus Export | `Json` and `Csv` strings |
+
+**Motus Waypoints** reshapes a planned trajectory for live controllers (e.g. UR Write). It does not connect to or command robots.
+
+- `Q` — data tree, **one branch per waypoint**, `AxisCount` joint values (radians). Wire to joint MoveJ-style inputs.
+- `P` — TCP planes via FK (same length as `Q` after decimate).
+- `Tm` — waypoint times (seconds); metadata for downstream graphs.
+- `D` (Decimate) — keep every Nth waypoint; **always keeps first and last**. Default `1` = all points.
+
+Dense Motus paths executed as discrete MoveJ segments are stop-and-go; use Decimate to thin. Prefer `Q` → joint moves for planned path fidelity. Use `P` → linear TCP moves only for Cartesian-intent (LIN) paths — FK planes from joint-space / RRT trajectories are not a safe MoveL path (TCP re-interpolation can diverge). Warns when `AxisCount ≠ 6`. Controller handoff notes: [AGENTS.md](../AGENTS.md).
 
 JSON export includes `jointNames` when the robot model provides them. Point count is the length of `Times`; duration is the last `Times` value (native Grasshopper list ops).
 

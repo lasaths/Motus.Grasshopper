@@ -304,6 +304,12 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 
 public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 {
+    private const double AxisLength = 0.05;
+    private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
+
+    private List<Plane> _previewPlanes = [];
+    private Polyline? _previewPath;
+
     public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
 
     public override void AddedToDocument(GH_Document doc)
@@ -324,10 +330,19 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo)) return;
+        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo))
+        {
+            ClearPreview();
+            return;
+        }
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
-        if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
+        if (t.Points.Count == 0)
+        {
+            ClearPreview();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points.");
+            return;
+        }
 
         var planes = t.Points.Select(pt =>
             KinematicsPreview.TcpPlane(ctx.EffectiveModel, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool)).ToList();
@@ -347,8 +362,184 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
                 ? string.Empty
                 : System.Text.Json.JsonSerializer.Serialize(p.ToolState.Values)).ToList();
         da.SetDataList(3, toolStates);
+
+        _previewPlanes = planes;
+        _previewPath = planes.Count >= 2 ? new Polyline(planes.Select(pl => pl.Origin)) : null;
+        ExpirePreview(true);
     }
+
+    public override BoundingBox ClippingBox
+    {
+        get
+        {
+            var bb = BoundingBox.Empty;
+            if (_previewPath is { Count: > 0 })
+                bb.Union(_previewPath.BoundingBox);
+            foreach (var pl in _previewPlanes)
+            {
+                bb.Union(pl.Origin);
+                bb.Union(pl.Origin + pl.XAxis * AxisLength);
+                bb.Union(pl.Origin + pl.YAxis * AxisLength);
+                bb.Union(pl.Origin + pl.ZAxis * AxisLength);
+            }
+            return bb.IsValid ? bb : BoundingBox.Unset;
+        }
+    }
+
+    public override void DrawViewportWires(IGH_PreviewArgs args)
+    {
+        if (Locked) return;
+        if (_previewPath is { Count: >= 2 })
+            args.Display.DrawPolyline(_previewPath, PathColor, 2);
+        foreach (var pl in _previewPlanes)
+        {
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.XAxis * AxisLength, Color.Red, 2);
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.YAxis * AxisLength, Color.Lime, 2);
+            args.Display.DrawLine(pl.Origin, pl.Origin + pl.ZAxis * AxisLength, Color.Blue, 2);
+        }
+    }
+
+    private void ClearPreview()
+    {
+        _previewPlanes = [];
+        _previewPath = null;
+        ExpirePreview(true);
+    }
+
     public override Guid ComponentGuid => new Guid("a72b5cfa-5cf5-4e54-a5cd-943e2aae82da");
+}
+
+/// <summary>
+/// Reshapes a Motus trajectory into controller-oriented trees: waypoint-major joints and TCP planes.
+/// Does not connect to or command robots — wire outputs into a downstream control plugin.
+/// </summary>
+public sealed class MotusWaypointsComponent : MotusComponentBase
+{
+    public MotusWaypointsComponent()
+        : base(
+            "Motus Waypoints",
+            "Waypoints",
+            "Controller-ready waypoint trees: joints {wp→q}, TCP planes, times. Decimate keeps first and last.",
+            "Export",
+            "path")
+    { }
+
+    public override void AddedToDocument(GH_Document doc)
+    {
+        base.AddedToDocument(doc);
+        TrajectoryMerge.EnsureListAccess(this, 0);
+    }
+
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddParameter(
+            new Param_MotusTrajectory(),
+            "Trajectory",
+            "Tr",
+            "Motus trajectory from Motus Plan (list concatenates sequential goals)",
+            GH_ParamAccess.list);
+        p.AddIntegerParameter(
+            "Decimate",
+            "D",
+            "Keep every Nth waypoint (always keeps first and last). 1 = all",
+            GH_ParamAccess.item,
+            1);
+        p[p.ParamCount - 1].Optional = true;
+    }
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p)
+    {
+        p.AddNumberParameter(
+            "Joints",
+            "Q",
+            "Joint angles (rad); one branch per waypoint, AxisCount values each",
+            GH_ParamAccess.tree);
+        p.AddPlaneParameter(
+            "Planes",
+            "P",
+            "TCP planes via FK (one per waypoint). Prefer Q→MoveJ for planned joint paths; P→MoveL only for Cartesian-intent paths",
+            GH_ParamAccess.list);
+        p.AddNumberParameter(
+            "Times",
+            "Tm",
+            "Elapsed time at each waypoint (seconds)",
+            GH_ParamAccess.list);
+    }
+
+    protected override void SolveInstance(IGH_DataAccess da)
+    {
+        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo))
+            return;
+
+        var t = trajGoo.Value!;
+        var ctx = trajGoo.Context();
+        if (t.Points.Count == 0)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points.");
+            return;
+        }
+
+        var decimate = 1;
+        da.GetData(1, ref decimate);
+        if (decimate < 1)
+            decimate = 1;
+
+        var indices = SelectDecimateIndices(t.Points.Count, decimate);
+        var axisCount = t.Robot.Preset.AxisCount;
+        if (axisCount != 6)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                $"Robot has {axisCount} axes; many UR controllers expect 6 joint values per waypoint.");
+        }
+
+        var tree = new GH_Structure<GH_Number>();
+        var planes = new List<Plane>(indices.Count);
+        var times = new List<double>(indices.Count);
+
+        for (var w = 0; w < indices.Count; w++)
+        {
+            var pt = t.Points[indices[w]];
+            var path = new GH_Path(w);
+            var positions = pt.JointState.Positions;
+            var n = Math.Min(axisCount, positions.Length);
+            for (var j = 0; j < n; j++)
+                tree.Append(new GH_Number(positions[j]), path);
+
+            planes.Add(KinematicsPreview.TcpPlane(
+                ctx.EffectiveModel, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool));
+            times.Add(pt.TimeSeconds);
+        }
+
+        da.SetDataTree(0, tree);
+        da.SetDataList(1, planes);
+        da.SetDataList(2, times);
+    }
+
+    /// <summary>Keep every <paramref name="step"/>th index; always include 0 and count-1.</summary>
+    internal static List<int> SelectDecimateIndices(int count, int step)
+    {
+        if (count <= 0)
+            return [];
+        if (step < 1)
+            step = 1;
+        if (step == 1 || count <= 2)
+        {
+            var all = new List<int>(count);
+            for (var i = 0; i < count; i++)
+                all.Add(i);
+            return all;
+        }
+
+        var indices = new List<int>();
+        for (var i = 0; i < count; i += step)
+            indices.Add(i);
+        if (indices[^1] != count - 1)
+            indices.Add(count - 1);
+        return indices;
+    }
+
+    public override Guid ComponentGuid => new Guid("133ba1e0-5b0e-46f7-92e8-31aaa7e60a55");
 }
 
 public sealed class MotusExportComponent : MotusComponentBase
