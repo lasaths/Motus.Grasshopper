@@ -124,10 +124,21 @@ public sealed class MotusScrubSlider : GH_NumberSlider
         t = Math.Clamp(t, 0, 1);
         var d = (decimal)t;
         if (Math.Abs(Slider.Value - d) < 0.0000001m) return;
-        if (expireDownstream)
-            SetSliderValue(d);
-        else
+        // Preview/Play sync must never re-enter a document solution from a UI/timer callback
+        // (Slider.Value / SetSliderValue can ExpireSolution and crash Rhino on macOS).
+        if (_syncFromPreviewDepth > 0 || !expireDownstream)
+        {
             Slider.Value = d;
+            return;
+        }
+
+        SetSliderValue(d);
+    }
+
+    public override void ExpireSolution(bool recompute)
+    {
+        if (_syncFromPreviewDepth > 0) return;
+        base.ExpireSolution(recompute);
     }
 
     private void ToggleSnap()

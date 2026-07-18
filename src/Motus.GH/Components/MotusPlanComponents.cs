@@ -120,9 +120,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         if (reader.ItemExists("ShowRrtSettings"))
             _showRrtSettings = reader.GetBoolean("ShowRrtSettings");
 
-        // Migrate documents that still serialize all 8 core+advanced inputs.
+        // Keep Show* flags for CreateParameter during ParameterData hydrate.
+        // Sync from actual pins only after base.Read (sparse advanced sets omit Group, etc.).
+        var ok = base.Read(reader);
         SyncFlagsFromExistingParams();
-        return base.Read(reader);
+        return ok;
     }
 
     public bool CanInsertParameter(GH_ParameterSide side, int index) =>
@@ -133,7 +135,20 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     public IGH_Param CreateParameter(GH_ParameterSide side, int index)
     {
-        // Deserialization may insert advanced pins one-by-one; pick the next missing one.
+        // Honor Show* flags so archives that skip Group (Collision+Attach+Rrt) deserialize cleanly.
+        foreach (var (name, show) in new (string, bool)[]
+                 {
+                     (MotusPlanInputs.Collision, _showCollision),
+                     (MotusPlanInputs.Group, _showGroup),
+                     (MotusPlanInputs.Attach, _showAttach),
+                     (MotusPlanInputs.RrtSettings, _showRrtSettings)
+                 })
+        {
+            if (show && !MotusPlanInputs.Has(this, name))
+                return CreateAdvancedParam(name);
+        }
+
+        // Legacy docs without Show* flags: next missing pin in canonical order.
         foreach (var name in new[]
                  {
                      MotusPlanInputs.Collision,

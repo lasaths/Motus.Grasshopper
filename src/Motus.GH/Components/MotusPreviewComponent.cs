@@ -337,10 +337,17 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _playing = true;
             _playStartPosition = 0;
             _playStartUtc = DateTime.UtcNow;
-            SyncScrubSlider(0);
+            // Silent scrub move — never expire from inside the Play mouse-up handler.
+            SyncScrubSlider(0, expireDownstream: false);
             StartPlayTimer();
         }
-        ExpireSolution(true);
+
+        // Defer solve out of the canvas MouseUp stack (re-entrant NewSolution crashes Rhino).
+        var doc = OnPingDocument();
+        if (doc is not null)
+            doc.ScheduleSolution(1, _ => ExpireSolution(false));
+        else
+            ExpireSolution(false);
     }
 
     private void StartPlayTimer()
@@ -386,13 +393,17 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         if (_meshCache is null)
         {
-            SyncScrubSlider(_position);
-            ExpireSolution(true);
+            SyncScrubSlider(_position, expireDownstream: false);
+            var doc = OnPingDocument();
+            if (doc is not null)
+                doc.ScheduleSolution(1, _ => ExpireSolution(false));
+            else
+                ExpireSolution(false);
             return;
         }
 
         _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
-        SyncScrubSlider(_position);
+        SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
         RhinoDoc.ActiveDoc?.Views.Redraw();
