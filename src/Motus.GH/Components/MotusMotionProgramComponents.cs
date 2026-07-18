@@ -31,7 +31,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Blend", "B", "Blend radius (m, default 0)", GH_ParamAccess.item, 0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusToolState(), "ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 

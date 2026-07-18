@@ -3,10 +3,12 @@ using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.GH;
 using Motus.GH.Data;
+using Motus.GH.Params;
 using Motus.GH.Urdf;
 using Motus.GH.Loaders;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
+using Motus.GH.UI;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
@@ -29,21 +31,33 @@ public sealed class MotusToolComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("GeomPlane", "L", "Geometry pose in TCP-local frame", GH_ParamAccess.item, Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Capabilities", "Cap", "None or Robotiq2F85 (jaw presets for Motus Tool State)", GH_ParamAccess.item, "None");
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("Tool", "Tl", "Tool definition", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTool(), "Tool", "Tl", "Tool definition", GH_ParamAccess.item);
+
+    public override void AddedToDocument(GH_Document doc)
+    {
+        base.AddedToDocument(doc);
+        if (Params.Input[4].SourceCount > 0) return;
+        doc.ScheduleSolution(1, _ =>
+            GhValueList.AttachDropdown(this, 4, new[] { "None", "Robotiq2F85" }, "Capabilities"));
+    }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var name = "tool";
         var tcp = Plane.WorldXY;
         var geomPlane = Plane.WorldXY;
+        var capsText = "None";
         IGH_GeometricGoo? geo = null;
         da.GetData(0, ref name);
         da.GetData(1, ref tcp);
         da.GetData(2, ref geo);
         da.GetData(3, ref geomPlane);
+        da.GetData(4, ref capsText);
 
         if (!tcp.IsValid)
         {
@@ -64,9 +78,15 @@ public sealed class MotusToolComponent : MotusComponentBase
             }
         }
 
-        var caps = name.Contains("robotiq", StringComparison.OrdinalIgnoreCase)
-            ? ToolCapabilities.Robotiq2F85
-            : null;
+        if (!TryResolveCapabilities(name, capsText, out var caps, out var capsRemark))
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                "Capabilities must be None or Robotiq2F85.");
+            return;
+        }
+        if (capsRemark is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, capsRemark);
+
         var tool = new ToolDefinition(
             string.IsNullOrWhiteSpace(name) ? "tool" : name.Trim(),
             FrameConversion.FromPlane(tcp),
@@ -76,6 +96,39 @@ public sealed class MotusToolComponent : MotusComponentBase
             ? []
             : CollisionViewportPreview.MeshesFor(geometry);
         da.SetData(0, new ToolGoo(tool));
+    }
+
+    private static bool TryResolveCapabilities(
+        string name,
+        string capsText,
+        out ToolCapabilities? caps,
+        out string? remark)
+    {
+        caps = null;
+        remark = null;
+        var raw = (capsText ?? "None").Trim();
+        if (raw.Equals("None", StringComparison.OrdinalIgnoreCase) ||
+            raw.Equals("Off", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(raw))
+        {
+            // Migration: name still hints Robotiq when Cap left at None.
+            if (name.Contains("robotiq", StringComparison.OrdinalIgnoreCase))
+            {
+                caps = ToolCapabilities.Robotiq2F85;
+                remark = "Capabilities=None but Name looks like Robotiq — using Robotiq2F85. Set Cap explicitly.";
+            }
+            return true;
+        }
+
+        if (raw.Equals("Robotiq2F85", StringComparison.OrdinalIgnoreCase) ||
+            raw.Equals("Robotiq", StringComparison.OrdinalIgnoreCase) ||
+            raw.Equals("2F85", StringComparison.OrdinalIgnoreCase))
+        {
+            caps = ToolCapabilities.Robotiq2F85;
+            return true;
+        }
+
+        return false;
     }
 
     private static CollisionObject? BuildGeometry(

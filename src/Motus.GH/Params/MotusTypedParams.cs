@@ -69,3 +69,29 @@ public sealed class Param_MotusSegment : GH_PersistentParam<MotionSegmentGoo>
     protected override GH_GetterResult Prompt_Singular(ref MotionSegmentGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<MotionSegmentGoo> values) => GH_GetterResult.cancel;
 }
+
+/// <summary>Typed Motus tool definition pin.</summary>
+public sealed class Param_MotusTool : GH_PersistentParam<ToolGoo>
+{
+    public Param_MotusTool()
+        : base("Tool", "Tl", "Motus tool definition", "Motus", "Params") { }
+
+    public override Guid ComponentGuid => new("f66e8488-943e-426f-b205-e8db5f684906");
+    public override GH_Exposure Exposure => GH_Exposure.hidden;
+    protected override Bitmap Icon => MotusIcon.Get("wrench", MotusIcon.SubcategoryColor("Model"));
+    protected override GH_GetterResult Prompt_Singular(ref ToolGoo value) => GH_GetterResult.cancel;
+    protected override GH_GetterResult Prompt_Plural(ref List<ToolGoo> values) => GH_GetterResult.cancel;
+}
+
+/// <summary>Typed Motus end-effector state pin.</summary>
+public sealed class Param_MotusToolState : GH_PersistentParam<EndEffectorStateGoo>
+{
+    public Param_MotusToolState()
+        : base("ToolState", "Ts", "Motus end-effector state", "Motus", "Params") { }
+
+    public override Guid ComponentGuid => new("a77e8488-943e-426f-b205-e8db5f684907");
+    public override GH_Exposure Exposure => GH_Exposure.hidden;
+    protected override Bitmap Icon => MotusIcon.Get("sliders-horizontal", MotusIcon.SubcategoryColor("Model"));
+    protected override GH_GetterResult Prompt_Singular(ref EndEffectorStateGoo value) => GH_GetterResult.cancel;
+    protected override GH_GetterResult Prompt_Plural(ref List<EndEffectorStateGoo> values) => GH_GetterResult.cancel;
+}

@@ -37,12 +37,13 @@ const MOTUS = {
   ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
     inputs: [],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
-  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 84,
+  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 104,
     inputs: [
       { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
       { name: 'TCP', nick: 'P', desc: 'TCP in flange frame (Z = tool axis)', optional: false, plane: true },
       { name: 'Geometry', nick: 'G', desc: 'Optional gripper mesh or brep (TCP-local)', optional: true },
       { name: 'GeomPlane', nick: 'L', desc: 'Geometry pose in TCP-local frame', optional: true, plane: true },
+      { name: 'Capabilities', nick: 'Cap', desc: 'None or Robotiq2F85 (jaw presets for Motus Tool State)', optional: true, text: 'None' },
     ],
     outputs: [{ name: 'Tool', nick: 'Tl', desc: 'Tool definition' }] },
   loadMesh: { guid: 'c3d4e5f6-a7b8-4901-c234-56789abcdef2', name: 'Motus Load Mesh', nick: 'LoadMesh', w: 74, h: 54,
@@ -63,7 +64,7 @@ const MOTUS = {
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
   plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 104,
-    desc: 'Plan to plane/joint goal; right-click for Collision/Group/Attach/RrtSettings (click Plan or enable Auto Plan)',
+    desc: 'Plan to plane/joint goal; right-click for Collision/Group/Attach/RrtSettings. For gripper SET/WAIT use Program Plan + Motion Segment.',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
@@ -174,7 +175,7 @@ const MOTUS = {
     outputs: [{ name: 'Attach', nick: 'A', desc: 'Attached body' }] },
   toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 74, h: 84,
     inputs: [
-      { name: 'Tool', nick: 'Tl', desc: 'Optional tool for validation and presets', optional: true },
+      { name: 'Tool', nick: 'Tl', desc: 'Motus Tool or Robot (uses Robot.Tool / bundled capabilities)', optional: true },
       { name: 'Preset', nick: 'P', desc: 'Open, Closed, or Custom', optional: false, text: 'Open' },
       { name: 'Width', nick: 'W', desc: 'Jaw width (m) when Preset=Custom', optional: true, number: 0.085 },
       { name: 'Speed', nick: 'Sp', desc: 'Grip speed ratio 0–1', optional: true, number: 0.5 },
@@ -1200,7 +1201,7 @@ function graph09() {
   const tool = motusComponent('tool', 200, 260, {
     TCP: [outRef(tcpPl.node, 'Plane')],
     Geometry: [outRef(gripper.node, 'Object')],
-  }, { text: { Name: 'gripper' } });
+  }, { text: { Name: 'gripper', Capabilities: 'None' } });
   const robot = motusComponent('robot', 380, 80, {
     Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
@@ -1234,7 +1235,7 @@ function graph10() {
   const tool = motusComponent('tool', 380, 260, {
     TCP: [outRef(tcpPl.node, 'Plane')],
     Geometry: [outRef(loadMesh.node, 'Mesh')],
-  }, { text: { Name: 'robotiq_2f85' } });
+  }, { text: { Name: 'robotiq_2f85', Capabilities: 'Robotiq2F85' } });
   const robot = motusComponent('robot', 540, 80, {
     Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
@@ -1257,8 +1258,12 @@ function graph11() {
   const robot = motusComponent('ur10e', 40, 120);
   const start = motusComponent('joints', 40, 260, {}, { jointValues: MOTION_START });
   const ptpGoal = motusComponent('joints', 40, 360, {}, { jointValues: MOTION_START });
-  const stateOpen = motusComponent('toolState', 200, 420, {}, { text: { Preset: 'Open' } });
-  const stateClosed = motusComponent('toolState', 200, 520, {}, { text: { Preset: 'Closed' } });
+  const stateOpen = motusComponent('toolState', 200, 420, {
+    Tool: [outRef(robot.node, 'Robot')],
+  }, { text: { Preset: 'Open' } });
+  const stateClosed = motusComponent('toolState', 200, 520, {
+    Tool: [outRef(robot.node, 'Robot')],
+  }, { text: { Preset: 'Closed' } });
   const segPtp = motusComponent('segment', 360, 280, {
     Goal: [outRef(ptpGoal.node, 'State')],
     ToolState: [outRef(stateOpen.node, 'State')],
@@ -1276,7 +1281,7 @@ function graph11() {
   const objs = [robot, start, ptpGoal, stateOpen, stateClosed, segPtp, segSet, progPlan, scrub, preview, exp];
   objs._meta = {
     fileName: '11_gripper_motion_program.ghx',
-    description: 'Motion program with SET gripper close: UR10e Robotiq -> Program Plan -> Preview/Export (toolState on trajectory).',
+    description: 'Motion program with SET gripper close: UR10e Robotiq -> ToolState(Robot) -> Program Plan -> Preview/Export.',
   };
   return buildGraph(objs);
 }

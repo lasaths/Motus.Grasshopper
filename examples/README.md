@@ -61,6 +61,8 @@ Open any file in Rhino 8 / Grasshopper, click **Plan** on **Motus Plan** or **Mo
 
 **Plan advanced inputs:** Collision / Group / Attach / RrtSettings are hidden by default. Right-click Motus Plan → Show Collision (etc.), or open examples 03–05 which already include those pins.
 
+**Tool / ToolState:** Motus Tool has an explicit **Cap** dropdown (`None` / `Robotiq2F85`). Motus Tool State accepts **Tool or Robot** on `Tl` (UR10e bundled tool works when you wire the robot). Gripper SET/WAIT uses Program Plan + Motion Segment, not Motus Plan.
+
 **Preview:** Trajectory list from Motus Plan concatenates sequential goals. Debug outputs (Index / Invalid / ToolState / Width) are behind right-click → Show debug outputs.
 
 ## Typical flows

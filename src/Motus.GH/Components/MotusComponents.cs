@@ -137,7 +137,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Base", "Bf", "Optional base frame override (TCP goals are in this frame)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Tool", "Tl", "Optional Motus Tool definition", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTool(), "Tool", "Tl", "Optional Motus Tool definition", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 

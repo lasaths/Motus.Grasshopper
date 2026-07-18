@@ -37,7 +37,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _showRrtSettings;
 
     public MotusPlanComponent()
-        : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan", "Plan", "flow-arrow")
+        : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan. For gripper SET/WAIT use Motus Program Plan + Motion Segment.", "Plan", "flow-arrow")
     {
         _worker = new PlanWorker(this);
         BaseWorker = _worker;
