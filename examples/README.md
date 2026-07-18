@@ -7,16 +7,16 @@ node scripts/generate-examples.mjs
 node scripts/validate-ghx.mjs
 ```
 
-Open any file in Rhino 8 / Grasshopper. **Motus Plan** and **Motus Program** examples ship with **Auto Plan** on. Drag **Motus Scrub** or **Play** on **Motus Preview** after the trajectory appears.
+Open any file in Rhino 8 / Grasshopper. Each example uses **Scribble** titles and coloured **Groups**; list inputs are fed through a **Merge** (one wire per pin). **Motus Plan** and **Motus Program** examples ship with **Auto Plan** on. Drag **Motus Scrub** or **Play** on **Motus Preview** after the trajectory appears.
 
 ## Example index
 
 | File | What it demonstrates |
 |------|----------------------|
-| `01_quick_plan.ghx` | Sequential goals (joint + TCP Pose LIN + plane), Preview, Export, Trajectory Data |
-| `02_collision_srdf.ghx` | ColSphere + ColBox → ColScene (SRDF) + Group + Attach + RRT Settings → Plan |
+| `01_quick_plan.ghx` | Sequential goals via **Merge** (joint + TCP Pose LIN + plane), Preview, Export, Trajectory Data |
+| `02_collision_srdf.ghx` | ColSphere + ColBox via **Merge** → ColScene (SRDF) + Attach + RRT → Plan (Group pin present but unwired; wire Planning Group after Motus.OMPL fix + Rhino restart) |
 | `03_urdf_tool_frames.ghx` | Motus Robot URDF + Base + Robotiq Tool (Load Mesh) + Start + Preview ShowStart |
-| `04_motion_program.ghx` | PTP + LIN + CIRC + SET gripper → Motus Program → Preview / Export |
+| `04_motion_program.ghx` | PTP + LIN + CIRC + SET via **Merge** → Motus Program → Preview / Export |
 
 ## Component coverage
 
@@ -109,4 +109,4 @@ Start (optional) ─────────────────────
 
 Re-save from Grasshopper after tweaks so the archive matches your installed component version. Prefer editing `scripts/generate-examples.mjs` for structural changes, then re-run the generator.
 
-External plugin workflows (UR RTDE, VirtualRobot, etc.): [docs/external-plugin-workflows.md](../docs/external-plugin-workflows.md).
+External plugin / controller handoff: [AGENTS.md](../AGENTS.md).

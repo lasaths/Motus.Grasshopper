@@ -11,7 +11,7 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 
 Pins **Motus.NET 0.6.8** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
 
-What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [docs/motus-net.md](docs/motus-net.md).
+What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [AGENTS.md](AGENTS.md).
 
 ## Install from source
 
@@ -52,7 +52,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 2. **Motus Plan** (nick **Quick**) — wire a Rhino **Plane** or **Motus Joint State** to `Goal` (and optionally `Start`), click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**. Plane goals are TCP LIN only.
 3. **Motus Preview** — **Play** to animate; **Motus Export** for JSON/CSV
 
-Component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md). Palette icons: [docs/icons.md](docs/icons.md).
+Component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md). Agent / maintainer notes: [AGENTS.md](AGENTS.md).
 
 ```
 Robot ──► Plan [Plan] ──► Preview [Play]
@@ -100,12 +100,12 @@ node scripts/generate-examples.mjs
 node scripts/validate-ghx.mjs
 ```
 
-Before release: `./scripts/verify-qa.ps1 -Configuration Release -Install` and [docs/qa-checklist.md](docs/qa-checklist.md).
+Before release: `./scripts/verify-qa.ps1 -Configuration Release -Install` (manual Rhino checks listed in [AGENTS.md](AGENTS.md)).
 
 ## External plugins
 
-Exports are neutral trajectories. Wire them into UR.RTDE.Grasshopper, VirtualRobot, Robots, or your own adapter. Safety IO, retries, and controller transport stay in the control plugin — not Motus.
+Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ for planned paths; use `P` → MoveL only for Cartesian-intent. Safety IO, retries, and controller transport stay in the control plugin — not Motus. Details: [AGENTS.md](AGENTS.md).
 
 ## Safety
 
-Preview and planning only. See [docs/safety.md](docs/safety.md).
+Preview and planning only — Motus does not connect to or command robots. See [AGENTS.md](AGENTS.md).

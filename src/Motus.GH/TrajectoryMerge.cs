@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace Motus.GH;
 
-/// <summary>Concatenates Motus Plan multi-goal trajectory lists for Preview / Export / Data.</summary>
+/// <summary>Concatenates Motus Plan multi-goal trajectory lists for Preview / Export / Data / Waypoints.</summary>
 internal static class TrajectoryMerge
 {
     /// <summary>
