@@ -11,6 +11,8 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 
 Pins **Motus.NET 0.6.8** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
 
+What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [docs/motus-net.md](docs/motus-net.md).
+
 ## Install from source
 
 **Windows**

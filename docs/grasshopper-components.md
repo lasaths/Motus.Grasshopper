@@ -45,7 +45,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Component | Notes |
 |-----------|-------|
 | Motus Plan | One planner for all goals. Click **Plan** to compute, or enable **Auto Plan** from the right-click menu. |
-| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). |
+| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [motus-net.md](motus-net.md). |
 | Motus Motion Segment | Build a single PTP/LIN/CIRC/SET/WAIT declarative segment (`MotionSegmentGoo`, execution hint only). |
 | Motus Program Plan | Plan a mixed segment list via `IndustrialMotionPlanner` (click **Plan**). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
