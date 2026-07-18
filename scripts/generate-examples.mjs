@@ -29,7 +29,7 @@ const MOTUS = {
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Path to .urdf or .xacro file', optional: false, text: '' },
       { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
-      { name: 'TipLink', nick: 'T', desc: 'Tip link name', optional: true, text: 'tool0' },
+      { name: 'TipLink', nick: 'Tip', desc: 'Tip link name', optional: true, text: 'tool0' },
       { name: 'Base', nick: 'Bf', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true, plane: true },
       { name: 'Tool', nick: 'Tl', desc: 'Optional Motus Tool definition', optional: true },
     ],
@@ -44,7 +44,7 @@ const MOTUS = {
       { name: 'Geometry', nick: 'G', desc: 'Optional gripper mesh or brep (TCP-local)', optional: true },
       { name: 'GeomPlane', nick: 'L', desc: 'Geometry pose in TCP-local frame', optional: true, plane: true },
     ],
-    outputs: [{ name: 'Tool', nick: 'T', desc: 'Tool definition' }] },
+    outputs: [{ name: 'Tool', nick: 'Tl', desc: 'Tool definition' }] },
   loadMesh: { guid: 'c3d4e5f6-a7b8-4901-c234-56789abcdef2', name: 'Motus Load Mesh', nick: 'LoadMesh', w: 74, h: 54,
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Path to .stl file', optional: false, text: '' },
@@ -55,50 +55,48 @@ const MOTUS = {
     inputs: [
       { name: 'Joints', nick: 'J', desc: 'Joint angles (right-click J input to toggle °)', optional: false, list: true, access: 1, angle: true },
     ],
-    outputs: [{ name: 'State', nick: 'S', desc: 'Joint state' }] },
+    outputs: [{ name: 'State', nick: 'Js', desc: 'Joint state' }] },
   tcpPose: { guid: 'f1a2b3c4-d5e6-4789-a123-4567890abcde', name: 'Motus TCP Pose', nick: 'TCP', w: 65, h: 44,
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
-      { name: 'State', nick: 'S', desc: 'Joint state', optional: false },
+      { name: 'State', nick: 'Js', desc: 'Joint state', optional: false },
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
-  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 172,
-    desc: 'Plan to plane/joint goal; optional Collision, Group, Attach, and RrtSettings (click Plan or enable Auto Plan)',
+  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 74, h: 104,
+    desc: 'Plan to plane/joint goal; right-click for Collision/Group/Attach/RrtSettings (click Plan or enable Auto Plan)',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1 },
-      { name: 'Start', nick: 'S', desc: 'Optional start joint state (defaults to home)', optional: true },
+      { name: 'Start', nick: 'St0', desc: 'Optional start joint state (defaults to home)', optional: true },
       { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005 },
+    ],
+    advancedInputs: [
       { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT; plane goals validate LIN against scene', optional: true },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
       { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1 },
       { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true },
     ],
     outputs: [
-      { name: 'Trajectory', nick: 'T', desc: 'Planned trajectories' },
-      { name: 'Status', nick: 'St', desc: 'Planning status' },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories' },
+      { name: 'Status', nick: 'Msg', desc: 'Planning status' },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
-  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 104,
+  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
     inputs: [
-      { name: 'Trajectory', nick: 'T', desc: 'Motus trajectory from Motus Plan', optional: false },
-      { name: 'ShowStart', nick: 'S', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory from Motus Plan (list concatenates sequential goals)', optional: false, access: 1 },
+      { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false },
       { name: 'Position', nick: 'P', desc: 'Optional normalized playback position 0–1 (Motus Scrub)', optional: true },
     ],
     outputs: [
       { name: 'Meshes', nick: 'M', desc: 'Link meshes at the current frame' },
       { name: 'Links', nick: 'L', desc: 'Link lines at the current frame' },
-      { name: 'TCP Path', nick: 'P', desc: 'Full TCP polyline via FK' },
-      { name: 'State', nick: 'S', desc: 'Joint state at the current frame' },
+      { name: 'TCP Path', nick: 'Path', desc: 'Full TCP polyline via FK' },
+      { name: 'State', nick: 'Js', desc: 'Joint state at the current frame' },
       { name: 'Time', nick: 'Tm', desc: 'Elapsed trajectory time at current frame (seconds)' },
-      { name: 'Index', nick: 'I', desc: 'Current waypoint index (0-based)' },
-      { name: 'Invalid', nick: 'X', desc: 'Invalid TCP segments (joint/velocity/acceleration limits)', access: 1 },
-      { name: 'ToolState', nick: 'Ts', desc: 'Tool state at the current frame', optional: true },
-      { name: 'Width', nick: 'W', desc: 'Gripper width (m) at playhead when present', optional: true },
     ] },
   export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 84,
     inputs: [
-      { name: 'Trajectory', nick: 'T', desc: 'Motus trajectory', optional: false },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory (list concatenates sequential goals)', optional: false, access: 1 },
       { name: 'Retime', nick: 'R', desc: 'Apply bottleneck path retiming before export', optional: true, bool: true },
       { name: 'Validate', nick: 'V', desc: 'Validate limits/velocity after retiming', optional: true, bool: false },
     ],
@@ -108,7 +106,7 @@ const MOTUS = {
       { name: 'Validation', nick: 'Val', desc: 'Validation summary when Validate=true', optional: true },
     ] },
   trajData: { guid: 'a72b5cfa-5cf5-4e54-a5cd-943e2aae82da', name: 'Motus Trajectory Data', nick: 'Data', w: 74, h: 84,
-    inputs: [{ name: 'Trajectory', nick: 'T', desc: 'Motus trajectory', optional: false }],
+    inputs: [{ name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory (list concatenates sequential goals)', optional: false, access: 1 }],
     outputs: [
       { name: 'Planes', nick: 'P', desc: 'TCP plane per waypoint' },
       { name: 'Times', nick: 'Tm', desc: 'Waypoint times (seconds)' },
@@ -118,12 +116,12 @@ const MOTUS = {
   rrtSettings: { guid: '11d59b15-ffe2-488e-83b8-52eddf772025', name: 'Motus RRT Settings', nick: 'RrtSet', w: 74, h: 104,
     inputs: [
       { name: 'MaxIter', nick: 'Mi', desc: 'Max sampling iterations', optional: false, number: 4000 },
-      { name: 'TimeLimit', nick: 'T', desc: 'Wall-clock cap in seconds (0 = off)', optional: false, number: 30 },
+      { name: 'TimeLimit', nick: 'Lim', desc: 'Wall-clock cap in seconds (0 = off)', optional: false, number: 30 },
       { name: 'Planner', nick: 'P', desc: 'Sampling planner from registry', optional: false, text: 'RrtConnect' },
       { name: 'GoalBias', nick: 'Gb', desc: 'Goal bias 0–1', optional: false, number: 0.08 },
       { name: 'Step', nick: 'St', desc: 'Tree step size (rad)', optional: false, number: 0.12 },
     ],
-    outputs: [{ name: 'Settings', nick: 'S', desc: 'Sampling planner settings for Motus Plan' }] },
+    outputs: [{ name: 'Settings', nick: 'Rrt', desc: 'Sampling planner settings for Motus Plan' }] },
   colSphere: { guid: 'c1a2b3c4-d5e6-4789-a012-3456789abcde', name: 'Motus Collision Sphere', nick: 'ColSph', w: 74, h: 64,
     inputs: [
       { name: 'Center', nick: 'C', desc: 'Sphere center', optional: false, point: [0.35, 0.15, 0.35] },
@@ -153,7 +151,7 @@ const MOTUS = {
       { name: 'Srdf', nick: 'S', desc: 'Optional SRDF file path (disable_collisions pairs)', optional: true, text: '' },
     ],
     outputs: [
-      { name: 'Scene', nick: 'S', desc: 'Collision scene' },
+      { name: 'Scene', nick: 'Sc', desc: 'Collision scene' },
       { name: 'Groups', nick: 'G', desc: 'Planning groups from SRDF (optional)', access: 1 },
       { name: 'EndEffectors', nick: 'EE', desc: 'End-effector map from SRDF as name=parent_link entries', access: 1 },
     ] },
@@ -162,7 +160,7 @@ const MOTUS = {
       { name: 'Group', nick: 'G', desc: 'Optional existing planning group (e.g. from ColScene SRDF output)', optional: true },
       { name: 'Name', nick: 'N', desc: 'Group name', optional: true, text: 'manipulator' },
       { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
-      { name: 'TipLink', nick: 'T', desc: 'Tip link name', optional: true, text: 'tool0' },
+      { name: 'TipLink', nick: 'Tip', desc: 'Tip link name', optional: true, text: 'tool0' },
       { name: 'Joints', nick: 'J', desc: 'Joint names (leave empty to use base..tip shorthand)', optional: true, access: 1 },
     ],
     outputs: [{ name: 'Group', nick: 'G', desc: 'Planning group' }] },
@@ -171,45 +169,54 @@ const MOTUS = {
       { name: 'Object', nick: 'O', desc: 'Collision object geometry to attach', optional: false },
       { name: 'Name', nick: 'N', desc: 'Attached body name', optional: true, text: 'grasp' },
       { name: 'TcpLocal', nick: 'P', desc: 'TCP-local pose of attached geometry', optional: true, plane: true },
-      { name: 'SourceName', nick: 'S', desc: 'Optional scene object name to hide while attached', optional: true, text: '' },
+      { name: 'SourceName', nick: 'Src', desc: 'Optional scene object name to hide while attached', optional: true, text: '' },
     ],
     outputs: [{ name: 'Attach', nick: 'A', desc: 'Attached body' }] },
   toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 74, h: 84,
     inputs: [
-      { name: 'Tool', nick: 'T', desc: 'Optional tool for validation and presets', optional: true },
+      { name: 'Tool', nick: 'Tl', desc: 'Optional tool for validation and presets', optional: true },
       { name: 'Preset', nick: 'P', desc: 'Open, Closed, or Custom', optional: false, text: 'Open' },
       { name: 'Width', nick: 'W', desc: 'Jaw width (m) when Preset=Custom', optional: true, number: 0.085 },
       { name: 'Speed', nick: 'Sp', desc: 'Grip speed ratio 0–1', optional: true, number: 0.5 },
       { name: 'Force', nick: 'F', desc: 'Grip force ratio 0–1', optional: true, number: 0.5 },
     ],
-    outputs: [{ name: 'State', nick: 'S', desc: 'End-effector state' }] },
-  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Motion Segment', nick: 'Segment', w: 74, h: 144,
-    desc: 'Build PTP/LIN/CIRC/SET/WAIT motion segment (Type dropdown)',
+    outputs: [{ name: 'State', nick: 'Ts', desc: 'End-effector state' }] },
+  segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Motion Segment', nick: 'Segment', w: 74, h: 84,
+    desc: 'Build PTP/LIN/CIRC/SET/WAIT motion segment (Type dropdown; type-specific pins appear automatically)',
     inputs: [
-      { name: 'Type', nick: 'T', desc: 'PTP, LIN, CIRC, SET, or WAIT', optional: false, text: 'PTP' },
+      { name: 'Type', nick: 'Ty', desc: 'PTP, LIN, CIRC, SET, or WAIT', optional: false, text: 'PTP' },
       { name: 'Goal', nick: 'G', desc: 'PTP: Joint State; LIN/CIRC: Plane (TCP pose)', optional: true },
-      { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true },
-      { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005 },
-      { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16 },
       { name: 'Blend', nick: 'B', desc: 'Blend radius (m, default 0)', optional: true, number: 0 },
       { name: 'ToolState', nick: 'Ts', desc: 'Optional tool state goal', optional: true },
-      { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
-      { name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 },
     ],
-    outputs: [{ name: 'Segment', nick: 'S', desc: 'Motion segment' }] },
+    typeInputs: {
+      PTP: [{ name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' }],
+      LIN: [
+        { name: 'Step', nick: 'St', desc: 'LIN only: TCP step size (m)', optional: true, number: 0.005 },
+        { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
+      ],
+      CIRC: [
+        { name: 'Via', nick: 'V', desc: 'CIRC only: arc via point (TCP plane)', optional: true },
+        { name: 'Samples', nick: 'N', desc: 'CIRC only: arc samples (>= 4)', optional: true, number: 16 },
+        { name: 'ToolMode', nick: 'Tm', desc: 'Hold, Ramp, or Instant (arm segments)', optional: true, text: 'Hold' },
+      ],
+      SET: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
+      WAIT: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0 }],
+    },
+    outputs: [{ name: 'Segment', nick: 'Seg', desc: 'Motion segment' }] },
   progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program Plan', nick: 'ProgPlan', w: 74, h: 144,
     desc: 'Plan mixed PTP/LIN/CIRC program (click Plan); LIN failures do not fall back to joint paths',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
       { name: 'Segments', nick: 'Seg', desc: 'List of motion segments', optional: false, access: 1 },
-      { name: 'Start', nick: 'S', desc: 'Start joint state (defaults to home)', optional: true },
+      { name: 'Start', nick: 'St0', desc: 'Start joint state (defaults to home)', optional: true },
       { name: 'Collision', nick: 'C', desc: 'Collision scene', optional: true },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true },
       { name: 'Attach', nick: 'A', desc: 'Optional attached bodies list', optional: true, access: 1 },
     ],
     outputs: [
-      { name: 'Trajectory', nick: 'T', desc: 'Planned trajectory' },
-      { name: 'Status', nick: 'St', desc: 'Planning status' },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectory' },
+      { name: 'Status', nick: 'Msg', desc: 'Planning status' },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
   scrub: { guid: 'e1f2a3b4-c5d6-4789-a012-3456789abc01', name: 'Motus Scrub', nick: 'Scrub', w: 220, h: 44 },
@@ -381,7 +388,24 @@ function paramOutput(def, index, px, py, compW) {
 function motusComponent(key, x, y, wireMap, options = {}) {
   const spec = structuredClone(MOTUS[key]);
   const instance = id();
-  const inputs = spec.inputs.map((inp) => {
+  const wireMapSafe = wireMap ?? {};
+  let inputDefs = [...(spec.inputs ?? [])];
+  // Auto-include Plan advanced pins when wired (or options.advanced).
+  if (spec.advancedInputs?.length) {
+    const want = new Set(options.advanced ?? []);
+    for (const adv of spec.advancedInputs) {
+      if (want.has(adv.name) || (wireMapSafe[adv.name]?.length))
+        inputDefs.push(adv);
+    }
+  }
+  // Segment type-specific pins.
+  const segType = (options.segmentType || options.text?.Type || 'PTP').toString().trim().toUpperCase();
+  if (spec.typeInputs?.[segType])
+    inputDefs = [...inputDefs, ...spec.typeInputs[segType]];
+  // Adjust height by pin count.
+  if (spec.h && inputDefs.length)
+    spec.h = Math.max(44, 24 + inputDefs.length * 20);
+  const inputs = inputDefs.map((inp) => {
     const copy = { ...inp, _guid: id() };
     if (options.numbers?.[inp.name] !== undefined) copy.number = options.numbers[inp.name];
     if (options.points?.[inp.name] !== undefined) copy.point = options.points[inp.name];
@@ -393,7 +417,7 @@ function motusComponent(key, x, y, wireMap, options = {}) {
   });
   const outputs = spec.outputs.map((out) => ({ ...out, _guid: id() }));
   const inChunks = inputs.map((inp, i) => {
-    const sources = (wireMap[inp.name] ?? []).map((ref) => ref._guid);
+    const sources = (wireMapSafe[inp.name] ?? []).map((ref) => ref._guid);
     let persistent = null;
     if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
     else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
@@ -404,6 +428,21 @@ function motusComponent(key, x, y, wireMap, options = {}) {
   });
   const outChunks = outputs.map((out, i) => paramOutput(out, i, x, y, spec.w));
   const node = { key, instance, inputs, outputs, spec };
+  const advancedNames = new Set((spec.advancedInputs ?? []).map((a) => a.name));
+  const presentAdvanced = inputs.filter((i) => advancedNames.has(i.name)).map((i) => i.name);
+  const planFlags = key === 'plan' ? [
+    item('ShowCollision', 'gh_bool', '1', presentAdvanced.includes('Collision') ? 'true' : 'false'),
+    item('ShowGroup', 'gh_bool', '1', presentAdvanced.includes('Group') ? 'true' : 'false'),
+    item('ShowAttach', 'gh_bool', '1', presentAdvanced.includes('Attach') ? 'true' : 'false'),
+    item('ShowRrtSettings', 'gh_bool', '1', presentAdvanced.includes('RrtSettings') ? 'true' : 'false'),
+  ] : [];
+  const containerItems = [
+    item('Description', 'gh_string', '10', esc(spec.desc ?? spec.name)),
+    item('InstanceGuid', 'gh_guid', '9', instance),
+    item('Name', 'gh_string', '10', spec.name),
+    item('NickName', 'gh_string', '10', spec.nick),
+    ...planFlags,
+  ];
   return { xml: `<chunk name="Object" index="PLACEHOLDER">
               <items count="3">
                 ${item('GUID', 'gh_guid', '9', spec.guid)}
@@ -412,11 +451,8 @@ function motusComponent(key, x, y, wireMap, options = {}) {
               </items>
               <chunks count="1">
                 <chunk name="Container">
-                  <items count="4">
-                    ${item('Description', 'gh_string', '10', esc(spec.desc ?? spec.name))}
-                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
-                    ${item('Name', 'gh_string', '10', spec.name)}
-                    ${item('NickName', 'gh_string', '10', spec.nick)}
+                  <items count="${containerItems.length}">
+                    ${containerItems.join('\n                    ')}
                   </items>
                   <chunks count="${1 + inputs.length + outputs.length}">
                     ${bounds(x, y, spec.w, spec.h)}

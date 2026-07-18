@@ -20,12 +20,14 @@ namespace Motus.GH.Components;
 public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariableParameterComponent
 {
     private const int CustomColorsParamIndex = 3;
+    private const int CoreOutputCount = 5;
 
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
     private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
 
     private PreviewColorMode _colorMode = PreviewColorMode.Override;
     private bool _showCustomColors;
+    private bool _showDebugOutputs;
     private List<Color> _customColors = [];
     private IReadOnlyList<Color?>? _drawMeshColors;
 
@@ -57,8 +59,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
-        p.AddBooleanParameter("ShowStart", "S", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
+        p.AddBooleanParameter("ShowStart", "SS", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
         p.AddNumberParameter("Position", "P", "Optional normalized playback position 0–1 (Motus Scrub); pauses Play when changed", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
@@ -67,21 +69,16 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         p.AddMeshParameter("Meshes", "M", "Link meshes at the current frame", GH_ParamAccess.list);
         p.AddLineParameter("Links", "L", "Link lines at the current frame", GH_ParamAccess.list);
-        p.AddCurveParameter("TCP Path", "P", "Full TCP polyline via FK", GH_ParamAccess.item);
-        p.AddGenericParameter("State", "S", "Joint state at the current frame", GH_ParamAccess.item);
+        p.AddCurveParameter("TCP Path", "Path", "Full TCP polyline via FK", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Joint state at the current frame", GH_ParamAccess.item);
         p.AddNumberParameter("Time", "Tm", "Elapsed trajectory time at current frame (seconds)", GH_ParamAccess.item);
-        p.AddIntegerParameter("Index", "I", "Current waypoint index (0-based)", GH_ParamAccess.item);
-        p.AddLineParameter("Invalid", "X", "Invalid TCP segments (joint/velocity/acceleration limits)", GH_ParamAccess.list);
-        p.AddGenericParameter("ToolState", "Ts", "Tool state at the current frame", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Width", "W", "Gripper width (m) at playhead when present", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
     }
 
     public override void AddedToDocument(GH_Document doc)
     {
         base.AddedToDocument(doc);
         EnsureCustomColorsParam();
+        EnsureDebugOutputs();
     }
 
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
@@ -92,37 +89,60 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         Menu_AppendItem(menu, "Custom colours", (_, _) => SetColorMode(PreviewColorMode.Custom), true, _colorMode == PreviewColorMode.Custom);
         Menu_AppendSeparator(menu);
         Menu_AppendItem(menu, "Show custom colours input", (_, _) => ToggleCustomColorsInput(), true, _showCustomColors);
+        Menu_AppendItem(menu, "Show debug outputs", (_, _) => ToggleDebugOutputs(), true, _showDebugOutputs);
         base.AppendAdditionalMenuItems(menu);
     }
 
-    public bool CanInsertParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input &&
-        index == CustomColorsParamIndex &&
-        Params.Input.Count == CustomColorsParamIndex;
+    public bool CanInsertParameter(GH_ParameterSide side, int index)
+    {
+        if (side == GH_ParameterSide.Input)
+            return index == CustomColorsParamIndex && Params.Input.Count == CustomColorsParamIndex;
+        if (side == GH_ParameterSide.Output)
+            return index >= CoreOutputCount;
+        return false;
+    }
 
-    public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input &&
-        index == CustomColorsParamIndex &&
-        Params.Input.Count > CustomColorsParamIndex;
+    public bool CanRemoveParameter(GH_ParameterSide side, int index)
+    {
+        if (side == GH_ParameterSide.Input)
+            return index == CustomColorsParamIndex && Params.Input.Count > CustomColorsParamIndex;
+        if (side == GH_ParameterSide.Output)
+            return index >= CoreOutputCount;
+        return false;
+    }
 
     public IGH_Param CreateParameter(GH_ParameterSide side, int index)
     {
-        var param = new Param_Colour
+        if (side == GH_ParameterSide.Input)
         {
-            Name = "Custom Colours",
-            NickName = "C",
-            Description = "One colour per preview mesh slot (same order as Meshes output)",
-            Access = GH_ParamAccess.list,
-            Optional = true
+            return new Param_Colour
+            {
+                Name = "Custom Colours",
+                NickName = "C",
+                Description = "One colour per preview mesh slot (same order as Meshes output)",
+                Access = GH_ParamAccess.list,
+                Optional = true
+            };
+        }
+
+        return new Param_Integer
+        {
+            Name = "Index",
+            NickName = "I",
+            Description = "Current waypoint index (0-based)",
+            Access = GH_ParamAccess.item
         };
-        return param;
     }
 
     public bool DestroyParameter(GH_ParameterSide side, int index) =>
-        side == GH_ParameterSide.Input && index == CustomColorsParamIndex;
+        (side == GH_ParameterSide.Input && index == CustomColorsParamIndex) ||
+        (side == GH_ParameterSide.Output && index >= CoreOutputCount);
 
-    public void VariableParameterMaintenance() =>
+    public void VariableParameterMaintenance()
+    {
         _showCustomColors = Params.Input.Count > CustomColorsParamIndex;
+        _showDebugOutputs = Params.Output.Count > CoreOutputCount;
+    }
 
     public override BoundingBox ClippingBox
     {
@@ -165,6 +185,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         writer.SetDouble("Position", _position);
         writer.SetInt32("ColorMode", (int)_colorMode);
         writer.SetBoolean("ShowCustomColors", _showCustomColors);
+        writer.SetBoolean("ShowDebugOutputs", _showDebugOutputs);
         return base.Write(writer);
     }
 
@@ -178,6 +199,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _colorMode = (PreviewColorMode)reader.GetInt32("ColorMode");
         if (reader.ItemExists("ShowCustomColors"))
             _showCustomColors = reader.GetBoolean("ShowCustomColors");
+        if (reader.ItemExists("ShowDebugOutputs"))
+            _showDebugOutputs = reader.GetBoolean("ShowDebugOutputs");
+        // Migrate older documents that always had debug outputs.
+        if (Params.Output.Count > CoreOutputCount)
+            _showDebugOutputs = true;
         return base.Read(reader);
     }
 
@@ -204,10 +230,72 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         ExpireSolution(true);
     }
 
+    private void ToggleDebugOutputs()
+    {
+        _showDebugOutputs = !_showDebugOutputs;
+        EnsureDebugOutputs();
+        ExpireSolution(true);
+    }
+
     private void EnsureCustomColorsParam()
     {
         if (!_showCustomColors || Params.Input.Count > CustomColorsParamIndex) return;
         Params.RegisterInputParam(CreateParameter(GH_ParameterSide.Input, CustomColorsParamIndex), CustomColorsParamIndex);
+    }
+
+    private void EnsureDebugOutputs()
+    {
+        void Ensure(string name, Func<IGH_Param> factory)
+        {
+            var idx = OutputIndexOf(name);
+            if (_showDebugOutputs && idx < 0)
+                Params.RegisterOutputParam(factory());
+            else if (!_showDebugOutputs && idx >= 0)
+                Params.UnregisterOutputParameter(Params.Output[idx]);
+        }
+
+        Ensure("Index", () => new Param_Integer
+        {
+            Name = "Index",
+            NickName = "I",
+            Description = "Current waypoint index (0-based)",
+            Access = GH_ParamAccess.item
+        });
+        Ensure("Invalid", () => new Param_Line
+        {
+            Name = "Invalid",
+            NickName = "X",
+            Description = "Invalid TCP segments (joint/velocity/acceleration limits)",
+            Access = GH_ParamAccess.list
+        });
+        Ensure("ToolState", () => new Param_GenericObject
+        {
+            Name = "ToolState",
+            NickName = "Ts",
+            Description = "Tool state at the current frame",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        });
+        Ensure("Width", () => new Param_Number
+        {
+            Name = "Width",
+            NickName = "W",
+            Description = "Gripper width (m) at playhead when present",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        });
+        Params.OnParametersChanged();
+        VariableParameterMaintenance();
+    }
+
+    private int OutputIndexOf(string name)
+    {
+        for (var i = 0; i < Params.Output.Count; i++)
+        {
+            if (string.Equals(Params.Output[i].Name, name, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
     }
 
     private void DrawColoredMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes, bool isStartGhost)
@@ -312,7 +400,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
+        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo))
+            return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
         var previewGeometry = RobotPreviewGeometry.ForViewport(
@@ -335,6 +424,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _position = 0;
             _staticsFor = null;
             _suppressScrubInput = true;
+            if (TryGetWiredScrub(out var wiredScrub))
+                wiredScrub.InvalidateTimelineCache();
         }
         _trajectory = t;
         if (t.Points.Count == 0)
@@ -397,10 +488,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
         if (_meshCache is not null)
         {
-            if (_playing || IsScrubDragging())
-                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
-            else
+            // Always update in place — MeshesFor duplicates every link mesh on idle solves.
+            if (_currentMeshes.Count == 0)
                 _currentMeshes = _meshCache.MeshesFor(state, toolState);
+            else
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
         }
         else
         {
@@ -425,11 +517,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         da.SetData(2, _tcpCurve);
         da.SetData(3, new JointStateGoo(state));
         da.SetData(4, timeSeconds);
-        da.SetData(5, _index);
-        da.SetDataList(6, _invalidSegments);
-        if (toolState is not null)
-            da.SetData(7, new EndEffectorStateGoo(toolState));
-        da.SetData(8, toolState?.GetValueOrDefault("width"));
+        if (_showDebugOutputs)
+        {
+            var indexOut = OutputIndexOf("Index");
+            var invalidOut = OutputIndexOf("Invalid");
+            var toolOut = OutputIndexOf("ToolState");
+            var widthOut = OutputIndexOf("Width");
+            if (indexOut >= 0) da.SetData(indexOut, _index);
+            if (invalidOut >= 0) da.SetDataList(invalidOut, _invalidSegments);
+            if (toolOut >= 0 && toolState is not null)
+                da.SetData(toolOut, new EndEffectorStateGoo(toolState));
+            if (widthOut >= 0)
+                da.SetData(widthOut, toolState?.GetValueOrDefault("width"));
+        }
         ExpirePreview(true);
     }
 
@@ -508,6 +608,42 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private bool IsScrubDragging() =>
         TryGetWiredScrub(out var scrub) && scrub.IsDragging;
+
+    /// <summary>Trajectory currently driving scrub keyframes (may be null before first solve).</summary>
+    internal Trajectory? ScrubTrajectory => _trajectory;
+
+    /// <summary>
+    /// Preview-only scrub update during slider drag — skips full graph ExpireSolution.
+    /// </summary>
+    internal static bool TryNotifyScrubDrag(MotusScrubSlider scrub, double scrubFraction)
+    {
+        var doc = scrub.OnPingDocument();
+        if (doc is null) return false;
+        foreach (var obj in doc.Objects)
+        {
+            if (obj is not MotusPreviewComponent preview) continue;
+            if (!preview.Params.Input[2].Sources.Any(s => ReferenceEquals(s, scrub))) continue;
+            return preview.ApplyScrubDragPreview(scrub, scrubFraction);
+        }
+        return false;
+    }
+
+    private bool ApplyScrubDragPreview(MotusScrubSlider scrub, double scrubFraction)
+    {
+        if (_trajectory is null || _previewPoints.Count == 0) return false;
+        _playing = false;
+        _position = Math.Clamp(MapScrubToTimeFraction(scrub, scrubFraction), 0, 1);
+        ResolveFrame(out var state, out _, out _, out var toolState);
+        if (_meshCache is not null)
+        {
+            if (_currentMeshes.Count == 0)
+                _currentMeshes = _meshCache.MeshesFor(state, toolState);
+            else
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+        }
+        ExpirePreview(true);
+        return true;
+    }
 
     private void SyncScrubSlider(double position, bool expireDownstream = false)
     {

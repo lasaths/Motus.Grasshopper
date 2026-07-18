@@ -93,8 +93,12 @@ internal readonly struct ScrubTimeline
 
 internal static class ScrubTimelineProbe
 {
-    public static ScrubTimeline TryResolve(MotusScrubSlider scrub)
+    public static ScrubTimeline TryResolve(MotusScrubSlider scrub) =>
+        TryResolve(scrub, out _);
+
+    public static ScrubTimeline TryResolve(MotusScrubSlider scrub, out Trajectory? trajectory)
     {
+        trajectory = null;
         var doc = scrub.OnPingDocument();
         if (doc is null) return ScrubTimeline.Empty;
 
@@ -103,10 +107,15 @@ internal static class ScrubTimelineProbe
             if (obj is not MotusPreviewComponent preview) continue;
             if (!preview.Params.Input[2].Sources.Any(s => ReferenceEquals(s, scrub))) continue;
 
+            // Prefer Preview's already-resolved trajectory (avoids volatile-data walks every paint).
+            trajectory = preview.ScrubTrajectory;
+            if (trajectory is not null)
+                return ScrubTimeline.From(trajectory);
+
             var trajInput = preview.Params.Input[0];
             foreach (var source in trajInput.Sources)
             {
-                var trajectory = ReadTrajectory(source);
+                trajectory = ReadTrajectory(source);
                 if (trajectory is not null) return ScrubTimeline.From(trajectory);
             }
         }

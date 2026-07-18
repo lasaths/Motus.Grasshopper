@@ -1,22 +1,24 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 using GH_IO.Serialization;
 using Motus.Core;
 using Motus.GH.Data;
+using Motus.GH.Params;
 using Motus.GH.Planning;
 using Motus.GH.UI;
 using Motus.GH.Rhino;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Motus.GH.Components;
 
-public sealed class MotusPlanComponent : MotusAsyncComponentBase
+public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariableParameterComponent
 {
     internal const double DefaultLinStepMeters = 0.005;
     private const int AutoPlanDebounceMs = 400;
+    private const int CoreInputCount = 4;
 
     private readonly PlanWorker _worker;
 
@@ -28,6 +30,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
     private int _debounceGen;
     private bool _planningPending;
     private string? _activeWorkerFingerprint;
+
+    private bool _showCollision;
+    private bool _showGroup;
+    private bool _showAttach;
+    private bool _showRrtSettings;
 
     public MotusPlanComponent()
         : base("Motus Plan", "Plan", "Plan motion to a plane (TCP LIN) or joint goal; click Plan or enable Auto Plan", "Plan", "flow-arrow")
@@ -43,7 +50,6 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
 
     protected override void BeforeSolveInstance()
     {
-        // Keep in-flight workers alive across idle re-solves; cancel explicitly below.
         if (IsReadyToSetData)
             base.BeforeSolveInstance();
     }
@@ -56,27 +62,25 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
         p.AddGenericParameter("Goal", "G", "Targets as Planes (TCP LIN) or Joint States", GH_ParamAccess.list);
-        p.AddGenericParameter("Start", "S", "Start joint state (defaults to UR10e home or zeros)", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "Start", "St0", "Start joint state (defaults to home/zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Collision", "C", "Obstacle-aware planning: ColScene → Collision. Joint goals use RRT (tune via RrtSettings); plane goals use LIN validate", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Group", "Gr", "Optional planning group (locks non-group joints)", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Attach", "A", "Optional attached bodies list", GH_ParamAccess.list);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("RrtSettings", "Rrt", "Optional RRT tuning from Motus RRT Settings (joint goals + collision only)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Trajectory", "T", "Planned trajectories", GH_ParamAccess.list);
-        p.AddTextParameter("Status", "St", "Status message", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Planned trajectories (one per goal)", GH_ParamAccess.list);
+        p.AddTextParameter("Status", "Msg", "Status message", GH_ParamAccess.item);
         p.AddTextParameter("Warnings", "W", "Warnings", GH_ParamAccess.list);
+    }
+
+    public override void AddedToDocument(GH_Document doc)
+    {
+        base.AddedToDocument(doc);
+        EnsureAdvancedParams();
     }
 
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
@@ -84,12 +88,21 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         Menu_AppendItem(menu, "Auto Plan", AutoPlanMenuClick, true, _autoPlan);
         if (IsOperationInProgress)
             Menu_AppendItem(menu, "Cancel planning", (_, _) => RequestCancellation());
+        Menu_AppendSeparator(menu);
+        Menu_AppendItem(menu, "Show Collision input", (_, _) => ToggleAdvanced(MotusPlanInputs.Collision, ref _showCollision), true, _showCollision);
+        Menu_AppendItem(menu, "Show Group input", (_, _) => ToggleAdvanced(MotusPlanInputs.Group, ref _showGroup), true, _showGroup);
+        Menu_AppendItem(menu, "Show Attach input", (_, _) => ToggleAdvanced(MotusPlanInputs.Attach, ref _showAttach), true, _showAttach);
+        Menu_AppendItem(menu, "Show RRT Settings input", (_, _) => ToggleAdvanced(MotusPlanInputs.RrtSettings, ref _showRrtSettings), true, _showRrtSettings);
         base.AppendAdditionalMenuItems(menu);
     }
 
     public override bool Write(GH_IWriter writer)
     {
         writer.SetBoolean("AutoPlan", _autoPlan);
+        writer.SetBoolean("ShowCollision", _showCollision);
+        writer.SetBoolean("ShowGroup", _showGroup);
+        writer.SetBoolean("ShowAttach", _showAttach);
+        writer.SetBoolean("ShowRrtSettings", _showRrtSettings);
         return base.Write(writer);
     }
 
@@ -97,15 +110,66 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
     {
         if (reader.ItemExists("AutoPlan"))
             _autoPlan = reader.GetBoolean("AutoPlan");
+        if (reader.ItemExists("ShowCollision"))
+            _showCollision = reader.GetBoolean("ShowCollision");
+        if (reader.ItemExists("ShowGroup"))
+            _showGroup = reader.GetBoolean("ShowGroup");
+        if (reader.ItemExists("ShowAttach"))
+            _showAttach = reader.GetBoolean("ShowAttach");
+        if (reader.ItemExists("ShowRrtSettings"))
+            _showRrtSettings = reader.GetBoolean("ShowRrtSettings");
+
+        // Migrate documents that still serialize all 8 core+advanced inputs.
+        SyncFlagsFromExistingParams();
         return base.Read(reader);
     }
 
-    internal bool IsCollisionPortWired() =>
-        Params.Input[MotusPlanInputs.Collision].SourceCount > 0;
+    public bool CanInsertParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public IGH_Param CreateParameter(GH_ParameterSide side, int index)
+    {
+        // Deserialization may insert advanced pins one-by-one; pick the next missing one.
+        foreach (var name in new[]
+                 {
+                     MotusPlanInputs.Collision,
+                     MotusPlanInputs.Group,
+                     MotusPlanInputs.Attach,
+                     MotusPlanInputs.RrtSettings
+                 })
+        {
+            if (!MotusPlanInputs.Has(this, name))
+                return CreateAdvancedParam(name);
+        }
+        return CreateAdvancedParam(MotusPlanInputs.Collision);
+    }
+
+    public bool DestroyParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public void VariableParameterMaintenance() => SyncFlagsFromExistingParams();
+
+    /// <summary>Enable advanced pins for example generators / document restore.</summary>
+    public void EnsureAdvancedInput(string name)
+    {
+        switch (name)
+        {
+            case MotusPlanInputs.Collision: _showCollision = true; break;
+            case MotusPlanInputs.Group: _showGroup = true; break;
+            case MotusPlanInputs.Attach: _showAttach = true; break;
+            case MotusPlanInputs.RrtSettings: _showRrtSettings = true; break;
+            default: return;
+        }
+        EnsureAdvancedParams();
+    }
+
+    internal bool IsCollisionPortWired() => MotusPlanInputs.IsWired(this, MotusPlanInputs.Collision);
 
     internal bool HasObstacleAwareInputsWired() =>
-        IsCollisionPortWired() ||
-        Params.Input[MotusPlanInputs.Attach].SourceCount > 0;
+        IsCollisionPortWired() || MotusPlanInputs.IsWired(this, MotusPlanInputs.Attach);
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -116,13 +180,26 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             return;
         }
 
-        if (!GhExtract.TryRobotGoo(da, 0, out _))
+        var robotIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Robot);
+        var goalIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Goal);
+        var stepIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Step);
+        var collisionIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Collision);
+
+        if (robotIdx < 0 || !GhExtract.TryRobotGoo(da, robotIdx, out _))
         {
             InvalidateCachedPlan();
             return;
         }
 
-        if (!GhExtract.TryGoals(da, 1, out var goals, out var goalErrors))
+        if (goalIdx < 0)
+        {
+            InvalidateCachedPlan();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Provide at least one valid Plane or Joint State goal.");
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix goal input errors.");
+            return;
+        }
+
+        if (!GhExtract.TryGoals(da, goalIdx, out var goals, out var goalErrors))
         {
             InvalidateCachedPlan();
             foreach (var error in goalErrors)
@@ -134,7 +211,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         }
 
         var stepInput = DefaultLinStepMeters;
-        if (da.GetData(3, ref stepInput))
+        if (stepIdx >= 0 && da.GetData(stepIdx, ref stepInput))
         {
             if (stepInput <= 0)
             {
@@ -145,7 +222,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             }
         }
 
-        var collision = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
+        var collision = GhExtract.ParseCollisionInput(da, collisionIdx);
         if (collision.Error is not null)
         {
             InvalidateCachedPlan();
@@ -161,6 +238,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
             InvalidateCachedPlan();
             return;
         }
+
+        GhExtract.RemarkIfDefaultStart(this, snapshot.UsedDefaultStart);
 
         var fingerprint = snapshot.Fingerprint;
         var planningContext = snapshot.PlanningContext;
@@ -195,7 +274,6 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
         _activeWorkerFingerprint = fingerprint;
         Message = "Planning…";
         OnDisplayExpired(true);
-        // Collect inputs before writing outputs — GH data access may not allow reads after SetData.
         LaunchWorker(da, snapshot);
         EmitOutputs(da, GhExtract.PlanStatusKind.Planning, activity);
     }
@@ -220,6 +298,78 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase
     {
         if (_cached is not null)
             ReportPlanningFailures(_cached);
+    }
+
+    private void ToggleAdvanced(string name, ref bool flag)
+    {
+        RecordUndoEvent($"Toggle {name}");
+        flag = !flag;
+        EnsureAdvancedParams();
+        ExpireSolution(true);
+    }
+
+    private void EnsureAdvancedParams()
+    {
+        SetAdvancedPresent(MotusPlanInputs.Collision, _showCollision, CreateAdvancedParam);
+        SetAdvancedPresent(MotusPlanInputs.Group, _showGroup, CreateAdvancedParam);
+        SetAdvancedPresent(MotusPlanInputs.Attach, _showAttach, CreateAdvancedParam);
+        SetAdvancedPresent(MotusPlanInputs.RrtSettings, _showRrtSettings, CreateAdvancedParam);
+        Params.OnParametersChanged();
+        VariableParameterMaintenance();
+    }
+
+    private void SetAdvancedPresent(string name, bool show, Func<string, IGH_Param> factory)
+    {
+        var existing = MotusPlanInputs.IndexOf(this, name);
+        if (show && existing < 0)
+            Params.RegisterInputParam(factory(name));
+        else if (!show && existing >= 0)
+            Params.UnregisterInputParameter(Params.Input[existing]);
+    }
+
+    private static IGH_Param CreateAdvancedParam(string name) => name switch
+    {
+        MotusPlanInputs.Collision => new Param_MotusCollisionScene
+        {
+            Name = MotusPlanInputs.Collision,
+            NickName = "C",
+            Description = "Obstacle-aware planning: ColScene → Collision. Joint goals use RRT; plane goals use LIN validate",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        },
+        MotusPlanInputs.Group => new Param_GenericObject
+        {
+            Name = MotusPlanInputs.Group,
+            NickName = "Gr",
+            Description = "Optional planning group (locks non-group joints)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        },
+        MotusPlanInputs.Attach => new Param_GenericObject
+        {
+            Name = MotusPlanInputs.Attach,
+            NickName = "A",
+            Description = "Optional attached bodies list",
+            Access = GH_ParamAccess.list,
+            Optional = true
+        },
+        MotusPlanInputs.RrtSettings => new Param_GenericObject
+        {
+            Name = MotusPlanInputs.RrtSettings,
+            NickName = "Rrt",
+            Description = "Optional RRT tuning from Motus RRT Settings (joint goals + collision only)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        },
+        _ => new Param_GenericObject { Name = name, NickName = name, Optional = true }
+    };
+
+    private void SyncFlagsFromExistingParams()
+    {
+        _showCollision = MotusPlanInputs.Has(this, MotusPlanInputs.Collision);
+        _showGroup = MotusPlanInputs.Has(this, MotusPlanInputs.Group);
+        _showAttach = MotusPlanInputs.Has(this, MotusPlanInputs.Attach);
+        _showRrtSettings = MotusPlanInputs.Has(this, MotusPlanInputs.RrtSettings);
     }
 
     private bool ShouldStartPlanning(string fingerprint, bool planNow)

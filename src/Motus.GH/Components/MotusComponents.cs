@@ -8,6 +8,7 @@ using Motus.Geometry;
 using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Loaders;
+using Motus.GH.Params;
 using Motus.GH.Preview;
 using Motus.GH.Resources;
 using Motus.GH.Rhino;
@@ -132,7 +133,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         p.AddTextParameter("Path", "P", "Path to .urdf or .xacro file", GH_ParamAccess.item);
         p.AddTextParameter("BaseLink", "B", "Base link name", GH_ParamAccess.item, "base_link");
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("TipLink", "T", "Tip link name", GH_ParamAccess.item, "tool0");
+        p.AddTextParameter("TipLink", "Tip", "Tip link name", GH_ParamAccess.item, "tool0");
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Base", "Bf", "Optional base frame override (TCP goals are in this frame)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
@@ -228,7 +229,7 @@ public sealed class MotusJointStateComponent : MotusComponentBase
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Joint state", GH_ParamAccess.item);
 
     protected override void BeforeSolveInstance()
     {
@@ -250,6 +251,13 @@ public sealed class MotusJointStateComponent : MotusComponentBase
         }
         if (vals.Count == 0) return;
 
+        if (!_useDegrees)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Remark,
+                "Joints are radians (right-click J → Degrees to enter °).");
+        }
+
         var arr = _useDegrees
             ? vals.Select(RhinoMath.ToRadians).ToArray()
             : vals.ToArray();
@@ -266,8 +274,8 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddGenericParameter("State", "S", "Joint state", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Joint state", GH_ParamAccess.item);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -307,7 +315,8 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 public sealed class MotusTrajectoryDataComponent : MotusComponentBase
 {
     public MotusTrajectoryDataComponent() : base("Motus Trajectory Data", "Data", "TCP planes, waypoint times, and per-axis joint series", "Export", "grid-four") { }
-    protected override void RegisterInputParams(GH_InputParamManager p) => p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
+    protected override void RegisterInputParams(GH_InputParamManager p) =>
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
         p.AddPlaneParameter("Planes", "P", "TCP planes via FK", GH_ParamAccess.list);
@@ -318,7 +327,7 @@ public sealed class MotusTrajectoryDataComponent : MotusComponentBase
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
+        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Remark, out var trajGoo)) return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
         if (t.Points.Count == 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points."); return; }
@@ -353,7 +362,7 @@ public sealed class MotusExportComponent : MotusComponentBase
     public MotusExportComponent() : base("Motus Export", "Export", "Serialize a trajectory to JSON and CSV", "Export", "export") { }
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Trajectory", "T", "Motus trajectory from Motus Plan", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
         p.AddBooleanParameter("Retime", "R", "Apply bottleneck path retiming before export", GH_ParamAccess.item, true);
         p[p.ParamCount - 1].Optional = true;
         p.AddBooleanParameter("Validate", "V", "Validate limits/velocity after retiming", GH_ParamAccess.item, false);
@@ -368,7 +377,7 @@ public sealed class MotusExportComponent : MotusComponentBase
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryTrajectoryGoo(da, 0, out var trajGoo)) return;
+        if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Warning, out var trajGoo)) return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
         var retime = true;

@@ -4,6 +4,7 @@ using Grasshopper.GUI;
 using Grasshopper.GUI.Canvas;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
+using Motus.GH.Components;
 using Motus.GH.Params;
 using Motus.GH.Preview;
 
@@ -126,5 +127,16 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
         }
     }
 
-    private void ExpireDownstreamPreview(bool recompute) => ScrubOwner.ExpireSolution(recompute);
+    private void ExpireDownstreamPreview(bool recompute)
+    {
+        // During drag: preview-only update (no full graph ExpireSolution).
+        if (ScrubOwner.IsDragging &&
+            MotusPreviewComponent.TryNotifyScrubDrag(ScrubOwner, (double)ScrubOwner.Slider.Value))
+        {
+            ScrubOwner.OnDisplayExpired(false);
+            return;
+        }
+
+        ScrubOwner.ExpireSolution(recompute);
+    }
 }

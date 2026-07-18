@@ -17,7 +17,7 @@ public sealed class MotusToolStateComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Tool", "T", "Optional tool for validation and presets", GH_ParamAccess.item);
+        p.AddGenericParameter("Tool", "Tl", "Optional tool for validation and presets", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("Preset", "P", "Open, Closed, or Custom", GH_ParamAccess.item, "Open");
         p.AddNumberParameter("Width", "W", "Jaw width (m) when Preset=Custom", GH_ParamAccess.item, 0.085);
@@ -29,7 +29,7 @@ public sealed class MotusToolStateComponent : MotusComponentBase
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("State", "S", "End-effector state", GH_ParamAccess.item);
+        p.AddGenericParameter("State", "Ts", "End-effector state", GH_ParamAccess.item);
 
     public override void AddedToDocument(GH_Document doc)
     {
@@ -44,6 +44,12 @@ public sealed class MotusToolStateComponent : MotusComponentBase
         ToolGoo? toolGoo = null;
         if (da.GetData(0, ref toolGoo) && toolGoo?.Value is not null)
             tool = toolGoo.Value;
+        else
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Remark,
+                "No Tool wired — assuming Robotiq 2F-85.");
+        }
 
         var preset = "Open";
         var width = 0.085;

@@ -16,6 +16,7 @@ internal sealed class PlanInputSnapshot
     public RobotContext Context { get; init; } = default!;
     public IReadOnlyList<(JointState? joints, Plane? plane)> Goals { get; init; } = [];
     public JointState Start { get; init; } = null!;
+    public bool UsedDefaultStart { get; init; }
     public PlanningContext PlanningContext { get; init; } = null!;
     public double LinStepMeters { get; init; }
     public RrtPlanSettings RrtSettings { get; init; } = RrtPlanSettings.Defaults;
@@ -36,34 +37,46 @@ internal sealed class PlanInputSnapshot
     {
         snapshot = null;
 
-        if (!GhExtract.TryRobotGoo(da, MotusPlanInputs.Robot, out var robotGoo))
+        var robotIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Robot);
+        var goalIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Goal);
+        var startIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Start);
+        var stepIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Step);
+        var collisionIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Collision);
+        var groupIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Group);
+        var attachIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.Attach);
+        var rrtIdx = MotusPlanInputs.IndexOf(owner, MotusPlanInputs.RrtSettings);
+
+        if (robotIdx < 0 || goalIdx < 0)
+            return false;
+
+        if (!GhExtract.TryRobotGoo(da, robotIdx, out var robotGoo))
             return false;
 
         robotGoo.EnsureBundledTool();
         var context = RobotContext.FromGoo(robotGoo);
 
-        if (!GhExtract.TryGoals(da, MotusPlanInputs.Goal, out var goals, out _))
+        if (!GhExtract.TryGoals(da, goalIdx, out var goals, out _))
             return false;
 
-        var start = GhExtract.StartOrHome(da, MotusPlanInputs.Start, context.Model);
+        var start = GhExtract.StartOrHome(da, startIdx, context.Model, out var usedDefaultStart);
         var linStep = MotusPlanComponent.DefaultLinStepMeters;
         var stepInput = linStep;
-        if (da.GetData(MotusPlanInputs.Step, ref stepInput))
+        if (stepIdx >= 0 && da.GetData(stepIdx, ref stepInput))
             linStep = stepInput;
 
-        var collisionParse = GhExtract.ParseCollisionInput(da, MotusPlanInputs.Collision);
+        var collisionParse = GhExtract.ParseCollisionInput(da, collisionIdx);
         if (collisionParse.Error is not null)
             return false;
 
         var planningContext = GhExtract.BuildPlanningContext(
             context.EffectiveModel,
             da,
-            MotusPlanInputs.Collision,
-            MotusPlanInputs.Group,
-            MotusPlanInputs.Attach,
+            collisionIdx,
+            groupIdx,
+            attachIdx,
             collisionParse.Scene);
 
-        var rrtSettings = GhExtract.ResolveRrtSettings(da, MotusPlanInputs.RrtSettings, owner);
+        var rrtSettings = GhExtract.ResolveRrtSettings(da, rrtIdx, owner);
         var needsSampling = GhExtract.GoalsNeedSamplingPlanner(goals, planningContext);
         var fingerprintRrt = needsSampling ? rrtSettings : RrtPlanSettings.Defaults;
         var fingerprint = PlanInputFingerprint.Compute(
@@ -85,6 +98,7 @@ internal sealed class PlanInputSnapshot
             Context = context,
             Goals = goals,
             Start = start,
+            UsedDefaultStart = usedDefaultStart,
             PlanningContext = planningContext,
             LinStepMeters = linStep,
             RrtSettings = rrtSettings,

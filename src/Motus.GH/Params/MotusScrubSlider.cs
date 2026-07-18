@@ -2,6 +2,7 @@ using GH_IO.Serialization;
 using Grasshopper.GUI.Base;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Special;
+using Motus.Core;
 using Motus.GH.Preview;
 using Motus.GH.Resources;
 using Motus.GH.UI;
@@ -80,8 +81,24 @@ public sealed class MotusScrubSlider : GH_NumberSlider
     internal void EndSyncFromPreview() => _syncFromPreviewDepth = Math.Max(0, _syncFromPreviewDepth - 1);
 
     private int _syncFromPreviewDepth;
+    private ScrubTimeline _cachedTimeline = ScrubTimeline.Empty;
+    private Trajectory? _timelineTrajectory;
 
-    internal ScrubTimeline ResolveTimeline() => ScrubTimelineProbe.TryResolve(this);
+    internal ScrubTimeline ResolveTimeline()
+    {
+        var timeline = ScrubTimelineProbe.TryResolve(this, out var trajectory);
+        if (ReferenceEquals(trajectory, _timelineTrajectory) && !_cachedTimeline.IsEmpty)
+            return _cachedTimeline;
+        _timelineTrajectory = trajectory;
+        _cachedTimeline = timeline;
+        return timeline;
+    }
+
+    internal void InvalidateTimelineCache()
+    {
+        _timelineTrajectory = null;
+        _cachedTimeline = ScrubTimeline.Empty;
+    }
 
     internal void ApplyKeyframeSnap(float trackWidthPx, float snapPx = 12f, bool forceNearest = false)
     {

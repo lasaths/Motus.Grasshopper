@@ -22,7 +22,7 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("BaseLink", "B", "Base link name", GH_ParamAccess.item, "base_link");
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("TipLink", "T", "Tip link name", GH_ParamAccess.item, "tool0");
+        p.AddTextParameter("TipLink", "Tip", "Tip link name", GH_ParamAccess.item, "tool0");
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("Joints", "J", "Joint names (leave empty to use base..tip shorthand)", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
@@ -72,7 +72,7 @@ public sealed class MotusAttachBodyComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("TcpLocal", "P", "TCP-local pose of attached geometry", GH_ParamAccess.item, Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("SourceName", "S", "Optional scene object name to hide while attached", GH_ParamAccess.item, "");
+        p.AddTextParameter("SourceName", "Src", "Optional scene object name to hide while attached", GH_ParamAccess.item, "");
         p[p.ParamCount - 1].Optional = true;
     }
 

@@ -32,7 +32,7 @@ public sealed class MotusToolComponent : MotusComponentBase
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("Tool", "T", "Tool definition", GH_ParamAccess.item);
+        p.AddGenericParameter("Tool", "Tl", "Tool definition", GH_ParamAccess.item);
 
     protected override void SolveInstance(IGH_DataAccess da)
     {

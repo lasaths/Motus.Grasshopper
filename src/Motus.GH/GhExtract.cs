@@ -11,6 +11,7 @@ using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Motus.GH;
 
@@ -63,6 +64,7 @@ internal static class GhExtract
     {
         joints = null;
         plane = null;
+        if (index < 0) return false;
         IGH_Goo? goo = null;
         if (!da.GetData(index, ref goo) || goo is null) return false;
         if (goo is JointStateGoo js && js.Value is not null) { joints = js.Value; return true; }
@@ -112,11 +114,37 @@ internal static class GhExtract
         return goals.Count > 0;
     }
 
-    public static JointState StartOrHome(IGH_DataAccess da, int index, RobotModel robot)
+    public static JointState StartOrHome(IGH_DataAccess da, int index, RobotModel robot) =>
+        StartOrHome(da, index, robot, out _);
+
+    public static JointState StartOrHome(
+        IGH_DataAccess da,
+        int index,
+        RobotModel robot,
+        out bool usedDefaultHome)
     {
+        usedDefaultHome = true;
+        if (index < 0)
+            return HomePoseLookup.HomeOrZeros(robot);
+
         JointStateGoo? goo = null;
-        if (da.GetData(index, ref goo) && goo?.Value is not null) return goo.Value;
+        if (da.GetData(index, ref goo) && goo?.Value is not null)
+        {
+            usedDefaultHome = false;
+            return goo.Value;
+        }
+
         return HomePoseLookup.HomeOrZeros(robot);
+    }
+
+    public static void RemarkIfDefaultStart(GH_Component owner, bool usedDefaultHome)
+    {
+        if (usedDefaultHome)
+        {
+            owner.AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Remark,
+                "Start not wired — using home/zeros.");
+        }
     }
 
     public static bool TryCollisionObject(IGH_Goo goo, out CollisionObject obj)
@@ -140,6 +168,9 @@ internal static class GhExtract
 
     public static CollisionInputParse ParseCollisionInput(IGH_DataAccess da, int index)
     {
+        if (index < 0)
+            return new CollisionInputParse { Wired = false };
+
         IGH_Goo? goo = null;
         if (!da.GetData(index, ref goo) || goo is null)
             return new CollisionInputParse { Wired = false };
@@ -189,17 +220,35 @@ internal static class GhExtract
     public static CollisionScene? OptionalCollisionScene(IGH_DataAccess da, int index) =>
         ParseCollisionInput(da, index).Scene;
 
+    // Cache raw Mesh/Brep → CollisionObject so Plan idle solves don't remesh every tick.
+    private static readonly ConditionalWeakTable<object, CollisionObject> GeometryCollisionCache = new();
+
     private static bool TryCollisionObjectFromGeometry(IGH_Goo goo, out CollisionObject? obj)
     {
         obj = null;
         if (goo is not IGH_GeometricGoo) return false;
 
+        object? key = null;
         if (goo is GH_Mesh ghm && ghm.Value is { IsValid: true } mesh)
-            obj = CollisionMeshBuilder.FromMesh(mesh, Plane.WorldXY, "obstacle");
+            key = mesh;
         else if (goo is GH_Brep ghb && ghb.Value is { IsValid: true } brep)
-            obj = CollisionMeshBuilder.FromBrep(brep, Plane.WorldXY, "obstacle");
+            key = brep;
+        if (key is null) return false;
 
-        return obj is not null;
+        if (GeometryCollisionCache.TryGetValue(key, out var cached))
+        {
+            obj = cached;
+            return true;
+        }
+
+        if (key is Mesh m)
+            obj = CollisionMeshBuilder.FromMesh(m, Plane.WorldXY, "obstacle");
+        else if (key is Brep b)
+            obj = CollisionMeshBuilder.FromBrep(b, Plane.WorldXY, "obstacle");
+
+        if (obj is null) return false;
+        GeometryCollisionCache.Add(key, obj);
+        return true;
     }
 
     public static PlanningContext BuildPlanningContext(
@@ -213,16 +262,19 @@ internal static class GhExtract
         var scene = collisionScene ?? OptionalCollisionScene(da, collisionIndex);
         var planningContext = PlanningContext.Create(robot, scene);
         PlanningGroupGoo? groupGoo = null;
-        if (da.GetData(groupIndex, ref groupGoo) && groupGoo?.Value is not null)
+        if (groupIndex >= 0 && da.GetData(groupIndex, ref groupGoo) && groupGoo?.Value is not null)
             planningContext = planningContext.ForGroup(groupGoo.Value);
 
-        var attachedBodies = new List<AttachedBodyGoo>();
-        if (da.GetDataList(attachIndex, attachedBodies))
+        if (attachIndex >= 0)
         {
-            foreach (var body in attachedBodies)
+            var attachedBodies = new List<AttachedBodyGoo>();
+            if (da.GetDataList(attachIndex, attachedBodies))
             {
-                if (body.Value is not null)
-                    planningContext = planningContext.Attach(body.Value);
+                foreach (var body in attachedBodies)
+                {
+                    if (body.Value is not null)
+                        planningContext = planningContext.Attach(body.Value);
+                }
             }
         }
 
@@ -480,6 +532,9 @@ internal static class GhExtract
 
     public static RrtPlanSettings ResolveRrtSettings(IGH_DataAccess da, int index, GH_Component? owner = null)
     {
+        if (index < 0)
+            return RrtPlanSettings.Defaults;
+
         var goo = default(RrtPlanSettingsGoo);
         if (!da.GetData(index, ref goo) || goo is null)
             return RrtPlanSettings.Defaults;

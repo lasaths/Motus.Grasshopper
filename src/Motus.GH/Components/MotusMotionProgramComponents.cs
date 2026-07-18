@@ -1,15 +1,21 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
+using Motus.GH.Params;
 using Motus.GH.UI;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
+using System.Windows.Forms;
 
 namespace Motus.GH.Components;
 
-public sealed class MotusMotionSegmentComponent : MotusComponentBase
+public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_VariableParameterComponent
 {
+    private const int CoreInputCount = 4;
+    private string _lastSyncedType = "PTP";
+
     public MotusMotionSegmentComponent()
         : base(
             "Motus Motion Segment",
@@ -20,38 +26,48 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddTextParameter("Type", "T", "PTP, LIN, CIRC, SET, or WAIT", GH_ParamAccess.item, "PTP");
+        p.AddTextParameter("Type", "Ty", "PTP, LIN, CIRC, SET, or WAIT", GH_ParamAccess.item, "PTP");
         p.AddGenericParameter("Goal", "G", "PTP: Joint State; LIN/CIRC: Plane (TCP pose)", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddPlaneParameter("Via", "V", "CIRC only: arc via point (TCP plane)", GH_ParamAccess.item);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Step", "St", "LIN only: TCP step size (m)", GH_ParamAccess.item, 0.005);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddIntegerParameter("Samples", "N", "CIRC only: arc samples (>= 4)", GH_ParamAccess.item, 16);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Blend", "B", "Blend radius (m, default 0)", GH_ParamAccess.item, 0);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("ToolState", "Ts", "Optional tool state goal", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("ToolMode", "Tm", "Hold, Ramp, or Instant interpolation hint (arm segments)", GH_ParamAccess.item, "Hold");
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Duration", "D", "SET/WAIT timing hint (s); SET ramp time when > 0", GH_ParamAccess.item, 0);
-        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
-        p.AddGenericParameter("Segment", "S", "Motion segment", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusSegment(), "Segment", "Seg", "Motion segment", GH_ParamAccess.item);
 
     public override void AddedToDocument(GH_Document doc)
     {
         base.AddedToDocument(doc);
-        if (Params.Input[0].SourceCount > 0) return;
         doc.ScheduleSolution(1, _ =>
         {
-            GhValueList.AttachDropdown(this, 0, new[] { "PTP", "LIN", "CIRC", "SET", "WAIT" }, "Type");
-            GhValueList.AttachDropdown(this, 7, new[] { "Hold", "Ramp", "Instant" }, "ToolMode");
+            if (Params.Input[0].SourceCount == 0)
+                GhValueList.AttachDropdown(this, 0, new[] { "PTP", "LIN", "CIRC", "SET", "WAIT" }, "Type");
+            SyncPinsForType(PeekType(), force: true);
         });
     }
+
+    protected override void BeforeSolveInstance()
+    {
+        SyncPinsForType(PeekType());
+        base.BeforeSolveInstance();
+    }
+
+    public bool CanInsertParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public IGH_Param CreateParameter(GH_ParameterSide side, int index) =>
+        new Param_Number { Name = "Step", NickName = "St", Optional = true };
+
+    public bool DestroyParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index >= CoreInputCount;
+
+    public void VariableParameterMaintenance() { }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -63,19 +79,22 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         }
 
         var blend = 0.0;
-        da.GetData(5, ref blend);
+        da.GetData(IndexOf("Blend"), ref blend);
         if (blend < 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Blend must be >= 0.");
             return;
         }
 
-        TryReadToolState(da, 6, out var toolState);
+        TryReadToolState(da, IndexOf("ToolState"), out var toolState);
         var toolMode = ToolStateMode.Hold;
-        if (!TryReadToolMode(da, 7, ref toolMode)) return;
+        var toolModeIdx = IndexOf("ToolMode");
+        if (toolModeIdx >= 0 && !TryReadToolMode(da, toolModeIdx, ref toolMode)) return;
 
         var duration = 0.0;
-        da.GetData(8, ref duration);
+        var durationIdx = IndexOf("Duration");
+        if (durationIdx >= 0)
+            da.GetData(durationIdx, ref duration);
         if (duration < 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Duration must be >= 0.");
@@ -115,9 +134,138 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         }
     }
 
+    private string PeekType()
+    {
+        var param = Params.Input[0];
+        foreach (var branch in param.VolatileData.Paths)
+        {
+            var list = param.VolatileData.get_Branch(branch);
+            if (list is null || list.Count == 0) continue;
+            if (list[0] is Grasshopper.Kernel.Types.GH_String gs && !string.IsNullOrWhiteSpace(gs.Value))
+                return gs.Value.Trim().ToUpperInvariant();
+            if (list[0] is Grasshopper.Kernel.Types.IGH_Goo goo && goo.CastTo<string>(out var s) && !string.IsNullOrWhiteSpace(s))
+                return s.Trim().ToUpperInvariant();
+        }
+
+        if (param is Param_String ps && ps.PersistentDataCount > 0)
+        {
+            var v = ps.PersistentData.get_FirstItem(false);
+            if (v is not null && !string.IsNullOrWhiteSpace(v.Value))
+                return v.Value.Trim().ToUpperInvariant();
+        }
+
+        return "PTP";
+    }
+
+    private void SyncPinsForType(string typeUpper, bool force = false)
+    {
+        if (!force && typeUpper == _lastSyncedType) return;
+        _lastSyncedType = typeUpper;
+
+        var wantStep = typeUpper == "LIN";
+        var wantVia = typeUpper == "CIRC";
+        var wantSamples = typeUpper == "CIRC";
+        var wantToolMode = typeUpper is "PTP" or "LIN" or "CIRC";
+        var wantDuration = typeUpper is "SET" or "WAIT";
+
+        SetPinPresent("Step", wantStep, () => new Param_Number
+        {
+            Name = "Step",
+            NickName = "St",
+            Description = "LIN only: TCP step size (m)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        }, setDefault: p =>
+        {
+            if (p is Param_Number pn)
+                pn.SetPersistentData(0.005);
+        });
+
+        SetPinPresent("Via", wantVia, () => new Param_Plane
+        {
+            Name = "Via",
+            NickName = "V",
+            Description = "CIRC only: arc via point (TCP plane)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        });
+
+        SetPinPresent("Samples", wantSamples, () => new Param_Integer
+        {
+            Name = "Samples",
+            NickName = "N",
+            Description = "CIRC only: arc samples (>= 4)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        }, setDefault: p =>
+        {
+            if (p is Param_Integer pi)
+                pi.SetPersistentData(16);
+        });
+
+        SetPinPresent("ToolMode", wantToolMode, () => new Param_String
+        {
+            Name = "ToolMode",
+            NickName = "Tm",
+            Description = "Hold, Ramp, or Instant interpolation hint (arm segments)",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        }, setDefault: p =>
+        {
+            if (p is Param_String ps)
+                ps.SetPersistentData("Hold");
+        });
+
+        SetPinPresent("Duration", wantDuration, () => new Param_Number
+        {
+            Name = "Duration",
+            NickName = "D",
+            Description = "SET/WAIT timing hint (s); SET ramp time when > 0",
+            Access = GH_ParamAccess.item,
+            Optional = true
+        }, setDefault: p =>
+        {
+            if (p is Param_Number pn)
+                pn.SetPersistentData(0.0);
+        });
+
+        Params.OnParametersChanged();
+
+        var toolModeIdx = IndexOf("ToolMode");
+        if (toolModeIdx >= 0 && Params.Input[toolModeIdx].SourceCount == 0 && OnPingDocument() is GH_Document doc)
+        {
+            doc.ScheduleSolution(1, _ =>
+                GhValueList.AttachDropdown(this, toolModeIdx, new[] { "Hold", "Ramp", "Instant" }, "ToolMode"));
+        }
+    }
+
+    private void SetPinPresent(string name, bool show, Func<IGH_Param> factory, Action<IGH_Param>? setDefault = null)
+    {
+        var existing = IndexOf(name);
+        if (show && existing < 0)
+        {
+            var param = factory();
+            setDefault?.Invoke(param);
+            Params.RegisterInputParam(param);
+        }
+        else if (!show && existing >= 0)
+            Params.UnregisterInputParameter(Params.Input[existing]);
+    }
+
+    private int IndexOf(string name)
+    {
+        for (var i = 0; i < Params.Input.Count; i++)
+        {
+            if (string.Equals(Params.Input[i].Name, name, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
+    }
+
     private static bool TryReadToolState(IGH_DataAccess da, int index, out EndEffectorState? state)
     {
         state = null;
+        if (index < 0) return true;
         EndEffectorStateGoo? goo = null;
         if (!da.GetData(index, ref goo) || goo?.Value is null) return true;
         state = goo.Value;
@@ -153,7 +301,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         out PtpSegment segment)
     {
         segment = null!;
-        if (!GhExtract.TryGoal(da, 1, out var joints, out _) || joints is null)
+        if (!GhExtract.TryGoal(da, IndexOf("Goal"), out var joints, out _) || joints is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "PTP requires a Joint State goal.");
             return false;
@@ -175,14 +323,16 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
         out LinSegment segment)
     {
         segment = null!;
-        if (!GhExtract.TryGoal(da, 1, out _, out var plane) || plane is null)
+        if (!GhExtract.TryGoal(da, IndexOf("Goal"), out _, out var plane) || plane is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "LIN requires a Plane goal (TCP pose).");
             return false;
         }
 
         var step = 0.005;
-        da.GetData(3, ref step);
+        var stepIdx = IndexOf("Step");
+        if (stepIdx >= 0)
+            da.GetData(stepIdx, ref step);
         if (step <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be > 0.");
@@ -206,20 +356,23 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase
     {
         segment = null!;
         var via = Plane.Unset;
-        if (!da.GetData(2, ref via) || !via.IsValid)
+        var viaIdx = IndexOf("Via");
+        if (viaIdx < 0 || !da.GetData(viaIdx, ref via) || !via.IsValid)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "CIRC requires Via and Goal planes.");
             return false;
         }
 
-        if (!GhExtract.TryGoal(da, 1, out _, out var goalPlane) || goalPlane is null)
+        if (!GhExtract.TryGoal(da, IndexOf("Goal"), out _, out var goalPlane) || goalPlane is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "CIRC requires Via and Goal planes.");
             return false;
         }
 
         var samples = 16;
-        da.GetData(4, ref samples);
+        var samplesIdx = IndexOf("Samples");
+        if (samplesIdx >= 0)
+            da.GetData(samplesIdx, ref samples);
         if (samples < 4)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Samples must be >= 4.");
@@ -287,11 +440,11 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddGenericParameter("Segments", "Seg", "List of motion segments", GH_ParamAccess.list);
-        p.AddGenericParameter("Start", "S", "Start joint state (defaults to home)", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusSegment(), "Segments", "Seg", "List of motion segments", GH_ParamAccess.list);
+        p.AddParameter(new Param_MotusJointState(), "Start", "St0", "Start joint state (defaults to home)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGenericParameter("Collision", "C", "Collision scene", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusCollisionScene(), "Collision", "C", "Collision scene", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Group", "Gr", "Optional planning group (locks non-group joints)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
@@ -301,8 +454,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Trajectory", "T", "Planned trajectory", GH_ParamAccess.item);
-        p.AddTextParameter("Status", "St", "Status message", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Planned trajectory", GH_ParamAccess.item);
+        p.AddTextParameter("Status", "Msg", "Status message", GH_ParamAccess.item);
         p.AddTextParameter("Warnings", "W", "Warnings", GH_ParamAccess.list);
     }
 
@@ -347,7 +500,9 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             return;
         }
 
-        var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel);
+        var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out var usedDefaultStart);
+        GhExtract.RemarkIfDefaultStart(this, usedDefaultStart);
+
         var collision = GhExtract.ParseCollisionInput(da, 3);
         if (collision.Error is not null)
         {
