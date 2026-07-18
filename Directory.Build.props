@@ -3,6 +3,8 @@
   <Import Project="$(MSBuildThisFileDirectory)build\MotusNetPackages.props" />
 
   <PropertyGroup>
+    <!-- Compile against an older SR so the .gha loads on Rhino 8.19+ (no 8.20 NuGet; nearest stable). -->
+    <RhinoCommonPackageVersion Condition="'$(RhinoCommonPackageVersion)' == ''">8.19.25132.1001</RhinoCommonPackageVersion>
     <Rhino8Dir Condition="'$(Rhino8Dir)' == '' and $([MSBuild]::IsOSPlatform(Windows))">C:\Program Files\Rhino 8</Rhino8Dir>
     <Rhino8App Condition="'$(Rhino8App)' == '' and $([MSBuild]::IsOSPlatform(OSX))">/Applications/Rhino 8.app</Rhino8App>
     <Rhino8CommonAssemblyPath Condition="'$(Rhino8CommonAssemblyPath)' == '' and $([MSBuild]::IsOSPlatform(Windows))">$(Rhino8Dir)/System/RhinoCommon.dll</Rhino8CommonAssemblyPath>

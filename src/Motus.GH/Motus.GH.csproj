@@ -39,20 +39,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="RhinoCommon" Version="8.32.26160.13001" Condition="'$(Rhino8CommonAssemblyPath)' == ''" ExcludeAssets="runtime" />
-    <Reference Include="RhinoCommon" Condition="Exists('$(Rhino8CommonAssemblyPath)')">
-      <HintPath>$(Rhino8CommonAssemblyPath)</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <PackageReference Include="Grasshopper" Version="8.32.26160.13001" Condition="!Exists('$(Rhino8GrasshopperDir)/Grasshopper.dll')" ExcludeAssets="runtime" />
-    <Reference Include="Grasshopper" Condition="Exists('$(Rhino8GrasshopperDir)/Grasshopper.dll')">
-      <HintPath>$(Rhino8GrasshopperDir)/Grasshopper.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="GH_IO" Condition="Exists('$(Rhino8GrasshopperDir)/GH_IO.dll')">
-      <HintPath>$(Rhino8GrasshopperDir)/GH_IO.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <!-- Always compile against the NuGet SR floor (see RhinoCommonPackageVersion). Local Rhino refs raise the floor to the installed SR. -->
+    <PackageReference Include="RhinoCommon" Version="$(RhinoCommonPackageVersion)" ExcludeAssets="runtime" />
+    <PackageReference Include="Grasshopper" Version="$(RhinoCommonPackageVersion)" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <!-- WinForms on net8.0 (Mac): McNeel template uses net48 reference assemblies until desktop ref is used -->
