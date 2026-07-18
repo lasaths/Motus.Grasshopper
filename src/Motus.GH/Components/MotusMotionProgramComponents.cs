@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Windows.Forms;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
@@ -32,8 +33,14 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             "Plan",
             "line-segments") { }
 
-    public override void CreateAttributes() =>
+    public override void CreateAttributes()
+    {
+        // Pin morph / dropdown rebuild must not dump the component to (0,0).
+        var pivot = Attributes?.Pivot;
         m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
+        if (pivot.HasValue)
+            m_attributes.Pivot = pivot.Value;
+    }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -57,7 +64,8 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         {
             _motionType = PeekType();
             SyncTypePin(_motionType);
-            SyncPinsForType(_motionType, force: true);
+            // Keep canvas Bounds/Pivot from Read — recreating attributes here zeros pivots.
+            SyncPinsForType(_motionType, force: true, recreateAttributes: false);
         });
     }
 
@@ -74,6 +82,8 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             _motionType = NormalizeType(reader.GetString("MotionType"));
         if (reader.ItemExists("ToolMode"))
             _toolMode = NormalizeToolMode(reader.GetString("ToolMode"));
+        // Morph pins to match MotionType before ParameterData hydrate (SET has fewer pins than RegisterInputParams).
+        SyncPinsForType(_motionType, force: true, recreateAttributes: false);
         return base.Read(reader);
     }
 
@@ -89,14 +99,25 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         base.BeforeSolveInstance();
     }
 
-    public bool CanInsertParameter(GH_ParameterSide side, int index) => false;
+    public bool CanInsertParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input;
 
-    public bool CanRemoveParameter(GH_ParameterSide side, int index) => false;
+    public bool CanRemoveParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index > 0;
 
-    public IGH_Param CreateParameter(GH_ParameterSide side, int index) =>
-        new Param_Number { Name = "Step", NickName = "St", Optional = true };
+    public IGH_Param CreateParameter(GH_ParameterSide side, int index)
+    {
+        foreach (var (name, factory) in ExtraPinsForType(_motionType))
+        {
+            if (IndexOf(name) < 0)
+                return factory();
+        }
 
-    public bool DestroyParameter(GH_ParameterSide side, int index) => false;
+        return new Param_Number { Name = "Step", NickName = "St", Optional = true };
+    }
+
+    public bool DestroyParameter(GH_ParameterSide side, int index) =>
+        side == GH_ParameterSide.Input && index > 0;
 
     public void VariableParameterMaintenance() { }
 
@@ -259,7 +280,55 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         ps.SetPersistentData(typeUpper);
     }
 
-    private void SyncPinsForType(string typeUpper, bool force = false)
+    private IEnumerable<(string Name, Func<IGH_Param> Factory)> ExtraPinsForType(string typeUpper)
+    {
+        typeUpper = NormalizeType(typeUpper);
+        if (typeUpper == "LIN")
+        {
+            yield return ("Step", () => new Param_Number
+            {
+                Name = "Step",
+                NickName = "St",
+                Description = "LIN only: TCP step size (m)",
+                Access = GH_ParamAccess.item,
+                Optional = true
+            });
+        }
+
+        if (typeUpper == "CIRC")
+        {
+            yield return ("Via", () => new Param_Plane
+            {
+                Name = "Via",
+                NickName = "V",
+                Description = "CIRC only: arc via point (TCP plane)",
+                Access = GH_ParamAccess.item,
+                Optional = true
+            });
+            yield return ("Samples", () => new Param_Integer
+            {
+                Name = "Samples",
+                NickName = "N",
+                Description = "CIRC only: arc samples (>= 4)",
+                Access = GH_ParamAccess.item,
+                Optional = true
+            });
+        }
+
+        if (typeUpper is "SET" or "WAIT")
+        {
+            yield return ("Duration", () => new Param_Number
+            {
+                Name = "Duration",
+                NickName = "D",
+                Description = "SET/WAIT timing hint (s); SET ramp time when > 0",
+                Access = GH_ParamAccess.item,
+                Optional = true
+            });
+        }
+    }
+
+    private void SyncPinsForType(string typeUpper, bool force = false, bool recreateAttributes = true)
     {
         typeUpper = NormalizeType(typeUpper);
         if (!force && typeUpper == _lastSyncedType) return;
@@ -361,7 +430,7 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         });
 
         Params.OnParametersChanged();
-        if (force || prevArm != isArm)
+        if (recreateAttributes && (force || prevArm != isArm))
             CreateAttributes();
     }
 

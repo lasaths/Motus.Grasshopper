@@ -111,7 +111,7 @@ const MOTUS = {
   preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
     inputs: [
       { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory from Motus Plan (list concatenates sequential goals)', optional: false, access: 1, typeId: PTYPE.trajectory },
-      { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: false, typeId: PTYPE.boolean },
+      { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: true, typeId: PTYPE.boolean },
       { name: 'Position', nick: 'P', desc: 'Optional normalized playback position 0–1 (Motus Scrub)', optional: true, typeId: PTYPE.number },
     ],
     outputs: [
@@ -586,8 +586,10 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     item('ToolMode', 'gh_string', '10', esc(options.toolMode || 'Hold')),
   ] : [];
   // Motus Preview Write() fields — required for Scrub wire restore + ShowStart.
-  const showStart = options.preview?.bools?.ShowStart === true
-    || options.bools?.ShowStart === true;
+  // Examples default SS/ShowStart on (ghost start pose); pass bools.ShowStart:false to opt out.
+  const showStart = key === 'preview'
+    ? options.preview?.bools?.ShowStart !== false && options.bools?.ShowStart !== false
+    : false;
   const previewPrefix = key === 'preview' ? [item('ColorMode', 'gh_int32', '3', '0')] : [];
   const previewSuffix = key === 'preview' ? [
     item('Position', 'gh_double', '6', '0'),
@@ -595,12 +597,17 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     item('ShowDebugOutputs', 'gh_bool', '1', 'false'),
     item('ShowStart', 'gh_bool', '1', showStart ? 'true' : 'false'),
   ] : [];
+  // Hidden = viewport preview off (IGH_PreviewObject); used for UR10e / Motus Robot in examples.
+  const hiddenFlag = options.hidden === true
+    ? [item('Hidden', 'gh_bool', '1', 'true')]
+    : [];
   // AutoPlan before Description so GH_IO custom fields load reliably on Motus Program.
   const containerItems = [
     ...previewPrefix,
     ...progFlags,
     ...planFlags.filter((f) => f.includes('AutoPlan')),
     item('Description', 'gh_string', '10', esc(spec.desc ?? spec.name)),
+    ...hiddenFlag,
     item('InstanceGuid', 'gh_guid', '9', instance),
     ...moveFlags,
     item('Name', 'gh_string', '10', spec.name),
@@ -709,12 +716,17 @@ function previewWithScrub(planX, planY, trajectoryRef, options = {}) {
     Position: [outRef(scrub.node, 'Number')],
     ...(options.inputs ?? {}),
   };
+  // Examples: Motus Preview SS (ShowStart) on by default.
+  const previewOpts = {
+    ...(options.preview ?? {}),
+    bools: { ShowStart: true, ...(options.preview?.bools ?? {}) },
+  };
   const preview = motusComponent(
     'preview',
     planX + PLAN_PREVIEW_DX,
     planY + PLAN_PREVIEW_DY,
     previewInputs,
-    options.preview ?? {},
+    previewOpts,
   );
   return { scrub, preview };
 }
@@ -1285,7 +1297,8 @@ function nativeGroup(nick, members, colourArgb) {
 }
 
 function ur10eRobot(x, y) {
-  return motusComponent('ur10e', x, y, {});
+  // Viewport preview off — Motus Preview owns the robot mesh (avoid double draw).
+  return motusComponent('ur10e', x, y, {}, { hidden: true });
 }
 
 /** 01 — quick plan: sequential joint + TCP Pose LIN + Export / TrajData / Preview (was 01+02+12). */
@@ -1425,7 +1438,7 @@ function graph03() {
     Path: [outRef(urdfFile.node, 'Path')],
     Base: [outRef(basePl.node, 'Plane')],
     Tool: [outRef(tool.node, 'Tool')],
-  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' } });
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
   const start = motusComponent('joints', 660, 240, {}, { jointValues: START_JOINTS });
   const goal = motusComponent('joints', 660, 380, {}, { jointValues: GOAL_JOINTS });
   const plan = motusComponent('plan', 880, 200, {
@@ -1433,9 +1446,7 @@ function graph03() {
     Goal: [outRef(goal.node, 'State')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(880, 200, outRef(plan.node, 'Trajectory'), {
-    preview: { bools: { ShowStart: true } },
-  });
+  const { scrub, preview } = previewWithScrub(880, 200, outRef(plan.node, 'Trajectory'));
   const exp = motusComponent('export', 880 + PLAN_PREVIEW_DX, 400, { Trajectory: [outRef(plan.node, 'Trajectory')] });
   const gPaths = nativeGroup('URDF + base', [urdfFile, basePl], GROUP_COLOUR.robot);
   const gTool = nativeGroup('Tool TCP + mesh', [
@@ -1457,66 +1468,82 @@ function graph03() {
 
 /** 04 — motion program: PTP + LIN + CIRC + SET gripper (was 08+11). */
 function graph04() {
-  // Bands: robot → moves (spaced) → program/preview right. ToolState below moves.
+  // One horizontal row per move (top→bottom = program order). Short wires only.
   const title = nativeScribble(40, -60, '04  Motion program', 28);
-  const note = nativePanel(420, -60, 'PTP → LIN → CIRC → SET. Scrub after Program Status OK.', 'Note', 300, 40);
+  const note = nativePanel(420, -60, 'One row per move → Merge → Program. Scrub when Status OK.', 'Note', 320, 40);
+
+  // Robot column (left)
   const robot = ur10eRobot(40, 40);
-  const start = motusComponent('joints', 40, 180, {}, { jointValues: MOTION_START });
+  const start = motusComponent('joints', 40, 160, {}, { jointValues: MOTION_START });
+
+  // Row 1 — PTP
   const ptpGoal = motusComponent('joints', 40, 320, {}, { jointValues: GOAL_JOINTS });
-  const stateOpen = motusComponent('toolState', 40, 980, {
+  const stateOpen = motusComponent('toolState', 220, 320, {
     Tool: [outRef(robot.node, 'Robot')],
   }, { text: { Preset: 'Open' } });
-  const stateClosed = motusComponent('toolState', 220, 980, {
-    Tool: [outRef(robot.node, 'Robot')],
-  }, { text: { Preset: 'Closed' } });
-  const segPtp = motusComponent('segment', 440, 40, {
+  const segPtp = motusComponent('segment', 420, 300, {
     Goal: [outRef(ptpGoal.node, 'State')],
     ToolState: [outRef(stateOpen.node, 'State')],
   }, { text: { Type: 'PTP' } });
-  const uz = nativeUnitZ(40, 440);
-  const ptLin = nativeConstructPoint(40, 500, [0.45, 0.15, 0.45]);
-  const plLin = nativePlane(200, 500, ptLin.node.outputs[0], uz.node.outputs[0]);
-  const segLin = motusComponent('segment', 440, 220, {
+
+  // Row 2 — LIN
+  const uz = nativeUnitZ(40, 460);
+  const ptLin = nativeConstructPoint(40, 520, [0.45, 0.15, 0.45]);
+  const plLin = nativePlane(200, 520, ptLin.node.outputs[0], uz.node.outputs[0]);
+  const segLin = motusComponent('segment', 420, 500, {
     Goal: [outRef(plLin.node, 'Plane')],
   }, { text: { Type: 'LIN' } });
-  const ptVia = nativeConstructPoint(40, 640, [0.453, 0.152, 0.45]);
-  const ptGoal = nativeConstructPoint(40, 760, [0.45, 0.154, 0.45]);
-  const plVia = nativePlane(200, 640, ptVia.node.outputs[0], uz.node.outputs[0]);
-  const plGoal = nativePlane(200, 760, ptGoal.node.outputs[0], uz.node.outputs[0]);
-  const segCirc = motusComponent('segment', 440, 420, {
+
+  // Row 3 — CIRC
+  const ptVia = nativeConstructPoint(40, 660, [0.453, 0.152, 0.45]);
+  const plVia = nativePlane(200, 660, ptVia.node.outputs[0], uz.node.outputs[0]);
+  const ptGoal = nativeConstructPoint(40, 780, [0.45, 0.154, 0.45]);
+  const plGoal = nativePlane(200, 780, ptGoal.node.outputs[0], uz.node.outputs[0]);
+  const segCirc = motusComponent('segment', 420, 700, {
     Goal: [outRef(plGoal.node, 'Plane')],
     Via: [outRef(plVia.node, 'Plane')],
   }, { text: { Type: 'CIRC' } });
-  const segSet = motusComponent('segment', 440, 640, {
+
+  // Row 4 — SET
+  const stateClosed = motusComponent('toolState', 40, 920, {
+    Tool: [outRef(robot.node, 'Robot')],
+  }, { text: { Preset: 'Closed' } });
+  const segSet = motusComponent('segment', 420, 900, {
     ToolState: [outRef(stateClosed.node, 'State')],
   }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
-  const segsMerge = nativeMerge(620, 280, [
+
+  // Sequence column
+  const segsMerge = nativeMerge(620, 520, [
     outRef(segPtp.node, 'Segment'),
     outRef(segLin.node, 'Segment'),
     outRef(segCirc.node, 'Segment'),
     outRef(segSet.node, 'Segment'),
   ]);
-  const progPlan = motusComponent('progPlan', 820, 260, {
+  const progPlan = motusComponent('progPlan', 820, 480, {
     Robot: [outRef(robot.node, 'Robot')],
     Segments: [outRef(segsMerge.node, 'Result')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(820, 260, outRef(progPlan.node, 'Trajectory'));
-  const exp = motusComponent('export', 820 + PLAN_PREVIEW_DX, 460, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
-  const gRobot = nativeGroup('Robot + start', [robot, start, ptpGoal], GROUP_COLOUR.robot);
-  const gSegs = nativeGroup('Moves (merge → Program)', [
-    stateOpen, stateClosed, segPtp,
-    ptLin, { xml: uz.xml, node: uz.node }, plLin, segLin,
-    ptVia, ptGoal, plVia, plGoal, segCirc, segSet, segsMerge,
-  ], GROUP_COLOUR.program);
-  const gOut = nativeGroup('Program + preview', [progPlan, scrub, preview, exp], GROUP_COLOUR.preview);
+  const { scrub, preview } = previewWithScrub(820, 480, outRef(progPlan.node, 'Trajectory'));
+  const exp = motusComponent('export', 820 + PLAN_PREVIEW_DX, 680, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
+
+  const gRobot = nativeGroup('Robot + start', [robot, start], GROUP_COLOUR.robot);
+  const gPtp = nativeGroup('1 PTP', [ptpGoal, stateOpen, segPtp], GROUP_COLOUR.plan);
+  const gLin = nativeGroup('2 LIN', [
+    { xml: uz.xml, node: uz.node }, ptLin, plLin, segLin,
+  ], GROUP_COLOUR.plan);
+  const gCirc = nativeGroup('3 CIRC', [ptVia, plVia, ptGoal, plGoal, segCirc], GROUP_COLOUR.plan);
+  const gSet = nativeGroup('4 SET', [stateClosed, segSet], GROUP_COLOUR.plan);
+  const gSeq = nativeGroup('Merge → Program', [segsMerge, progPlan], GROUP_COLOUR.preview);
+  const gOut = nativeGroup('Preview + export', [scrub, preview, exp], GROUP_COLOUR.preview);
+
   const flat = [
-    title, note, robot, start, ptpGoal, stateOpen, stateClosed, segPtp,
-    { xml: ptLin.xml }, { xml: uz.xml }, { xml: plLin.xml },
-    segLin,
-    { xml: ptVia.xml }, { xml: ptGoal.xml }, { xml: plVia.xml }, { xml: plGoal.xml },
-    segCirc, segSet, segsMerge, progPlan, scrub, preview, exp,
-    gRobot, gSegs, gOut,
+    title, note, robot, start,
+    ptpGoal, stateOpen, segPtp,
+    { xml: uz.xml }, { xml: ptLin.xml }, { xml: plLin.xml }, segLin,
+    { xml: ptVia.xml }, { xml: plVia.xml }, { xml: ptGoal.xml }, { xml: plGoal.xml }, segCirc,
+    stateClosed, segSet, segsMerge, progPlan, scrub, preview, exp,
+    gRobot, gPtp, gLin, gCirc, gSet, gSeq, gOut,
   ];
   flat._meta = {
     fileName: '04_motion_program.ghx',

@@ -19,12 +19,12 @@ A coloured GH Group that owns one stage of an example. Groups must not overlap. 
 _Avoid_: cluster, region (unless meaning GH Cluster); one-off group colours per example
 
 **Band layout**:
-Example stages stack as horizontal bands with a clear vertical gap; wires still run left→right inside each band. Plan/Preview sit in the rightmost band.
-_Avoid_: overlapping columns, nested groups
+Example stages stack as horizontal bands with a clear vertical gap; wires still run left→right inside each band. Plan/Preview sit in the rightmost band. Example 04 uses one band (and group) per move type in program order: PTP → LIN → CIRC → SET → Merge → Program.
+_Avoid_: overlapping columns, nested groups; one giant Moves blob with long vertical tool-state wires
 
 **Plan–Scrub–Preview**:
-Fixed relative spacing in the example generator: Scrub between Plan and Preview (not stacked above Preview). Deltas from Plan origin: Scrub (+132,+76), Preview (+373,+9).
-_Avoid_: Scrub overlapping Plan pins
+Fixed relative spacing in the example generator: Scrub between Plan and Preview (not stacked above Preview). Deltas from Plan origin: Scrub (+132,+76), Preview (+373,+9). Examples set Motus Preview `SS`/`ShowStart` on, and UR10e / Motus Robot viewport preview off (`Hidden`), so only Preview draws the robot.
+_Avoid_: Scrub overlapping Plan pins; double robot preview from UR10e + Preview
 
 **Scribble title**:
 A short canvas title for an example (mono font). Not a substitute for component tooltips.
