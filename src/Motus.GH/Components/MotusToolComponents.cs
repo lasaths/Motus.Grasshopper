@@ -23,6 +23,12 @@ public sealed class MotusToolComponent : MotusComponentBase
     public MotusToolComponent()
         : base("Motus Tool", "Tool", "Define end-effector TCP and optional gripper geometry", "Model", "wrench") { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Tl->Motus Robot Tool Tl",
+        "Wire: optional Motus Load Mesh to Geometry G",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddTextParameter("Name", "N", "Tool name", GH_ParamAccess.item, "tool");

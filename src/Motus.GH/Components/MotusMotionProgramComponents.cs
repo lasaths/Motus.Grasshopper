@@ -34,6 +34,13 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
             "Plan",
             "line-segments") { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Seg->Motus Program Segments",
+        "Note: Type dropdown morphs Goal pins before wiring Goal",
+        "Wire: PTP Goal=Joints Js; LIN/CIRC Goal=plane/TCP P",
+    ];
+
     private PointF? _canvasPivot;
 
     public override void CreateAttributes()
@@ -704,6 +711,13 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             "Plan a mixed Motus Move sequence (PTP/LIN/CIRC/SET/WAIT). Click Plan or enable Auto Plan. Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
             "Plan",
             "stack") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Robot Rb; Motus Move Seg list in program order",
+        "Next: Tr->Motus Preview / Motus Waypoints",
+        "Note: click Plan or enable Auto Plan",
+    ];
 
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(

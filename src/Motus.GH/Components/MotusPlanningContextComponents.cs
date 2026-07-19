@@ -14,6 +14,12 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
 {
     public MotusPlanningGroupComponent() : base("Motus Planning Group", "Group", "Create or pass through a planning group", "Plan", "list-plus") { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: G->Motus Plan Group (show pin)",
+        "Wire: optional ColScene SRDF Groups G",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Group", "G", "Optional existing planning group (e.g. from ColScene SRDF output)", GH_ParamAccess.item);
@@ -64,6 +70,12 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
 public sealed class MotusAttachBodyComponent : MotusComponentBase
 {
     public MotusAttachBodyComponent() : base("Motus Attach Body", "Attach", "Define an attached body in TCP-local frame", "Collision", "paperclip") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Collision * Object O",
+        "Next: A->Motus Plan Attach (show pin)",
+    ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {

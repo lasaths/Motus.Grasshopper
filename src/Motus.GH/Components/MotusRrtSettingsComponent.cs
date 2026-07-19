@@ -2,6 +2,7 @@ using Grasshopper.Kernel;
 using Motus.GH.Data;
 using Motus.GH.Planning;
 using Motus.OMPL.NET;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Motus.GH.Components;
@@ -17,6 +18,12 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
             "Tune sampling planners for joint goals with collision; wire Settings into Motus Plan",
             "Plan",
             "faders") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Settings->Motus Plan RrtSettings (show pin; joint goals + collision only)",
+        "Note: stub builds often list RrtConnect only",
+    ];
 
     public override void AddedToDocument(GH_Document doc)
     {

@@ -49,12 +49,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private KinematicsPreview.PreviewMeshCache? _meshCache;
-    private (int linkCount, string? toolName, int jointCount, int capCount) _cacheSig;
+    private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp) _cacheSig;
     private List<TrajectoryPoint> _previewPoints = [];
     private readonly Dictionary<(Color Color, float Transparency), DisplayMaterial> _materialCache = new();
 
     public MotusPreviewComponent()
         : base("Motus Preview", "Preview", "Animated FK preview; wire Motus Scrub or click Play/Stop", "Preview", "eye") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Plan Tr",
+        "Wire: optional Motus Scrub to P for scrubbing",
+        "Note: Play/Stop on component; not a controller",
+    ];
 
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, () => _playing ? "\u25A0 Stop" : "\u25B6 Play", () => _playing, TogglePlayback);
@@ -418,7 +425,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
 
-        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0);
+        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0, ctx.Tree?.Fingerprint ?? 0);
         if (_meshCache is not null && sig == _cacheSig)
         {
             _drawMeshColors = _meshCache.MeshColors ??
@@ -434,7 +441,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             ctx.Base,
             ctx.Tool,
             toolCapabilities,
-            ctx.PreviewMeshColors);
+            ctx.PreviewMeshColors,
+            ctx.Tree,
+            ctx.Model.JointNames);
         _drawMeshColors = _meshCache?.MeshColors ??
                           PreviewColorResolver.AlignMeshColors(previewGeometry, ctx.PreviewMeshColors);
     }

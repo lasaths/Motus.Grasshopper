@@ -45,6 +45,14 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         TaskCreationOptions = System.Threading.Tasks.TaskCreationOptions.LongRunning;
     }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus UR10e/Robot Rb; Goal G from Joints Js and/or planes/TCP P",
+        "Next: Tr->Motus Preview Tr; Motus Waypoints Tr",
+        "Note: click Plan or enable Auto Plan",
+        "Note: show Collision pin for obstacle-aware RRT; unwired obstacles are display-only",
+    ];
+
     internal bool AutoPlanEnabled => _autoPlan;
 
     protected override bool ShouldAbortRunningWorkers() => false;
@@ -63,8 +71,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model", GH_ParamAccess.item);
-        p.AddGenericParameter("Goal", "G", "Targets as Planes (TCP LIN) or Joint States", GH_ParamAccess.list);
+        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model from Motus UR10e or Motus Robot", GH_ParamAccess.item);
+        p.AddGenericParameter("Goal", "G", "Planes (TCP LIN) or Joint States; list = visit order", GH_ParamAccess.list);
         p.AddGenericParameter("Start", "St0", "Start as Plane (IK) or Joint State (defaults to home/zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
@@ -73,8 +81,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Planned trajectories (one per goal)", GH_ParamAccess.list);
-        p.AddTextParameter("Status", "Msg", "Status message", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Planned trajectories → Motus Preview / Motus Waypoints (one per goal)", GH_ParamAccess.list);
+        p.AddTextParameter("Status", "Msg", "Status message (read before controller handoff)", GH_ParamAccess.item);
         p.AddTextParameter("Warnings", "W", "Warnings", GH_ParamAccess.list);
     }
 

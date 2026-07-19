@@ -17,6 +17,7 @@ using Motus.GH.Urdf;
 using Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -32,6 +33,23 @@ public abstract class MotusComponentBase : GH_Component
     {
         _subcategory = sub;
         _iconName = iconName;
+    }
+
+    /// <summary>
+    /// AI wiring hints for Cassis/MCP (search keywords only — not hover tooltips).
+    /// </summary>
+    // ponytail: Keywords keep recipes out of Description tooltips; Cassis must expose Keywords.
+    protected virtual IReadOnlyList<string> AiKeywords => [];
+
+    public override IEnumerable<string> Keywords
+    {
+        get
+        {
+            foreach (var k in base.Keywords)
+                yield return k;
+            foreach (var k in AiKeywords)
+                yield return k;
+        }
     }
 
     protected override System.Drawing.Bitmap Icon =>
@@ -73,7 +91,7 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     }
 
     private static string PreviewKey(RobotModelGoo goo, string? sourcePath, bool showCollision) =>
-        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}|col:{showCollision}";
+        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}|{goo.Tree?.Fingerprint}|{goo.PreviewHome}|col:{showCollision}";
 
     public override BoundingBox ClippingBox =>
         RobotViewportPreview.ComputeBounds(
@@ -126,6 +144,12 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
 {
     public MotusRobotComponent()
         : base("Motus Robot", "Robot", "Load a robot from URDF or .xacro; optional Base and Tool overrides", "file") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Rb->Motus Plan Rb",
+        "Wire: Path to .urdf/.xacro; optional Tool Tl",
+    ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -185,6 +209,12 @@ public sealed class MotusUr10eRobotiqComponent : RobotSourceComponentBase
     public MotusUr10eRobotiqComponent()
         : base("Motus UR10e Robotiq", "UR10e", "Bundled UR10e arm with Robotiq 2F-85 gripper", "robot") { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Rb->Motus Plan Rb",
+        "Note: zero-config bundled robot; no Path pin",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p) { }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -222,6 +252,13 @@ public sealed class MotusJointStateComponent : MotusComponentBase
 
     public MotusJointStateComponent() : base("Motus Joint State", "Joints", "Create joint state (radians)", "Model", "gear-six") { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: Js->Motus Plan Goal G (list OK)",
+        "Next: Js->Motus TCP Pose Js for Cartesian goals",
+        "Note: URDF joint order; right-click J to toggle degrees",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddAngleParameter("Joints", "J", "Joint angles (right-click J input to toggle °)", GH_ParamAccess.list);
@@ -254,6 +291,12 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
 {
     public MotusTcpPoseComponent()
         : base("Motus TCP Pose", "TCP", "Forward kinematics: joint state to TCP plane in base frame", "Model", "crosshair") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Robot/UR10e Rb; Motus Joint State Js",
+        "Next: P->Motus Plan Goal G (plane = TCP LIN)",
+    ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -310,6 +353,13 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
             "path")
     { }
 
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Plan Tr (list concatenates goals)",
+        "Next: Q->MoveJ-style writers (primary handoff)",
+        "Do not: MoveL P after joint-space RRT; P is FK planes for Cartesian-intent only",
+    ];
+
     public override void AddedToDocument(GH_Document doc)
     {
         base.AddedToDocument(doc);
@@ -346,12 +396,12 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
         p.AddNumberParameter(
             "Joints",
             "Q",
-            "Joint angles (rad); one branch per waypoint, AxisCount values each",
+            "Joint tree {waypoint→q[n]} for MoveJ-style controllers (primary handoff)",
             GH_ParamAccess.tree);
         p.AddPlaneParameter(
             "Planes",
             "P",
-            "TCP planes via FK (one per waypoint). Prefer Q→MoveJ for planned joint paths; P→MoveL only for Cartesian-intent paths",
+            "FK TCP planes. Prefer Q→MoveJ for joint paths; P→MoveL only for Cartesian-intent",
             GH_ParamAccess.list);
         p.AddNumberParameter(
             "Times",
@@ -448,6 +498,12 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
 public sealed class MotusExportComponent : MotusComponentBase
 {
     public MotusExportComponent() : base("Motus Export", "Export", "Serialize a trajectory to JSON and CSV", "Export", "export") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Plan Tr",
+        "Note: script/PlanBundle handoff; controllers usually want Motus Waypoints Q",
+    ];
 
     public override void AddedToDocument(GH_Document doc)
     {
