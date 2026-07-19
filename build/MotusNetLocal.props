@@ -3,7 +3,7 @@
   <PropertyGroup>
     <MotusNetSiblingRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Motus.NET\'))</MotusNetSiblingRoot>
     <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == '' and Exists('$(MotusNetSiblingRoot)src\Motus.Core\Motus.Core.csproj')">true</UseMotusNetProjectReference>
-    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.6.9-local</MotusNetVersion>
+    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.7.0-local</MotusNetVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">

@@ -27,7 +27,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.6.9** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Sibling `../Motus.NET` → project refs ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)).
+Pinned **0.7.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Sibling `../Motus.NET` → project refs ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)).
 
 | Package | Role |
 |---------|------|

@@ -9,7 +9,7 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — built against RhinoCommon/Grasshopper `8.19.25132.1001` for SR compatibility
 - .NET 8 SDK
 
-Pins **Motus.NET 0.6.9** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
+Pins **Motus.NET 0.7.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
 
 What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [AGENTS.md](AGENTS.md).
 
@@ -44,7 +44,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 | `RhinoCommonPackageVersion` | NuGet floor for RhinoCommon/Grasshopper (default `8.19.25132.1001`) |
 | `Rhino8Dir` | Windows Rhino 8 install (launch / path hints) |
 | `Rhino8App` | macOS Rhino 8 `.app` path |
-| `MotusNetVersion` | Override NuGet pin (default `0.6.9`) |
+| `MotusNetVersion` | Override NuGet pin (default `0.7.0`) |
 
 ## First plan (3 components)
 
