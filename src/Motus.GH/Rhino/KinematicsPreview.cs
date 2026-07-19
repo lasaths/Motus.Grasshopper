@@ -352,19 +352,9 @@ public static class KinematicsPreview
         {
             var tree = _tree!;
             var q = _driverQ!;
-            var jaw = Robotiq2F85Kinematics.DriverAngleRadians(jawWidthMeters, _toolOpenWidth);
             for (var di = 0; di < tree.DriverCount; di++)
             {
                 var j = tree.Joints[tree.DriverJointIndices[di]];
-                if (j.Name.Contains("robotiq", StringComparison.OrdinalIgnoreCase)
-                    && j.Name.Contains("left_knuckle", StringComparison.OrdinalIgnoreCase)
-                    && !j.Name.Contains("finger", StringComparison.OrdinalIgnoreCase)
-                    && !j.Name.Contains("inner", StringComparison.OrdinalIgnoreCase))
-                {
-                    q[di] = jaw;
-                    continue;
-                }
-
                 var ai = -1;
                 if (_armJointNames is not null)
                 {
@@ -382,6 +372,17 @@ public static class KinematicsPreview
                     ai = di; // serial tree / same order
                 q[di] = ai >= 0 && ai < armQ.Count ? armQ[ai] : 0;
             }
+
+            // Wave 2: Motus.NET ToolParameterBinding owns width→driver (mimic owns fingers).
+            var driverNames = new string[tree.DriverCount];
+            for (var di = 0; di < tree.DriverCount; di++)
+                driverNames[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
+            ToolParameterBinding.ApplyInto(
+                ToolCapabilities.Robotiq2F85,
+                new EndEffectorState(new Dictionary<string, double> { ["width"] = jawWidthMeters }),
+                driverNames,
+                q.AsSpan(),
+                _toolOpenWidth);
 
             _treeFk!.ComputeLinkTransformsInto(q, _treeMats!);
         }

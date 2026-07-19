@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Wave 0 — documentation / Gate 0 API freeze intent). No `MobilityModel` implementation in this wave.
+Accepted (Waves 0–2). Wave 2 adds `ToolParameterBinding`, `JointTableTrees`, and `MobilityModel.HolonomicSE2` in Motus.NET.
 
 ## Context
 
@@ -48,14 +48,11 @@ URDF load and GH **Motus Serial Chain** both build the **same** Motus.NET `Kinem
 | Scrub frames | No `DuplicateMesh` per frame |
 | Reach grids | No joint-product reach grids |
 
-### Mobility (hooks only)
+### Mobility (Wave 2)
 
-This ADR records future hooks — prose only in Wave 0:
-
-- `MobilityModel` (empty type / SE(2) / climbing later)
-- Base-frame swap for mobile or climbing setups
-
-**Do not implement** `MobilityModel` (even an empty stub) in Wave 0.
+- `MobilityModel.HolonomicSE2` / `Fixed` in Motus.NET — base frame from (x, y, yaw)
+- GH **Motus Joint Table** optional `Mob` pin; Serial Chain keeps plane `Base`
+- Nonholonomic / climbing base swaps remain later
 
 ### Out of scope
 

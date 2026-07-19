@@ -189,6 +189,11 @@ internal static class PlanExecutor
 
         goalProgress?.Invoke(0.25);
 
+        // Wave 2: N-DOF / rail plane goals use numerical IK (not UR 6R analytic).
+        var ndofNote = session.Preset.AxisCount != 6
+            ? $"Plane goal on {session.Preset.AxisCount}-axis robot uses numerical IK (not UR analytic)."
+            : null;
+
         var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
         ICollisionChecker? checker = needsCollision ? sharedChecker : null;
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
@@ -205,6 +210,7 @@ internal static class PlanExecutor
         {
             goalProgress?.Invoke(1.0);
             var linWarnings = linResult.Warnings.ToList();
+            if (ndofNote is not null) linWarnings.Add(ndofNote);
             if (!request.CollisionInputWired)
                 linWarnings.Add("Collision input unwired — plane goal planned in free space (LIN only).");
             else if (needsCollision)
@@ -232,7 +238,15 @@ internal static class PlanExecutor
                 rrtOpts,
                 linResult.Errors);
             if (rrtFallback.Success)
+            {
                 goalProgress?.Invoke(1.0);
+                if (ndofNote is not null && !rrtFallback.Warnings.Contains(ndofNote))
+                {
+                    var w = rrtFallback.Warnings.ToList();
+                    w.Add(ndofNote);
+                    return PlanningResult.Succeeded(rrtFallback.Trajectory!, w);
+                }
+            }
             return rrtFallback;
         }
 
@@ -265,6 +279,7 @@ internal static class PlanExecutor
 
         goalProgress?.Invoke(1.0);
         var warnings = jointResult.Warnings.ToList();
+        if (ndofNote is not null) warnings.Add(ndofNote);
         warnings.Add("TCP-LIN failed; used joint-space path to the Cartesian goal instead (not a straight TCP line).");
         return PlanningResult.Succeeded(jointResult.Trajectory!, warnings);
     }

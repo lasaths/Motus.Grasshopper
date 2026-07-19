@@ -36,6 +36,9 @@ const MOTUS_COMPONENTS = new Map([
   ['b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', 'Motus Tool'],
   ['c3d4e5f6-a7b8-4901-c234-56789abcdef2', 'Motus Load Mesh'],
   ['11d59b15-ffe2-488e-83b8-52eddf772025', 'Motus RRT Settings'],
+  ['c8f2a1d0-4e3b-4a7c-9d1e-2b6f8a0c5e71', 'Motus Serial Chain'],
+  ['a1b2c3d4-5e6f-7081-92a3-b4c5d6e7f809', 'Motus Reach Samples'],
+  ['d9e3b2c1-5f4a-4b8d-9e2f-3c7a1d0b6f82', 'Motus Joint Table'],
 ]);
 
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';
