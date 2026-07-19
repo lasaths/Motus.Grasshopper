@@ -9,8 +9,8 @@
     <Compile Include="..\..\src\Motus.GH\Rhino\**\*.cs" Link="Rhino\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Motus.GH\Planning\PlanPhaseTimings.cs" Link="Planning\PlanPhaseTimings.cs" />
     <Compile Include="..\..\src\Motus.GH\Planning\LinCollisionRrtFallback.cs" Link="Planning\LinCollisionRrtFallback.cs" />
-    <!-- Must include runtime: compile+copy NuGet RhinoCommon (install path is a different SR and breaks load). -->
-    <PackageReference Include="RhinoCommon" Version="$(RhinoCommonPackageVersion)" />
+    <!-- Compile-only: NuGet RhinoCommon is a ref assembly. RhinoBootstrap loads the install DLL at runtime. -->
+    <PackageReference Include="RhinoCommon" Version="$(RhinoCommonPackageVersion)" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\robots\ur10e_robotiq\**\*" Link="resources\robots\ur10e_robotiq\%(RecursiveDir)%(Filename)%(Extension)">
