@@ -138,6 +138,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 |-----------|-------|
 | Motus Collision Sphere | Center point + radius (m) |
 | Motus Collision Box | Plane + half extents (m) |
+| Motus Collision Plane | Infinite half-space floor/wall; **+Z free**. Default **Offset** 2 mm sinks the plane. Scene auto-ignores proximal `link:-1..1` vs planes (robot+floor at origin). |
 | Motus Collision Mesh | Mesh or Brep obstacle (meters); plane bakes world pose into vertices |
 | Motus Collision Scene | Merge collision objects; optional **Srdf** path for allowed pairs (`link:N` or obstacle names). Outputs scene plus optional SRDF groups/end-effector map. |
 

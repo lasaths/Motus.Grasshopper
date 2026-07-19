@@ -69,6 +69,81 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("c1a2b3c4-d5e6-4789-a012-3456789abcde");
 }
 
+public sealed class MotusCollisionPlaneComponent : MotusComponentBase
+{
+    private List<Mesh> _previewMeshes = new();
+    private string? _previewKey;
+
+    public MotusCollisionPlaneComponent()
+        : base("Motus Collision Plane", "ColPlane", "Infinite floor/wall half-space (meters)", "Collision", "intersect-square") { }
+
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddPlaneParameter("Plane", "P", "Plane; +Z is free side (floor = WorldXY)", GH_ParamAccess.item, Plane.WorldXY);
+        // ponytail: 2mm sink so co-located robot base does not rest exactly on the plane
+        p.AddNumberParameter("Offset", "O", "Shift plane along −Z (m); default sinks floor slightly", GH_ParamAccess.item, 0.002);
+        p.AddNumberParameter("Preview", "Sz", "Preview half-extent (m, visual only)", GH_ParamAccess.item, 1.0);
+        p.AddTextParameter("Name", "N", "Obstacle name", GH_ParamAccess.item, "floor");
+    }
+
+    protected override void RegisterOutputParams(GH_OutputParamManager p) =>
+        p.AddGenericParameter("Object", "O", "Collision object", GH_ParamAccess.item);
+
+    protected override void SolveInstance(IGH_DataAccess da)
+    {
+        var pl = Plane.WorldXY;
+        var offset = 0.002;
+        var previewSize = 1.0;
+        var name = "floor";
+        if (!da.GetData(0, ref pl)) return;
+        da.GetData(1, ref offset);
+        da.GetData(2, ref previewSize);
+        da.GetData(3, ref name);
+        name = CollisionNameUtil.Resolve(this, 3, name, "floor");
+
+        if (!pl.ZAxis.Unitize())
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Plane normal is invalid.");
+            return;
+        }
+
+        var posePlane = pl;
+        if (Math.Abs(offset) > 1e-12)
+            posePlane = new Plane(pl.Origin - pl.ZAxis * offset, pl.XAxis, pl.YAxis);
+
+        var obj = CollisionObject.Plane(name, FrameConversion.FromPlane(posePlane));
+        var key = $"{posePlane.OriginX:R},{posePlane.OriginY:R},{posePlane.OriginZ:R}|{offset:R}|{previewSize:R}|{name}|{obj.ContentHash}";
+        if (_previewKey != key)
+        {
+            _previewKey = key;
+            var half = Math.Max(0.05, Math.Abs(previewSize));
+            var box = new Box(
+                posePlane,
+                new Interval(-half, half),
+                new Interval(-half, half),
+                new Interval(-0.002, 0));
+            _previewMeshes = [Mesh.CreateFromBox(box, 1, 1, 1)];
+        }
+
+        if (pl.Origin.DistanceTo(Point3d.Origin) < 1e-6 && Math.Abs(offset) < 1e-9)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                "Plane at world origin with Offset=0: base link is auto-ignored, but distal geometry may still clip. Prefer Offset>0 for floors.");
+        }
+
+        da.SetData(0, new CollisionObjectGoo(obj));
+    }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
+
+    public override Guid ComponentGuid => new Guid("7187b866-deb7-47b7-86a7-44b368af21d1");
+}
+
 public sealed class MotusCollisionBoxComponent : MotusComponentBase
 {
     private List<Mesh> _previewMeshes = new();

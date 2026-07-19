@@ -424,6 +424,17 @@ public static class KinematicsPreview
                 return CapsuleMesh(obj);
             case CollisionShape.Mesh:
                 return RawMesh(obj.MeshVertices, obj.MeshIndices);
+            case CollisionShape.Plane:
+            {
+                // Motus local +X = free normal; ToPlane recovers Rhino Z = Motus X.
+                var pl = FrameConversion.ToPlane(obj.Pose);
+                var slab = new Box(
+                    pl,
+                    new Interval(-1, 1),
+                    new Interval(-1, 1),
+                    new Interval(-0.002, 0));
+                return Mesh.CreateFromBox(slab, 1, 1, 1);
+            }
             default:
                 return null;
         }
