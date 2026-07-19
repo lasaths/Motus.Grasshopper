@@ -1,15 +1,13 @@
 #!/usr/bin/env pwsh
-# Minimal Motus.NET 0.7.0 publish — no GH bump (already released).
-# Run from Motus.Grasshopper root with sibling ../Motus.NET and your git auth.
+# Minimal Motus.NET 0.7.0 publish — Grasshopper 0.7.0 already released.
+# Run from anywhere; uses sibling ../Motus.NET next to Motus.Grasshopper.
 $ErrorActionPreference = "Stop"
-$net = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\Motus.NET"))
+$ghRoot = Split-Path $PSScriptRoot -Parent
+$net = [IO.Path]::GetFullPath((Join-Path $ghRoot "..\Motus.NET"))
 if (-not (Test-Path (Join-Path $net "Motus.NET.slnx"))) {
-    $net = [IO.Path]::GetFullPath((Join-Path (Split-Path $PSScriptRoot -Parent) "..\Motus.NET"))
+    throw "Motus.NET not found at $net — clone it next to Motus.Grasshopper."
 }
-if (-not (Test-Path (Join-Path $net "Motus.NET.slnx"))) {
-    throw "Motus.NET not found next to Motus.Grasshopper"
-}
-$patchDir = Join-Path (Split-Path $PSScriptRoot -Parent) "patches\motus-net-0.7.0"
+$patchDir = Join-Path $ghRoot "patches\motus-net-0.7.0"
 $branch = "cursor/cell-aware-0.7-96a0"
 
 Set-Location $net
@@ -17,10 +15,9 @@ git fetch origin master
 git checkout master
 git pull origin master
 
-$has = git branch --list $branch
-if ($has) { git checkout $branch } else { git checkout -b $branch }
+if (git branch --list $branch) { git checkout $branch } else { git checkout -b $branch }
 
-$log = git log --oneline -30
+$log = git log --oneline -30 | Out-String
 if ($log -notmatch "Resolve plane merge conflicts and cut 0\.7\.0") {
     Get-ChildItem $patchDir -Filter "*.patch" | Sort-Object Name | ForEach-Object {
         git am $_.FullName
@@ -38,7 +35,7 @@ Write-Host "Merge $branch into master on GitHub, then press Enter."
 git checkout master
 git pull origin master
 $ver = (Get-Content motus-net.version -Raw).Trim()
-if ($ver -ne "0.7.0") { throw "master motus-net.version is '$ver' — merge first" }
+if ($ver -ne "0.7.0") { throw "master motus-net.version is '$ver' — merge the PR first" }
 
 if (-not (git tag -l "v0.7.0")) {
     git tag v0.7.0
