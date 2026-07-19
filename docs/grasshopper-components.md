@@ -68,7 +68,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.
 - The planner is inferred from the inputs:
-  - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). Falls back to joint-space path if LIN fails but goal IK succeeded.
+  - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). If LIN fails on collision with a wired scene → IK goal + RRT (uses Motus RRT Settings when present). Other LIN failures still fall back to joint-linear when goal IK succeeds.
   - `Goal` is joints + `Collision` wired → sampling planner via **Motus RRT Settings** → `Plan.RrtSettings` (default RRT-Connect).
   - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (registry `ShortName`, e.g. `RrtConnect`; unavailable planners hidden), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
   - `Goal` is joints, no collision → joint-linear plan.
@@ -89,18 +89,20 @@ The white **TCP Path** in **Motus Preview** is an FK polyline between trajectory
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Red sphere visible, plan ignores it | `ColScene` not wired to **Motus Plan** `Collision` | `ColSphere` → `ColScene` → `Plan.Collision` |
-| Plane goal, Status Success, TCP pierces sphere | LIN validates **link capsules**, not the TCP point | Expected for plane goals; use **Joint State** goals + `Collision` for RRT avoidance (`examples/02_collision_srdf.ghx`) |
-| Warning: joint-space fallback | LIN failed; path is not a straight TCP line | Use a nearer `Start`, a **Joint State** goal, or accept the joint-linear path |
+| Plane goal, Status Success, TCP pierces sphere | LIN validates **link capsules**, not the TCP point | Expected when envelopes clear; if LIN collides Motus Plan RRTs instead (warning on Status) |
+| Warning: RRT joint path / joint-space fallback | LIN blocked or failed; path is not a straight TCP line | Accept the joint path, or use a nearer `Start` / clearer corridor for LIN |
 | Joint goal, no avoidance | No collision scene on `Plan` | Wire `ColScene`; without it joint goals use joint-linear interpolation only |
 
 **Goal type vs collision behavior**
 
 | Goal | `Collision` wired | Planner behavior |
 |------|-------------------|------------------|
-| Plane | Yes | TCP-linear (LIN) + validate against obstacles (no rerouting) |
+| Plane | Yes | TCP-linear (LIN) + validate; on collision failure → IK goal + RRT (not a straight TCP line) |
 | Plane | No | TCP-linear in free space |
 | Joint State | Yes | RRT-Connect (tries to avoid obstacles) |
 | Joint State | No | Joint-linear interpolation |
+
+`Motus Program` LIN segments still validate-only (no RRT reroute).
 
 Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments that fail link-envelope checks (orange viewport lines). Red `Invalid` output remains joint/velocity/acceleration limits only.
 

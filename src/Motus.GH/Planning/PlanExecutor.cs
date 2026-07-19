@@ -213,7 +213,28 @@ internal static class PlanExecutor
         }
 
         if (linResult.Errors.Any(e => e.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
-            return linResult;
+        {
+            if (!needsCollision || sharedChecker is null)
+                return linResult;
+
+            if (cancellationToken.IsCancellationRequested)
+                return PlanningResult.Failed(new[] { "Planning cancelled." });
+
+            goalProgress?.Invoke(0.5);
+            var rrtOpts = request.RrtSettings.ToOptions(cancellationToken, goalProgress);
+            var rrtFallback = LinCollisionRrtFallback.Plan(
+                session,
+                ctx.Chain,
+                start,
+                goal,
+                planningContext,
+                sharedChecker,
+                rrtOpts,
+                linResult.Errors);
+            if (rrtFallback.Success)
+                goalProgress?.Invoke(1.0);
+            return rrtFallback;
+        }
 
         if (cancellationToken.IsCancellationRequested)
             return PlanningResult.Failed(new[] { "Planning cancelled." });

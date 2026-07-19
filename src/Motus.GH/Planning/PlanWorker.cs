@@ -165,7 +165,13 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
 
             foreach (var result in Result.Results)
             {
-                if (result.Success && result.Warnings.Any(w => w.Contains("TCP-LIN failed; used joint-space", StringComparison.OrdinalIgnoreCase)))
+                if (!result.Success) continue;
+                if (result.Warnings.Any(w => w.Contains("RRT joint path", StringComparison.OrdinalIgnoreCase)))
+                {
+                    RuntimeRemarks.Add("TCP-LIN blocked by collision; RRT joint path used — TCP path is not straight.");
+                    break;
+                }
+                if (result.Warnings.Any(w => w.Contains("TCP-LIN failed; used joint-space", StringComparison.OrdinalIgnoreCase)))
                 {
                     RuntimeRemarks.Add("TCP-LIN failed; joint-space fallback used — TCP path is not straight.");
                     break;
