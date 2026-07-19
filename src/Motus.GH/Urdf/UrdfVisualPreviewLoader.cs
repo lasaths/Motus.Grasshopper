@@ -1,4 +1,5 @@
 using Motus.GH.Loaders;
+using Motus.GH.Rhino;
 using Motus.Core;
 using Motus.Geometry;
 using System.Collections.Concurrent;
@@ -11,6 +12,8 @@ namespace Motus.GH.Urdf;
 internal static class UrdfVisualPreviewLoader
 {
     private const int MaxDaeNodeDepth = 64;
+    /// <summary>Preview geometry tagged for TreeFK placement by LinkName (must match KinematicsPreview.TreeLinkIndex).</summary>
+    internal const int TreeLinkIndex = -2;
 
     private static readonly ConcurrentDictionary<string, RobotPreviewVisuals?> VisualCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -68,7 +71,8 @@ internal static class UrdfVisualPreviewLoader
 
         AppendBasePedestalVisual(linksByName, urdfDirectory, materials, build);
 
-        AppendFixedDescendantVisuals(
+        // Fixed + revolute tip descendants (e.g. Robotiq): link-local meshes; TreeFK poses them.
+        AppendTipDescendantVisuals(
             robotRoot, linksByName, tipLink, chainLinkNames.Count - 1,
             ComposeFixedForwardChain(robotRoot, chainLinkNames[^1], tipLink),
             urdfDirectory, materials, build);
@@ -548,7 +552,14 @@ internal static class UrdfVisualPreviewLoader
         }
     }
 
-    private static void AppendFixedDescendantVisuals(
+    private static bool IsTipVisualJoint(string? type) =>
+        type is null
+        || type.Equals("fixed", StringComparison.OrdinalIgnoreCase)
+        || type.Equals("revolute", StringComparison.OrdinalIgnoreCase)
+        || type.Equals("continuous", StringComparison.OrdinalIgnoreCase)
+        || type.Equals("prismatic", StringComparison.OrdinalIgnoreCase);
+
+    private static void AppendTipDescendantVisuals(
         XElement robotRoot,
         Dictionary<string, XElement> linksByName,
         string parentLink,
@@ -560,7 +571,7 @@ internal static class UrdfVisualPreviewLoader
     {
         foreach (var joint in robotRoot.Elements("joint"))
         {
-            if (!string.Equals(joint.Attribute("type")?.Value, "fixed", StringComparison.OrdinalIgnoreCase))
+            if (!IsTipVisualJoint(joint.Attribute("type")?.Value))
                 continue;
             if (!string.Equals(joint.Element("parent")?.Attribute("link")?.Value, parentLink, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -587,13 +598,15 @@ internal static class UrdfVisualPreviewLoader
                     if (geom is null) continue;
                     var name = $"{child}_vis{visualIdx++}";
                     var urdfColor = UrdfMaterialParser.ResolveVisualColor(visual, materials);
+                    // Link-local mesh (visual origin only). TreeFK / tip bake places the link;
+                    // LinkIndex = TreeLinkIndex means resolve by LinkName in PreviewMeshCache.
                     foreach (var (obj, meshColor) in ParseVisualGeometries(
-                                 name, ComposeFrames(childToWorld, visPose), geom, urdfDirectory))
-                        build.Add(new LinkCollisionGeometry(attachLinkIndex, child, obj), meshColor ?? urdfColor);
+                                 name, visPose, geom, urdfDirectory))
+                        build.Add(new LinkCollisionGeometry(TreeLinkIndex, child, obj), meshColor ?? urdfColor);
                 }
             }
 
-            AppendFixedDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, materials, build);
+            AppendTipDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, materials, build);
         }
     }
 

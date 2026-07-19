@@ -92,8 +92,8 @@ const MOTUS = {
   plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 74, h: 104,
     desc: 'Quick planner: plane=LIN, joint=joint-linear/RRT. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.',
     inputs: [
-      { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false, typeId: PTYPE.robot },
-      { name: 'Goal', nick: 'G', desc: 'Targets as Planes (TCP LIN) or Joint States', optional: false, access: 1, typeId: PTYPE.generic },
+      { name: 'Robot', nick: 'Rb', desc: 'Robot model from Motus UR10e or Motus Robot', optional: false, typeId: PTYPE.robot },
+      { name: 'Goal', nick: 'G', desc: 'Planes (TCP LIN) or Joint States; list = visit order', optional: false, access: 1, typeId: PTYPE.generic },
       { name: 'Start', nick: 'St0', desc: 'Start as Plane (IK) or Joint State (defaults to home/zeros)', optional: true, typeId: PTYPE.generic },
       { name: 'Step', nick: 'St', desc: 'Plane goals only: TCP LIN step size (m)', optional: true, number: 0.005, typeId: PTYPE.number },
     ],
@@ -104,8 +104,8 @@ const MOTUS = {
       { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true, typeId: PTYPE.generic },
     ],
     outputs: [
-      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories', access: 1, typeId: PTYPE.trajectory },
-      { name: 'Status', nick: 'Msg', desc: 'Planning status', typeId: PTYPE.string },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories → Motus Preview / Motus Waypoints (one per goal)', access: 1, typeId: PTYPE.trajectory },
+      { name: 'Status', nick: 'Msg', desc: 'Status message (read before controller handoff)', typeId: PTYPE.string },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings', access: 1, typeId: PTYPE.string },
     ] },
   preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
@@ -138,8 +138,8 @@ const MOTUS = {
       { name: 'Decimate', nick: 'D', desc: 'Keep every Nth waypoint (always keeps first and last). 1 = all', optional: true, number: 1, typeId: PTYPE.integer },
     ],
     outputs: [
-      { name: 'Joints', nick: 'Q', desc: 'Joint angles (rad); one branch per waypoint', access: 1 },
-      { name: 'Planes', nick: 'P', desc: 'TCP plane per waypoint' },
+      { name: 'Joints', nick: 'Q', desc: 'Joint tree {waypoint→q[n]} for MoveJ-style controllers (primary handoff)', access: 1 },
+      { name: 'Planes', nick: 'P', desc: 'FK TCP planes. Prefer Q→MoveJ for joint paths; P→MoveL only for Cartesian-intent' },
       { name: 'Times', nick: 'Tm', desc: 'Waypoint times (seconds)' },
     ] },
   rrtSettings: { guid: '11d59b15-ffe2-488e-83b8-52eddf772025', name: 'Motus RRT Settings', nick: 'RrtSet', w: 74, h: 104,

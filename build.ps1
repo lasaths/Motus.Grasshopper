@@ -3,19 +3,44 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
+    [ValidateSet("net8.0-windows", "net8.0")]
+    [string]$Tfm = "net8.0-windows",
     [switch]$Zip,
-    [switch]$Install
+    [switch]$Yak,
+    [switch]$Install,
+    # Force Motus.NET NuGet packages (recommended for Yak/release zips when ../Motus.NET exists).
+    [switch]$UseNuGet
 )
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$out = Join-Path $root "src\Motus.GH\bin\$Configuration\net8.0-windows"
+$out = Join-Path $root "src\Motus.GH\bin\$Configuration\$Tfm"
+
+function Stage-MotusPlugin([string]$StageDir, [string]$OutputDir = $out) {
+    if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
+    Copy-Item "$OutputDir\Motus.GH.gha" $StageDir
+    Copy-Item "$OutputDir\Motus.*.dll" $StageDir
+    $stageResources = Join-Path $StageDir "resources"
+    New-Item -ItemType Directory -Force -Path $stageResources | Out-Null
+    Copy-Item "$OutputDir\resources\*" $stageResources -Recurse
+}
+
+$msbuildProps = @()
+if ($UseNuGet -or $Yak) {
+    $msbuildProps += "-p:UseMotusNetProjectReference=false"
+    Write-Host "Using Motus.NET from NuGet (not sibling project refs)."
+}
 
 Write-Host "Building Motus.Grasshopper ($Configuration)..."
-dotnet restore (Join-Path $root "Motus.Grasshopper.slnx") --force-evaluate
+dotnet restore (Join-Path $root "Motus.Grasshopper.slnx") --force-evaluate @msbuildProps
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration --no-restore
+dotnet build (Join-Path $root "Motus.Grasshopper.slnx") -c $Configuration --no-restore @msbuildProps
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+if (-not (Test-Path "$out\Motus.GH.gha")) {
+    throw "Missing $out\Motus.GH.gha — build the $Tfm target first."
+}
 
 Write-Host "`nBuilt: $out\Motus.GH.gha"
 Write-Host "Copy to Grasshopper Libraries\Motus:"
@@ -37,20 +62,70 @@ if ($Install) {
     Write-Host "Restart Grasshopper (or Rhino) to load Motus."
 }
 
-if ($Zip) {
+if ($Zip -or $Yak) {
     $dist = Join-Path $root "dist"
     New-Item -ItemType Directory -Force -Path $dist | Out-Null
+}
+
+if ($Zip) {
     $zipPath = Join-Path $dist "Motus.Grasshopper-$Configuration.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     $stage = Join-Path $env:TEMP "motus-gh-stage"
-    if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-    New-Item -ItemType Directory -Force -Path $stage | Out-Null
-    Copy-Item "$out\Motus.GH.gha" $stage
-    Copy-Item "$out\Motus.*.dll" $stage
-    $stageResources = Join-Path $stage "resources"
-    New-Item -ItemType Directory -Force -Path $stageResources | Out-Null
-    Copy-Item "$out\resources\*" $stageResources -Recurse
+    Stage-MotusPlugin $stage
     Compress-Archive -Path "$stage\*" -DestinationPath $zipPath
     Remove-Item $stage -Recurse -Force
     Write-Host "`nRelease zip: $zipPath"
+}
+
+if ($Yak) {
+    $cli = Get-Command yak -ErrorAction SilentlyContinue
+    if ($cli) {
+        $yakExe = $cli.Source
+    } else {
+        $yakExe = Join-Path ${env:ProgramFiles} "Rhino 8\System\Yak.exe"
+        if (-not (Test-Path $yakExe)) { throw "yak not found — install Rhino 8 or add Yak.exe to PATH." }
+    }
+
+    $csproj = Get-Content (Join-Path $root "src\Motus.GH\Motus.GH.csproj") -Raw
+    if ($csproj -notmatch "<Version>([^<]+)</Version>") { throw "Could not read <Version> from Motus.GH.csproj" }
+    $version = $Matches[1]
+
+    # Rhino 8 multi-target: Windows loads net8.0-windows, Mac loads net8.0.
+    # manifest.yml must sit above the TFM folders (McNeel yak anatomy).
+    $stage = Join-Path $env:TEMP "motus-yak-stage"
+    if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+    $binRoot = Join-Path $root "src\Motus.GH\bin\$Configuration"
+    foreach ($tfmDir in @("net8.0-windows", "net8.0")) {
+        $src = Join-Path $binRoot $tfmDir
+        if (-not (Test-Path "$src\Motus.GH.gha")) {
+            throw "Missing $src\Motus.GH.gha — both TFMs required for cross-platform Yak."
+        }
+        Stage-MotusPlugin (Join-Path $stage $tfmDir) $src
+    }
+
+    Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE") -Force
+    $manifest = Get-Content (Join-Path $root "packaging\yak\manifest.yml") -Raw
+    $manifest = $manifest -replace "(?m)^version:\s*.*$", "version: $version"
+    Set-Content -Path (Join-Path $stage "manifest.yml") -Value $manifest -NoNewline
+
+    Push-Location $stage
+    try {
+        & $yakExe build
+        if ($LASTEXITCODE -ne 0) { throw "yak build failed ($LASTEXITCODE)" }
+        Get-ChildItem *.yak | ForEach-Object {
+            $dest = Join-Path $dist $_.Name
+            Move-Item $_.FullName $dest -Force
+            Write-Host "`nYak package (Win+Mac): $dest"
+            Write-Host "  net8.0-windows/ → Rhino 8 Windows"
+            Write-Host "  net8.0/         → Rhino 8 macOS"
+            Write-Host "Push when ready: yak push `"$dest`""
+            Write-Host "Test server:     yak push --source https://test.yak.rhino3d.com `"$dest`""
+        }
+    }
+    finally {
+        Pop-Location
+        Remove-Item $stage -Recurse -Force
+    }
 }

@@ -8,6 +8,8 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 |-----------|--------|---------|
 | Motus UR10e Robotiq | *(none)* | Bundled UR10e + Robotiq 2F-85 robot |
 | Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
+| Motus Serial Chain | **Lengths** list (m); optional Base, Home `Q`, **Rail**, Types, TCP | Same Robot goo — parametric serial / rail+arm (concept sizing) |
+| Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
 | Motus Tool | Name, TCP plane (flange frame), optional gripper Mesh/Brep | Tool definition |
 | Motus Tool State | Optional Tool; Preset (Open/Closed/Custom); Width, Speed, Force | End-effector state (`EndEffectorStateGoo`) |
 | Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
@@ -130,7 +132,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 
 `Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present.
 
-`Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Gripper mesh preview morphs with jaw width when tool capabilities are present.
+`Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Robotiq finger meshes follow URDF/PickNik joint kinematics from jaw width (not a flattened scale).
 
 **Motus Export** JSON includes `contractVersion`, `diagnostics`, optional `provenance`, and tool metadata (`toolState`, `toolCapabilities`) for downstream consumers.
 

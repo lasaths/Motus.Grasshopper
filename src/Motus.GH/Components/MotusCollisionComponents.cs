@@ -9,6 +9,7 @@ using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Motus.GH.Components;
@@ -33,6 +34,12 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
     private string? _previewKey;
 
     public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision", "sphere") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: O->Motus Collision Scene Objects O",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddPointParameter("Center", "C", "Sphere center", GH_ParamAccess.item, Point3d.Origin);
@@ -76,6 +83,11 @@ public sealed class MotusCollisionPlaneComponent : MotusComponentBase
 
     public MotusCollisionPlaneComponent()
         : base("Motus Collision Plane", "ColPlane", "Infinite floor/wall half-space (meters)", "Collision", "intersect-square") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: O->Motus Collision Scene Objects O",
+    ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -150,6 +162,12 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
     private string? _previewKey;
 
     public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: O->Motus Collision Scene Objects O",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddPlaneParameter("Plane", "P", "Box center/orientation", GH_ParamAccess.item, Plane.WorldXY);
@@ -198,6 +216,14 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
     private List<string>? _srdfEndEffectors;
 
     public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs/groups", "Collision", "circles-three-plus") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Wire: Motus Collision Box/Sphere/Plane/Mesh O list",
+        "Next: Sc->Motus Plan Collision (show Collision pin first)",
+        "Note: without Collision on Plan, red obstacles are display-only",
+    ];
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);

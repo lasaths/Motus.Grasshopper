@@ -6,6 +6,7 @@ using Motus.GH.Data;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Motus.GH.Components;
@@ -16,6 +17,11 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
     private string? _previewKey;
 
     public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "polygon") { }
+
+    protected override IReadOnlyList<string> AiKeywords { get; } =
+    [
+        "Next: O->Motus Collision Scene Objects O",
+    ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {

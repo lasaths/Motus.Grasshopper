@@ -7,7 +7,7 @@ Notes for AI agents and maintainers working on Motus.Grasshopper.
 - **Planning / preview / export only** — no RTDE, no live robot commands, no project reference to UR.RTDE.Grasshopper.
 - Execution (Session, Run, waits, ServoJ) lives in downstream control plugins.
 - User component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md).
-- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — GH robots are URDF-only (path or bundled UR10e Robotiq).
+- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET.
 
 ## Layout
 

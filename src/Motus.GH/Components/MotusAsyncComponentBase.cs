@@ -1,5 +1,6 @@
 using Motus.GH.Async;
 using Motus.GH.Resources;
+using System.Collections.Generic;
 using System.Drawing;
 
 namespace Motus.GH.Components;
@@ -14,6 +15,23 @@ public abstract class MotusAsyncComponentBase : GH_AsyncComponent
     {
         _subcategory = sub;
         _iconName = iconName;
+    }
+
+    /// <summary>
+    /// AI wiring hints for Cassis/MCP (search keywords only — not hover tooltips).
+    /// </summary>
+    // ponytail: Keywords keep recipes out of Description tooltips; Cassis must expose Keywords.
+    protected virtual IReadOnlyList<string> AiKeywords => [];
+
+    public override IEnumerable<string> Keywords
+    {
+        get
+        {
+            foreach (var k in base.Keywords)
+                yield return k;
+            foreach (var k in AiKeywords)
+                yield return k;
+        }
     }
 
     protected override Bitmap Icon =>
