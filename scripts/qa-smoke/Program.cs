@@ -245,6 +245,75 @@ for (var i = 1; i < rrtPts.Count; i++)
 }
 Ok("RRT Connect avoids obstacle with RobotMeshCollisionChecker");
 
+// Motus Plan 0.7: plane-goal LIN blocked by collision → IK + RRT fallback
+// (RhinoCommon runtime required — run locally with Rhino NuGet restore)
+{
+    var dodgeStart = new JointState(new[] { 0.0, -1.5708, 1.5708, -1.5708, 0.0, 0.0 });
+    var dodgeGoalJoints = new JointState(new[] { 1.2, -1.0, 1.2, -1.6, -1.5708, 0.0 });
+    var dodgeFk = KinematicsResolver.CreateFkSolver(urPreset, urChain);
+    var dodgeCartGoal = new CartesianPose(dodgeFk.ComputeTcp(dodgeGoalJoints, urPreset.BaseFrame, urPreset.ToolFrame).Tcp);
+    var dodgeChecker = CollisionCheckerFactory.Create(urRobot)
+        ?? throw new InvalidOperationException("Expected collision checker for UR robot");
+    var freeLin = new CartesianLinearPathPlanner(urPreset, urChain).PlanToResult(
+        new CartesianPlanningRequest(urRobot, dodgeStart, dodgeCartGoal, new PlanningOptions { MaxJointStepRadians = 0.05 }),
+        new CartesianLinOptions(StepMeters: 0.005, ContinueOnIkFailure: false));
+    if (!freeLin.Success) Fail($"Free LIN for RRT-fallback setup: {string.Join("; ", freeLin.Errors)}");
+    CollisionScene? dodgeScene = null;
+    foreach (var pt in freeLin.Trajectory!.Points)
+    {
+        var origins = dodgeFk.ComputeLinkOrigins(pt.JointState.Positions, urPreset.BaseFrame.Frame);
+        foreach (var origin in origins)
+        {
+            var trial = new CollisionScene(new[] { CollisionObject.Sphere("linBlock", origin, 0.12) });
+            if (dodgeChecker.IsCollisionFree(dodgeStart, trial)
+                && dodgeChecker.IsCollisionFree(dodgeGoalJoints, trial)
+                && !dodgeChecker.IsCollisionFree(pt.JointState, trial))
+            {
+                dodgeScene = trial;
+                break;
+            }
+        }
+        if (dodgeScene is not null) break;
+    }
+    if (dodgeScene is null) Fail("Could not place a LIN-blocking sphere that clears start/goal");
+    var dodgeCtx = PlanningContext.Create(urRobot, dodgeScene);
+    var dodgeOpts = dodgeCtx.ToPlanningOptions(new PlanningOptions
+    {
+        MaxJointStepRadians = 0.05,
+        CollisionChecker = dodgeChecker,
+        CollisionScene = dodgeScene
+    });
+    var blockedLin = new CartesianLinearPathPlanner(urPreset, urChain).PlanToResult(
+        new CartesianPlanningRequest(urRobot, dodgeStart, dodgeCartGoal, dodgeOpts, dodgeScene),
+        new CartesianLinOptions(StepMeters: 0.005, ContinueOnIkFailure: false));
+    if (blockedLin.Success)
+        Fail("Expected TCP-LIN to fail against mid-path sphere before RRT fallback");
+    if (!blockedLin.Errors.Any(e => e.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
+        Fail($"Expected LIN collision error before RRT fallback; got: {string.Join("; ", blockedLin.Errors)}");
+    var fallback = LinCollisionRrtFallback.Plan(
+        urRobot,
+        urChain,
+        dodgeStart,
+        dodgeCartGoal,
+        dodgeCtx,
+        dodgeChecker,
+        new SamplingPlannerOptions
+        {
+            PlannerId = SamplingPlannerId.RrtConnect,
+            MaxIterations = 12000,
+            MaxPlanTimeSeconds = 30,
+            RandomSeed = 42,
+            GoalBias = 0.08,
+            StepRadians = 0.12
+        },
+        blockedLin.Errors);
+    if (!fallback.Success)
+        Fail($"LIN collision RRT fallback: {string.Join("; ", fallback.Errors)}");
+    if (!fallback.Warnings.Any(w => w.Contains("RRT joint path", StringComparison.OrdinalIgnoreCase)))
+        Fail($"RRT fallback should warn with '{LinCollisionRrtFallback.Warning}'");
+    Ok("Plane-goal LIN collision falls back to RRT joint path with warning");
+}
+
 // Attach body + RRT (PlanningContext attach path)
 var workpiece = CollisionObject.Sphere("workpiece", Frame.Identity, 0.005);
 var attachStart = start;
