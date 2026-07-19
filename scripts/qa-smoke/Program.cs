@@ -261,8 +261,8 @@ Ok("RRT Connect avoids obstacle with RobotMeshCollisionChecker");
     CollisionScene? dodgeScene = null;
     foreach (var pt in freeLin.Trajectory!.Points)
     {
-        var origins = dodgeFk.ComputeLinkOrigins(pt.JointState.Positions, urPreset.BaseFrame.Frame);
-        foreach (var origin in origins)
+        var linkOrigins = dodgeFk.ComputeLinkOrigins(pt.JointState.Positions, urPreset.BaseFrame.Frame);
+        foreach (var origin in linkOrigins)
         {
             var trial = new CollisionScene(new[] { CollisionObject.Sphere("linBlock", origin, 0.12) });
             if (dodgeChecker.IsCollisionFree(dodgeStart, trial)
@@ -588,6 +588,37 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     Ok("Tool GeometryForState scales collision with width parameter");
 }
 
+// Robotiq: width→driver q + TreeFK mimic moves finger tip (no GH hardcode FK)
+{
+    if (Math.Abs(Robotiq2F85Kinematics.DriverAngleRadians(0.085)) > 1e-9)
+        Fail("Open width should map to driver angle 0");
+    if (Math.Abs(Robotiq2F85Kinematics.DriverAngleRadians(0.0) - 0.8) > 1e-9)
+        Fail("Closed width should map to driver angle 0.8");
+    var tree = UrdfRobotLoader.LoadTree(Path.Combine(resources, "ur10e_robotiq", "ur10e_robotiq.urdf"));
+    var treeFk = new TreeForwardKinematics(tree);
+    var mats = new double[tree.Links.Count][];
+    for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+    var qOpen = new double[tree.DriverCount];
+    var qClosed = (double[])qOpen.Clone();
+    for (var i = 0; i < tree.DriverCount; i++)
+    {
+        var name = tree.Joints[tree.DriverJointIndices[i]].Name;
+        if (name.Contains("robotiq_left_knuckle", StringComparison.OrdinalIgnoreCase)
+            && !name.Contains("finger", StringComparison.OrdinalIgnoreCase)
+            && !name.Contains("inner", StringComparison.OrdinalIgnoreCase))
+            qClosed[i] = 0.8;
+    }
+    var tip = tree.IndexOfLink("robotiq_left_finger_tip");
+    treeFk.ComputeLinkTransformsInto(qOpen, mats);
+    var x0 = mats[tip][3];
+    var y0 = mats[tip][7];
+    treeFk.ComputeLinkTransformsInto(qClosed, mats);
+    var dist = Math.Sqrt(Math.Pow(mats[tip][3] - x0, 2) + Math.Pow(mats[tip][7] - y0, 2));
+    if (dist < 1e-3)
+        Fail($"TreeFK mimic should move finger tip on close; dist={dist}");
+    Ok("Robotiq 2F-85 TreeFK + mimic moves finger tip from width driver q");
+}
+
 // Motion program collision path (LIN segment validation)
 var linOnlyStart = new JointState(new[] { 0.0, -0.5, 1.0, -1.0, 0.0, 0.0 });
 var linOnlyPose = motionFk.ComputeTcp(linOnlyStart, urPreset.BaseFrame, urPreset.ToolFrame);
@@ -733,6 +764,34 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
             Fail($"Example02 joint fallback: {string.Join("; ", ex02Joint.Errors)}");
     }
     Ok("Example02 cartesian planning (UR10e Robotiq home -> GOAL_JOINTS TCP) succeeds");
+}
+
+// Wave 1: Serial Chain tree + capped reach sampling (Motus.NET Gate 0 surface)
+{
+    var lengths = new[] { 0.15, 0.35, 0.30, 0.20, 0.15, 0.10 };
+    var tree = SerialKinematicTrees.FromLengths(lengths, rail: false, name: "qa_serial");
+    if (tree.DriverCount != 6)
+        Fail($"SerialKinematicTrees expected 6 drivers, got {tree.DriverCount}");
+    var tip = tree.ExtractSerialTip("base_link", "tool0");
+    if (tip.Chain.Joints.Length != 6)
+        Fail("Serial tip extract should yield 6 joints");
+    var treeFk = new TreeForwardKinematics(tree);
+    var mats = new double[tree.Links.Count][];
+    for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+    treeFk.ComputeLinkTransformsInto(new double[6], mats);
+    var lower = new double[6];
+    var upper = new double[6];
+    for (var i = 0; i < 6; i++)
+    {
+        var j = tree.Joints[tree.DriverJointIndices[i]];
+        lower[i] = j.Lower;
+        upper[i] = j.Upper;
+    }
+    var xyz = new double[64 * 3];
+    var n = ReachSampling.FillTcpPointsInto(treeFk, tree.IndexOfLink("tool0"), lower, upper, xyz, 64);
+    if (n != 64)
+        Fail($"ReachSampling expected 64 samples, got {n}");
+    Ok("SerialKinematicTrees + TreeFK + ReachSampling (64 TCP samples)");
 }
 
 Console.WriteLine("\nAll automated QA checks passed.");

@@ -7,6 +7,9 @@ namespace Motus.GH.Rhino;
 
 public static class KinematicsPreview
 {
+    /// <summary>LinkIndex sentinel: place mesh via TreeFK + LinkName (see UrdfVisualPreviewLoader.TreeLinkIndex).</summary>
+    public const int TreeLinkIndex = -2;
+
     public static IFkSolver? TryFk(RobotModel robot, SerialJointChain? chain = null)
     {
         try
@@ -97,14 +100,20 @@ public static class KinematicsPreview
             yield return toolMesh;
     }
 
-    /// <summary>Cache link-local meshes; per-frame cost is duplicate + transform only.</summary>
+    /// <summary>Cache link-local meshes; per-frame cost is transform only (TreeFK Into when tree present).</summary>
     public sealed class PreviewMeshCache
     {
         private readonly IFkSolver _fk;
+        private readonly TreeForwardKinematics? _treeFk;
+        private readonly KinematicTree? _tree;
+        private readonly double[]? _driverQ;
+        private readonly double[][]? _treeMats;
+        private readonly int[]? _treeLinkOfMesh; // per _links entry, or -1
+        private readonly IReadOnlyList<string>? _armJointNames;
         private readonly BaseFrame _baseF;
         private readonly ToolFrame _toolF;
         private readonly double[] _baseMatrix;
-        private readonly List<(int LinkIndex, Mesh Mesh)> _links;
+        private readonly List<(int LinkIndex, string LinkName, Mesh Mesh)> _links;
         private readonly Mesh? _toolMesh;
         private readonly CollisionObject? _toolGeometry;
         private readonly bool _toolInFlangeFrame;
@@ -117,9 +126,15 @@ public static class KinematicsPreview
 
         private PreviewMeshCache(
             IFkSolver fk,
+            TreeForwardKinematics? treeFk,
+            KinematicTree? tree,
+            double[]? driverQ,
+            double[][]? treeMats,
+            int[]? treeLinkOfMesh,
+            IReadOnlyList<string>? armJointNames,
             BaseFrame baseF,
             ToolFrame toolF,
-            List<(int, Mesh)> links,
+            List<(int, string, Mesh)> links,
             Mesh? toolMesh,
             CollisionObject? toolGeometry,
             bool toolInFlangeFrame,
@@ -128,6 +143,12 @@ public static class KinematicsPreview
             IReadOnlyList<Color?> meshColors)
         {
             _fk = fk;
+            _treeFk = treeFk;
+            _tree = tree;
+            _driverQ = driverQ;
+            _treeMats = treeMats;
+            _treeLinkOfMesh = treeLinkOfMesh;
+            _armJointNames = armJointNames;
             _baseF = baseF;
             _toolF = toolF;
             _baseMatrix = Transforms.FromFrame(baseF.Frame);
@@ -136,7 +157,7 @@ public static class KinematicsPreview
             _toolGeometry = toolGeometry;
             _toolInFlangeFrame = toolInFlangeFrame;
             _toolAttachOffset = toolAttachOffset;
-            _toolOpenWidth = toolOpenWidth > 1e-9 ? toolOpenWidth : 0.085;
+            _toolOpenWidth = toolOpenWidth > 1e-9 ? toolOpenWidth : Robotiq2F85Kinematics.OpenWidthMeters;
             _meshColors = meshColors;
         }
 
@@ -147,24 +168,25 @@ public static class KinematicsPreview
             BaseFrame? baseFrame = null,
             ToolFrame? toolFrame = null,
             ToolCapabilities? toolCapabilities = null,
-            Color?[]? urdfColors = null)
+            Color?[]? urdfColors = null,
+            KinematicTree? tree = null,
+            IReadOnlyList<string>? armJointNames = null)
         {
             if (TryFk(robot, chain) is not { } fk) return null;
 
             var baseF = baseFrame ?? robot.Preset.BaseFrame;
             var toolF = toolFrame ?? robot.Preset.ToolFrame;
-            var links = new List<(int, Mesh)>();
+            var links = new List<(int, string, Mesh)>();
             var meshColors = new List<Color?>();
 
             for (var gi = 0; gi < geometry.Links.Count; gi++)
             {
                 var link = geometry.Links[gi];
                 if (link.LocalGeometry.Shape != CollisionShape.Mesh) continue;
-                // Bake visual origin once; FK link transform is applied per frame in UpdateMeshes.
                 var baked = TransformCollision(link.LocalGeometry, Transforms.Identity());
                 if (ToRhinoMesh(baked) is { } mesh)
                 {
-                    links.Add((link.LinkIndex, mesh));
+                    links.Add((link.LinkIndex, link.LinkName, mesh));
                     meshColors.Add(urdfColors is not null && gi < urdfColors.Length ? urdfColors[gi] : null);
                 }
             }
@@ -179,10 +201,35 @@ public static class KinematicsPreview
             if (toolMesh is not null)
                 meshColors.Add(null);
 
+            TreeForwardKinematics? treeFk = null;
+            double[]? driverQ = null;
+            double[][]? treeMats = null;
+            int[]? treeLinkOfMesh = null;
+            if (tree is not null)
+            {
+                treeFk = new TreeForwardKinematics(tree);
+                driverQ = new double[tree.DriverCount];
+                treeMats = new double[tree.Links.Count][];
+                for (var i = 0; i < treeMats.Length; i++)
+                    treeMats[i] = new double[16];
+                treeLinkOfMesh = new int[links.Count];
+                for (var i = 0; i < links.Count; i++)
+                {
+                    try { treeLinkOfMesh[i] = tree.IndexOfLink(links[i].Item2); }
+                    catch { treeLinkOfMesh[i] = -1; }
+                }
+            }
+
             return links.Count == 0 && toolMesh is null
                 ? null
                 : new PreviewMeshCache(
                     fk,
+                    treeFk,
+                    tree,
+                    driverQ,
+                    treeMats,
+                    treeLinkOfMesh,
+                    armJointNames ?? robot.JointNames,
                     baseF,
                     toolF,
                     links,
@@ -191,7 +238,8 @@ public static class KinematicsPreview
                     geometry.ToolGeometryInFlangeFrame,
                     geometry.ToolGeometryAttachOffset,
                     toolCapabilities?.Parameters.FirstOrDefault(p =>
-                        string.Equals(p.Name, "width", StringComparison.Ordinal))?.Max ?? 0.085,
+                        string.Equals(p.Name, "width", StringComparison.Ordinal))?.Max
+                        ?? Robotiq2F85Kinematics.OpenWidthMeters,
                     meshColors);
         }
 
@@ -206,7 +254,7 @@ public static class KinematicsPreview
         private List<Mesh> CreateFrameMeshList()
         {
             var list = new List<Mesh>(_links.Count + (_toolMesh is null ? 0 : 1));
-            foreach (var (_, localMesh) in _links)
+            foreach (var (_, _, localMesh) in _links)
                 list.Add(localMesh.DuplicateMesh());
             if (_toolMesh is not null)
                 list.Add(_toolMesh.DuplicateMesh());
@@ -231,14 +279,36 @@ public static class KinematicsPreview
                 ? new List<Mesh>(meshCount)
                 : target;
 
+            var jawWidth = _toolOpenWidth;
+            if (toolState?.Values.TryGetValue("width", out var width) == true)
+                jawWidth = width;
+
+            if (_treeFk is not null && _tree is not null && _driverQ is not null && _treeMats is not null)
+                FillTreeDriverQ(state.Positions, jawWidth);
+
             for (var i = 0; i < _links.Count; i++)
             {
-                var (linkIndex, localMesh) = _links[i];
-                var worldM = linkIndex < 0
-                    ? _baseMatrix
-                    : linkIndex < linkMats.Count
-                        ? Transforms.Multiply(_baseMatrix, linkMats[linkIndex])
-                        : _baseMatrix;
+                var (linkIndex, _, localMesh) = _links[i];
+                double[] worldM;
+                if (_treeFk is not null && _treeMats is not null && _treeLinkOfMesh is not null
+                    && _treeLinkOfMesh[i] >= 0)
+                {
+                    worldM = Transforms.Multiply(_baseMatrix, _treeMats[_treeLinkOfMesh[i]]);
+                }
+                else if (linkIndex == TreeLinkIndex)
+                {
+                    // Tree missing: leave at base (should not happen for bundled URDF)
+                    worldM = _baseMatrix;
+                }
+                else
+                {
+                    worldM = linkIndex < 0
+                        ? _baseMatrix
+                        : linkIndex < linkMats.Count
+                            ? Transforms.Multiply(_baseMatrix, linkMats[linkIndex])
+                            : _baseMatrix;
+                }
+
                 if (duplicate)
                 {
                     var mesh = localMesh.DuplicateMesh();
@@ -254,17 +324,14 @@ public static class KinematicsPreview
 
             if (_toolMesh is not null)
             {
+                // Fallback only when no URDF gripper links exist (planning hull viewport).
                 var toolM = ToolCollisionPlacement.WorldMatrix(
                     _fk, state.Positions, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
                 var toolXform = ToRhinoTransform(toolM);
-                var widthRatio = 1.0;
-                if (toolState?.Values.TryGetValue("width", out var width) == true)
-                    widthRatio = Math.Clamp(width / _toolOpenWidth, 0.05, 1.0);
 
                 if (duplicate)
                 {
                     var mesh = _toolMesh.DuplicateMesh();
-                    ApplyWidthMorph(mesh, widthRatio);
                     mesh.Transform(toolXform);
                     results.Add(mesh);
                 }
@@ -272,7 +339,6 @@ public static class KinematicsPreview
                 {
                     var toolIndex = _links.Count;
                     target[toolIndex].CopyFrom(_toolMesh);
-                    ApplyWidthMorph(target[toolIndex], widthRatio);
                     target[toolIndex].Transform(toolXform);
                 }
             }
@@ -282,15 +348,42 @@ public static class KinematicsPreview
             return results;
         }
 
-        private static void ApplyWidthMorph(Mesh mesh, double widthRatio)
+        private void FillTreeDriverQ(IReadOnlyList<double> armQ, double jawWidthMeters)
         {
-            if (Math.Abs(widthRatio - 1.0) < 1e-6) return;
-            for (var i = 0; i < mesh.Vertices.Count; i++)
+            var tree = _tree!;
+            var q = _driverQ!;
+            var jaw = Robotiq2F85Kinematics.DriverAngleRadians(jawWidthMeters, _toolOpenWidth);
+            for (var di = 0; di < tree.DriverCount; di++)
             {
-                var v = mesh.Vertices[i];
-                mesh.Vertices.SetVertex(i, v.X * widthRatio, v.Y, v.Z);
+                var j = tree.Joints[tree.DriverJointIndices[di]];
+                if (j.Name.Contains("robotiq", StringComparison.OrdinalIgnoreCase)
+                    && j.Name.Contains("left_knuckle", StringComparison.OrdinalIgnoreCase)
+                    && !j.Name.Contains("finger", StringComparison.OrdinalIgnoreCase)
+                    && !j.Name.Contains("inner", StringComparison.OrdinalIgnoreCase))
+                {
+                    q[di] = jaw;
+                    continue;
+                }
+
+                var ai = -1;
+                if (_armJointNames is not null)
+                {
+                    for (var k = 0; k < _armJointNames.Count; k++)
+                    {
+                        if (string.Equals(_armJointNames[k], j.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ai = k;
+                            break;
+                        }
+                    }
+                }
+
+                if (ai < 0)
+                    ai = di; // serial tree / same order
+                q[di] = ai >= 0 && ai < armQ.Count ? armQ[ai] : 0;
             }
-            mesh.Normals.ComputeNormals();
+
+            _treeFk!.ComputeLinkTransformsInto(q, _treeMats!);
         }
 
         private static Transform ToRhinoTransform(double[] m) => new()

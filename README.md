@@ -21,6 +21,7 @@ What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Sett
 ./build.ps1                      # Release
 ./build.ps1 -Configuration Debug
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
+./build.ps1 -Yak                 # dist/motus-*-rh8_*-any.yak (Win+Mac TFMs; needs Rhino 8 yak)
 ./build.ps1 -Install             # %APPDATA%\Grasshopper\Libraries\Motus
 ```
 

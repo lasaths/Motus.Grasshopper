@@ -50,7 +50,7 @@ const T_RIGHT_TIP = mul(T_RIGHT_FINGER, tfRpy([-0.00563134, 0, 0.04718515], [0, 
 
 const IDENTITY = tfRpy([0, 0, 0], [0, 0, 0]);
 
-// Joint origins from PickNik robotiq_2f_85_macro.urdf.xacro (closed pose, q=0).
+// Joint origins from PickNik robotiq_2f_85_macro.urdf.xacro (open pose, driver q=0).
 const PARTS_IN_TOOL0 = [
   { file: 'ur_to_robotiq_adapter.stl', tf: IDENTITY },
   { file: 'robotiq_base.stl', tf: T_ADAPTER_BASE },
@@ -77,17 +77,41 @@ const GRIPPER_LINKS = [
   { name: 'robotiq_right_finger_tip', mesh: 'right_finger_tip' },
 ];
 
+// PickNik 2F-85: driver = robotiq_left_knuckle (q 0..0.8). Mimics keep the parallelogram.
 const GRIPPER_JOINTS = [
-  { name: 'tool0_robotiq_adapter', parent: 'tool0', child: 'robotiq_adapter', xyz: '0 0 0', rpy: '0 0 0' },
-  { name: 'robotiq_adapter_base', parent: 'robotiq_adapter', child: 'robotiq_base', xyz: '0 0 0.011', rpy: '0 0 0' },
-  { name: 'robotiq_base_left_knuckle', parent: 'robotiq_base', child: 'robotiq_left_knuckle', xyz: '0.03060114 0 0.05490452', rpy: '0 0 0' },
-  { name: 'robotiq_base_right_knuckle', parent: 'robotiq_base', child: 'robotiq_right_knuckle', xyz: '-0.03060114 0 0.05490452', rpy: '0 0 0' },
-  { name: 'robotiq_left_knuckle_finger', parent: 'robotiq_left_knuckle', child: 'robotiq_left_finger', xyz: '0.03152616 0 -0.00376347', rpy: '0 0 0' },
-  { name: 'robotiq_right_knuckle_finger', parent: 'robotiq_right_knuckle', child: 'robotiq_right_finger', xyz: '-0.03152616 0 -0.00376347', rpy: '0 0 0' },
-  { name: 'robotiq_base_left_inner', parent: 'robotiq_base', child: 'robotiq_left_inner_knuckle', xyz: '0.0127 0 0.06142', rpy: '0 0 0' },
-  { name: 'robotiq_base_right_inner', parent: 'robotiq_base', child: 'robotiq_right_inner_knuckle', xyz: '-0.0127 0 0.06142', rpy: '0 0 0' },
-  { name: 'robotiq_left_finger_tip', parent: 'robotiq_left_finger', child: 'robotiq_left_finger_tip', xyz: '0.00563134 0 0.04718515', rpy: '0 0 0' },
-  { name: 'robotiq_right_finger_tip', parent: 'robotiq_right_finger', child: 'robotiq_right_finger_tip', xyz: '-0.00563134 0 0.04718515', rpy: '0 0 0' },
+  { name: 'tool0_robotiq_adapter', type: 'fixed', parent: 'tool0', child: 'robotiq_adapter', xyz: '0 0 0', rpy: '0 0 0' },
+  { name: 'robotiq_adapter_base', type: 'fixed', parent: 'robotiq_adapter', child: 'robotiq_base', xyz: '0 0 0.011', rpy: '0 0 0' },
+  {
+    name: 'robotiq_left_knuckle', type: 'revolute', parent: 'robotiq_base', child: 'robotiq_left_knuckle',
+    xyz: '0.03060114 0 0.05490452', rpy: '0 0 0', axis: '0 -1 0', lower: '0', upper: '0.8',
+  },
+  {
+    name: 'robotiq_right_knuckle', type: 'revolute', parent: 'robotiq_base', child: 'robotiq_right_knuckle',
+    xyz: '-0.03060114 0 0.05490452', rpy: '0 0 0', axis: '0 -1 0', lower: '-0.8', upper: '0',
+    mimic: { joint: 'robotiq_left_knuckle', multiplier: '-1' },
+  },
+  { name: 'robotiq_left_knuckle_finger', type: 'fixed', parent: 'robotiq_left_knuckle', child: 'robotiq_left_finger', xyz: '0.03152616 0 -0.00376347', rpy: '0 0 0' },
+  { name: 'robotiq_right_knuckle_finger', type: 'fixed', parent: 'robotiq_right_knuckle', child: 'robotiq_right_finger', xyz: '-0.03152616 0 -0.00376347', rpy: '0 0 0' },
+  {
+    name: 'robotiq_left_inner_knuckle', type: 'revolute', parent: 'robotiq_base', child: 'robotiq_left_inner_knuckle',
+    xyz: '0.0127 0 0.06142', rpy: '0 0 0', axis: '0 -1 0', lower: '0', upper: '0.8',
+    mimic: { joint: 'robotiq_left_knuckle', multiplier: '1' },
+  },
+  {
+    name: 'robotiq_right_inner_knuckle', type: 'revolute', parent: 'robotiq_base', child: 'robotiq_right_inner_knuckle',
+    xyz: '-0.0127 0 0.06142', rpy: '0 0 0', axis: '0 -1 0', lower: '-0.8', upper: '0',
+    mimic: { joint: 'robotiq_left_knuckle', multiplier: '-1' },
+  },
+  {
+    name: 'robotiq_left_finger_tip', type: 'revolute', parent: 'robotiq_left_finger', child: 'robotiq_left_finger_tip',
+    xyz: '0.00563134 0 0.04718515', rpy: '0 0 0', axis: '0 -1 0', lower: '-0.8', upper: '0',
+    mimic: { joint: 'robotiq_left_knuckle', multiplier: '-1' },
+  },
+  {
+    name: 'robotiq_right_finger_tip', type: 'revolute', parent: 'robotiq_right_finger', child: 'robotiq_right_finger_tip',
+    xyz: '-0.00563134 0 0.04718515', rpy: '0 0 0', axis: '0 -1 0', lower: '0', upper: '0.8',
+    mimic: { joint: 'robotiq_left_knuckle', multiplier: '1' },
+  },
 ];
 
 export async function fetchRobotiqAssets() {
@@ -152,10 +176,22 @@ function patchUrdfGripper(urdfPath) {
     </visual>
   </link>`).join('\n');
 
-  const jointXml = GRIPPER_JOINTS.map(({ name, parent, child, xyz, rpy }) => `  <joint name="${name}" type="fixed">
+  const jointXml = GRIPPER_JOINTS.map((j) => {
+    const { name, type, parent, child, xyz, rpy } = j;
+    let body = `  <joint name="${name}" type="${type}">
     <parent link="${parent}"/><child link="${child}"/>
-    <origin xyz="${xyz}" rpy="${rpy}"/>
-  </joint>`).join('\n');
+    <origin xyz="${xyz}" rpy="${rpy}"/>`;
+    if (type === 'revolute') {
+      body += `
+    <axis xyz="${j.axis}"/>
+    <limit lower="${j.lower}" upper="${j.upper}" velocity="0.5" effort="50"/>`;
+      if (j.mimic)
+        body += `
+    <mimic joint="${j.mimic.joint}" multiplier="${j.mimic.multiplier}"/>`;
+    }
+    return `${body}
+  </joint>`;
+  }).join('\n');
 
   const gripperBlock = `${linkXml}\n\n${jointXml}`;
 
@@ -165,7 +201,7 @@ function patchUrdfGripper(urdfPath) {
 
   // Idempotent: strip prior per-link gripper before re-inserting.
   src = src.replace(/  <link name="robotiq_[^"]+">[\s\S]*?<\/link>\r?\n/g, '');
-  src = src.replace(/  <joint name="(?:tool0_robotiq_adapter|robotiq_[^"]+)" type="fixed">[\s\S]*?<\/joint>\r?\n/g, '');
+  src = src.replace(/  <joint name="(?:tool0_robotiq_adapter|robotiq_[^"]+)" type="(?:fixed|revolute)">[\s\S]*?<\/joint>\r?\n/g, '');
 
   const marker = '  <link name="tool0"/>';
   if (!src.includes(marker)) throw new Error(`tool0 link not found in ${urdfPath}`);

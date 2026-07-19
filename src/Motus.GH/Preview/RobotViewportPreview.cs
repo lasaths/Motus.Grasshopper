@@ -33,14 +33,15 @@ internal static class RobotViewportPreview
 
     goo.EnsureChainFromPath(sourcePath);
     goo.UrdfSourcePath ??= sourcePath;
-    var home = HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
+    var home = goo.PreviewHome ?? HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
     var ctx = RobotContext.FromGoo(goo);
     var geometry = RobotPreviewGeometry.ForViewport(
         ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
         goo.Tool);
     if (geometry is not null &&
         KinematicsPreview.PreviewMeshCache.TryCreate(
-            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities) is { } cache)
+            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities,
+            goo.PreviewMeshColors, goo.Tree, goo.Value?.JointNames) is { } cache)
     {
       meshes = cache.MeshesFor(home);
     }
@@ -62,12 +63,14 @@ internal static class RobotViewportPreview
 
     goo.EnsureChainFromPath(sourcePath);
     goo.UrdfSourcePath ??= sourcePath;
-    var home = HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
+    var home = goo.PreviewHome ?? HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
     var ctx = RobotContext.FromGoo(goo);
     var geometry = ctx.EffectiveModel.CollisionModel;
     if (geometry is null) return [];
 
-    if (KinematicsPreview.PreviewMeshCache.TryCreate(ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool) is { } cache)
+    if (KinematicsPreview.PreviewMeshCache.TryCreate(
+            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool,
+            tree: goo.Tree, armJointNames: goo.Value?.JointNames) is { } cache)
       return cache.MeshesFor(home);
 
     return KinematicsPreview

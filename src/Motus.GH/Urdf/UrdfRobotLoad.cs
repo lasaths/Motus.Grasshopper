@@ -14,6 +14,7 @@ internal static class UrdfRobotLoad
     private sealed record CachedRobot(
         RobotModel Model,
         SerialJointChain Chain,
+        KinematicTree? Tree,
         RobotCollisionModel? PreviewGeometry,
         Color?[]? PreviewMeshColors,
         string UrdfSourcePath);
@@ -72,6 +73,7 @@ internal static class UrdfRobotLoad
         return new CachedRobot(
             urdf.ToModel(),
             urdf.Chain,
+            urdf.Tree,
             previewVisuals?.Geometry,
             previewVisuals?.MeshColors,
             path);
@@ -82,6 +84,7 @@ internal static class UrdfRobotLoad
         var goo = new RobotModelGoo(cached.Model)
         {
             Chain = cached.Chain,
+            Tree = cached.Tree,
             PreviewGeometry = cached.PreviewGeometry,
             PreviewMeshColors = cached.PreviewMeshColors,
             UrdfSourcePath = cached.UrdfSourcePath

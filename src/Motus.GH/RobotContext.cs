@@ -28,6 +28,7 @@ public readonly struct RobotContext
 
     public RobotCollisionModel? PreviewGeometry { get; }
     public Color?[]? PreviewMeshColors { get; }
+    public KinematicTree? Tree { get; }
 
     public RobotContext(
         RobotModel model,
@@ -36,7 +37,8 @@ public readonly struct RobotContext
         BaseFrame @base,
         ToolFrame tool,
         RobotCollisionModel? previewGeometry = null,
-        Color?[]? previewMeshColors = null)
+        Color?[]? previewMeshColors = null,
+        KinematicTree? tree = null)
     {
         Model = model;
         EffectiveModel = effectiveModel;
@@ -45,36 +47,23 @@ public readonly struct RobotContext
         Tool = tool;
         PreviewGeometry = previewGeometry;
         PreviewMeshColors = previewMeshColors;
+        Tree = tree;
     }
-
-
 
     public static RobotContext FromGoo(RobotModelGoo goo)
-
     {
-
         goo.EnsureChainFromPath();
-
         goo.EnsureBundledTool();
-
         var session = goo.EffectiveModel();
-
         return new RobotContext(
-
             goo.Value!,
-
             session,
-
             goo.Chain,
-
             goo.EffectiveBase(),
-
             goo.EffectiveTool(),
-
             goo.EffectivePreviewGeometry(),
-            goo.PreviewMeshColors);
-
+            goo.PreviewMeshColors,
+            goo.Tree);
     }
-
 }
 
