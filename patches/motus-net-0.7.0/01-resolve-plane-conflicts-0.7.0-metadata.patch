@@ -1,0 +1,309 @@
+From 986566d90cb386d75531f78907d53f7a67fc2ba1 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Sun, 19 Jul 2026 08:27:24 +0000
+Subject: [PATCH 1/2] Resolve plane merge conflicts and cut 0.7.0 metadata.
+
+Keep CollisionObject.Plane, ContentHash, and proximal link:-1..1 auto-allow;
+drop conflict markers from the eeba1aa landing.
+---
+ CHANGELOG.md                            | 18 ++++----
+ Directory.Build.props                   |  2 +-
+ motus-net.version                       |  2 +-
+ src/Motus.Core/Collision.cs             | 26 ++---------
+ src/Motus.Core/CollisionScene.cs        | 15 +++----
+ src/Motus.Geometry/CollisionGeometry.cs | 60 +++++++++----------------
+ 6 files changed, 41 insertions(+), 82 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 263490f..cceb0d6 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ## [Unreleased]
+ 
+-<<<<<<< HEAD
++## [0.7.0] - 2026-07-19
++
++### Added
++
++- `CollisionShape.Plane` / `CollisionObject.Plane` — infinite half-space (Motus local +X free); O(1) signed-distance tests in managed checkers
++- Plane obstacles auto-allow proximal `link:-1..1` pairs (robot + floor at origin)
++
+ ## [0.6.9] - 2026-07-19
+ 
+ ### Fixed
+@@ -38,13 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - `Transforms.TransformPointInto` — allocation-free point transform
+ - `JointState.Wrap` — adopt an existing joint buffer without copying
+ - `Example03CollisionRrtPerfTests` — UR10e + ColSphere scenario aligned with Motus.Grasshopper `examples/03_collision_rrt.ghx`
+-=======
+-### Added
+-
+-- `CollisionShape.Plane` / `CollisionObject.Plane` — infinite half-space (Motus local +X free); O(1) signed-distance tests in managed checkers
+-- `CollisionObject.ContentHash` — stable shape payload hash for cache keys
+-- Plane obstacles auto-allow proximal `link:-1..1` pairs (robot + floor at origin)
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+ 
+ ## [0.6.6] - 2026-07-13
+ 
+@@ -310,7 +309,8 @@ Initial public release.
+ - **Motus.Presets** — JSON preset loader with bundled UR and KUKA defaults
+   (approximate public datasheet values for planning/visualization only).
+ 
+-[Unreleased]: https://github.com/lasaths/Motus.NET/compare/v0.6.9...HEAD
++[Unreleased]: https://github.com/lasaths/Motus.NET/compare/v0.7.0...HEAD
++[0.7.0]: https://github.com/lasaths/Motus.NET/compare/v0.6.9...v0.7.0
+ [0.6.9]: https://github.com/lasaths/Motus.NET/compare/v0.6.8...v0.6.9
+ [0.6.8]: https://github.com/lasaths/Motus.NET/compare/v0.6.7...v0.6.8
+ [0.6.7]: https://github.com/lasaths/Motus.NET/compare/v0.6.6...v0.6.7
+diff --git a/Directory.Build.props b/Directory.Build.props
+index 7a913d2..422a809 100644
+--- a/Directory.Build.props
++++ b/Directory.Build.props
+@@ -9,7 +9,7 @@
+ 
+   <!-- Shared package identity / metadata -->
+   <PropertyGroup>
+-    <Version>0.6.9</Version>
++    <Version>0.7.0</Version>
+     <Authors>lasaths</Authors>
+     <Company>lasaths</Company>
+     <Product>Motus.NET</Product>
+diff --git a/motus-net.version b/motus-net.version
+index 1a5ac0d..faef31a 100644
+--- a/motus-net.version
++++ b/motus-net.version
+@@ -1 +1 @@
+-0.6.9
++0.7.0
+diff --git a/src/Motus.Core/Collision.cs b/src/Motus.Core/Collision.cs
+index ea3d204..ea86814 100644
+--- a/src/Motus.Core/Collision.cs
++++ b/src/Motus.Core/Collision.cs
+@@ -19,8 +19,6 @@ public sealed class CollisionObject
+     public double ExtentX { get; }
+     public double ExtentY { get; }
+     public double ExtentZ { get; }
+-    /// <summary>Stable hash of shape payload (extents or mesh topology) for cache keys.</summary>
+-    public int ContentHash { get; }
+ 
+     // PONYTAIL: Mesh data (vertices [x,y,z], triangle indices)
+     public List<double[]>? MeshVertices { get; }
+@@ -30,14 +28,10 @@ public sealed class CollisionObject
+     public double[]? MeshAabbMin { get; }  // [minX, minY, minZ]
+     public double[]? MeshAabbMax { get; }  // [maxX, maxY, maxZ]
+ 
+-<<<<<<< HEAD
+     /// <summary>Stable content key computed once at construction (verts/indices or primitive extents).</summary>
+     public int ContentHash { get; }
+ 
+-    // PONYTAIL: Sphere/Box constructor (existing)
+-=======
+     // PONYTAIL: Sphere/Box/Capsule/Plane constructor
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+     private CollisionObject(string name, Frame pose, CollisionShape shape, double extentX, double extentY, double extentZ)
+     {
+         Name = name;
+@@ -46,11 +40,7 @@ public sealed class CollisionObject
+         ExtentX = extentX;
+         ExtentY = shape == CollisionShape.Box ? extentY : shape == CollisionShape.Capsule ? extentY : extentX;
+         ExtentZ = shape == CollisionShape.Box ? extentZ : extentX;
+-<<<<<<< HEAD
+-        ContentHash = ComputePrimitiveContentHash(name, ExtentX, ExtentY, ExtentZ);
+-=======
+-        ContentHash = HashCode.Combine((int)shape, ExtentX, ExtentY, ExtentZ);
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
++        ContentHash = ComputePrimitiveContentHash(name, shape, ExtentX, ExtentY, ExtentZ);
+     }
+ 
+     // PONYTAIL: Mesh constructor
+@@ -67,17 +57,7 @@ public sealed class CollisionObject
+ 
+         // PONYTAIL: Compute AABB once at construction
+         (MeshAabbMin, MeshAabbMax) = ComputeAabb(vertices);
+-<<<<<<< HEAD
+         ContentHash = ComputeMeshContentHash(name, vertices, indices);
+-=======
+-        var h = new HashCode();
+-        h.Add((int)CollisionShape.Mesh);
+-        h.Add(vertices.Count);
+-        h.Add(indices.Count);
+-        h.Add(MeshAabbMin[0]); h.Add(MeshAabbMin[1]); h.Add(MeshAabbMin[2]);
+-        h.Add(MeshAabbMax[0]); h.Add(MeshAabbMax[1]); h.Add(MeshAabbMax[2]);
+-        ContentHash = h.ToHashCode();
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+     }
+ 
+     public static CollisionObject Sphere(string name, Frame pose, double radiusMeters) =>
+@@ -121,10 +101,12 @@ public sealed class CollisionObject
+         return (min, max);
+     }
+ 
+-    private static int ComputePrimitiveContentHash(string name, double extentX, double extentY, double extentZ)
++    private static int ComputePrimitiveContentHash(
++        string name, CollisionShape shape, double extentX, double extentY, double extentZ)
+     {
+         var hash = new HashCode();
+         hash.Add(name, StringComparer.Ordinal);
++        hash.Add((int)shape);
+         hash.Add(extentX);
+         hash.Add(extentY);
+         hash.Add(extentZ);
+diff --git a/src/Motus.Core/CollisionScene.cs b/src/Motus.Core/CollisionScene.cs
+index af58f2a..f2045fc 100644
+--- a/src/Motus.Core/CollisionScene.cs
++++ b/src/Motus.Core/CollisionScene.cs
+@@ -8,6 +8,9 @@ public static class CollisionBodies
+ 
+     public static string RobotLink(int index)
+     {
++        // ponytail: negative indices are plane-proximal aliases (link:-1), not cache slots
++        if (index < 0)
++            return $"link:{index}";
+         if ((uint)index >= (uint)_linkNames.Length)
+             GrowLinkNames(index + 1);
+         return _linkNames[index];
+@@ -36,18 +39,14 @@ public sealed class CollisionScene
+     public CollisionScene(IReadOnlyList<CollisionObject>? objects = null, IReadOnlyList<(string, string)>? allowedPairs = null)
+     {
+         Objects = objects ?? Array.Empty<CollisionObject>();
+-<<<<<<< HEAD
+-        AllowedPairs = allowedPairs ?? Array.Empty<(string, string)>();
++        // ponytail: plane at robot origin clips proximal envelopes — skip link:-1..1 vs planes
++        AllowedPairs = WithPlaneBasePairs(Objects, allowedPairs);
+         if (AllowedPairs.Count > 0)
+         {
+             _allowedSet = new HashSet<(string, string)>();
+             foreach (var (a, b) in AllowedPairs)
+                 _allowedSet.Add(NormalizePair(a, b));
+         }
+-=======
+-        // ponytail: plane at robot origin clips proximal envelopes — skip link:-1..1 vs planes
+-        AllowedPairs = WithPlaneBasePairs(Objects, allowedPairs);
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+     }
+ 
+     public bool IsPairAllowed(string bodyA, string bodyB)
+@@ -56,10 +55,9 @@ public sealed class CollisionScene
+         return _allowedSet.Contains(NormalizePair(bodyA, bodyB));
+     }
+ 
+-<<<<<<< HEAD
+     private static (string, string) NormalizePair(string a, string b) =>
+         string.CompareOrdinal(a, b) <= 0 ? (a, b) : (b, a);
+-=======
++
+     private static IReadOnlyList<(string A, string B)> WithPlaneBasePairs(
+         IReadOnlyList<CollisionObject> objects,
+         IReadOnlyList<(string, string)>? allowedPairs)
+@@ -88,5 +86,4 @@ public sealed class CollisionScene
+         }
+         pairs.Add((a, b));
+     }
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+ }
+diff --git a/src/Motus.Geometry/CollisionGeometry.cs b/src/Motus.Geometry/CollisionGeometry.cs
+index d8f4c30..66526dc 100644
+--- a/src/Motus.Geometry/CollisionGeometry.cs
++++ b/src/Motus.Geometry/CollisionGeometry.cs
+@@ -44,18 +44,11 @@ internal static class CollisionGeometry
+     {
+         return robot.Shape switch
+         {
+-<<<<<<< HEAD
+             CollisionShape.Sphere => SphereIntersectsObject(robot.Pose, robot.ExtentX, obstacle, bvhCache, scratch),
+             CollisionShape.Capsule => CapsuleIntersectsObject(robot, obstacle, bvhCache, scratch),
+             CollisionShape.Box => BoxIntersectsObject(robot, obstacle, bvhCache, scratch),
+             CollisionShape.Mesh => MeshIntersectsObject(robot, obstacle, bvhCache, scratch),
+-=======
+-            CollisionShape.Sphere => SphereIntersectsObject(robot.Pose, robot.ExtentX, obstacle, bvhCache),
+-            CollisionShape.Capsule => CapsuleIntersectsObject(robot, obstacle, bvhCache),
+-            CollisionShape.Box => BoxIntersectsObject(robot, obstacle, bvhCache),
+-            CollisionShape.Mesh => MeshIntersectsObject(robot, obstacle, bvhCache),
+             CollisionShape.Plane => false, // planes are scene obstacles only
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+             _ => false
+         };
+     }
+@@ -313,17 +306,8 @@ internal static class CollisionGeometry
+         {
+             CollisionShape.Sphere => SphereSphereOverlap(center, radius, obj.Pose, obj.ExtentX),
+             CollisionShape.Box => SphereBoxOverlap(center, radius, obj),
+-<<<<<<< HEAD
+             CollisionShape.Capsule => CapsuleIntersectsObject(obj, CollisionObject.Sphere("_", center, radius), bvhCache, scratch),
+             CollisionShape.Mesh => SphereMeshOverlap(center, radius, obj, bvhCache, scratch),
+-            _ => false
+-        };
+-
+-    private static bool BoxIntersectsObject(
+-        CollisionObject box, CollisionObject obstacle, Dictionary<int, BvhNode> bvhCache, CollisionQueryScratch? scratch)
+-=======
+-            CollisionShape.Capsule => CapsuleIntersectsObject(obj, CollisionObject.Sphere("_", center, radius), bvhCache),
+-            CollisionShape.Mesh => SphereMeshOverlap(center, radius, obj, bvhCache),
+             CollisionShape.Plane => SpherePlaneOverlap(center, radius, obj),
+             _ => false
+         };
+@@ -337,8 +321,26 @@ internal static class CollisionGeometry
+         return signed < radius;
+     }
+ 
+-    private static bool BoxIntersectsObject(CollisionObject box, CollisionObject obstacle, Dictionary<string, BvhNode> bvhCache)
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
++    private static bool BoxPlaneOverlap(CollisionObject box, CollisionObject plane)
++    {
++        var hx = box.ExtentX; var hy = box.ExtentY; var hz = box.ExtentZ;
++        var boxM = Transforms.FromFrame(box.Pose);
++        Span<(double x, double y, double z)> corners =
++        [
++            (-hx, -hy, -hz), (hx, -hy, -hz), (-hx, hy, -hz), (hx, hy, -hz),
++            (-hx, -hy, hz), (hx, -hy, hz), (-hx, hy, hz), (hx, hy, hz)
++        ];
++        foreach (var (ox, oy, oz) in corners)
++        {
++            var w = Transforms.TransformPoint(boxM, ox, oy, oz);
++            if (SpherePlaneOverlap(new Frame(w[0], w[1], w[2]), 0, plane))
++                return true;
++        }
++        return false;
++    }
++
++    private static bool BoxIntersectsObject(
++        CollisionObject box, CollisionObject obstacle, Dictionary<int, BvhNode> bvhCache, CollisionQueryScratch? scratch)
+     {
+         // O(1) for plane: box vs half-space via 8 corners (still tiny)
+         if (obstacle.Shape == CollisionShape.Plane)
+@@ -360,30 +362,8 @@ internal static class CollisionGeometry
+         return SphereIntersectsObject(box.Pose, Math.Max(hx, Math.Max(hy, hz)), obstacle, bvhCache, scratch);
+     }
+ 
+-<<<<<<< HEAD
+     private static bool SphereMeshOverlap(
+         Frame linkCenter, double linkRadius, CollisionObject mesh, Dictionary<int, BvhNode> bvhCache, CollisionQueryScratch? scratch)
+-=======
+-    private static bool BoxPlaneOverlap(CollisionObject box, CollisionObject plane)
+-    {
+-        var hx = box.ExtentX; var hy = box.ExtentY; var hz = box.ExtentZ;
+-        var boxM = Transforms.FromFrame(box.Pose);
+-        Span<(double x, double y, double z)> corners =
+-        [
+-            (-hx, -hy, -hz), (hx, -hy, -hz), (-hx, hy, -hz), (hx, hy, -hz),
+-            (-hx, -hy, hz), (hx, -hy, hz), (-hx, hy, hz), (hx, hy, hz)
+-        ];
+-        foreach (var (ox, oy, oz) in corners)
+-        {
+-            var w = Transforms.TransformPoint(boxM, ox, oy, oz);
+-            if (SpherePlaneOverlap(new Frame(w[0], w[1], w[2]), 0, plane))
+-                return true;
+-        }
+-        return false;
+-    }
+-
+-    private static bool MeshIntersectsObject(CollisionObject mesh, CollisionObject obstacle, Dictionary<string, BvhNode> bvhCache)
+->>>>>>> 0721fae (Add infinite plane collision objects and proximal-link ignore.)
+     {
+         if (!TryGetMeshBvh(bvhCache, mesh, out var bvh))
+             return SphereAabbOverlap(linkCenter, linkRadius, mesh);
+-- 
+2.43.0
+
