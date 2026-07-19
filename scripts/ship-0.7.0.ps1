@@ -115,8 +115,8 @@ try {
     $csproj = Join-Path $ghRoot "src\Motus.GH\Motus.GH.csproj"
     if (-not $DryRun) {
         (Get-Content $csproj -Raw) `
-            -replace "<AssemblyVersion>$version</AssemblyVersion>", "<AssemblyVersion>$version.0</AssemblyVersion>" `
-            -replace "<FileVersion>$version</FileVersion>", "<FileVersion>$version.0</FileVersion>" |
+            -replace "<AssemblyVersion>${version}</AssemblyVersion>", "<AssemblyVersion>${version}.0</AssemblyVersion>" `
+            -replace "<FileVersion>${version}</FileVersion>", "<FileVersion>${version}.0</FileVersion>" |
             Set-Content $csproj -NoNewline
     }
 
@@ -129,7 +129,7 @@ try {
     }
 
     Run "git add build/MotusNetPackages.props build/MotusNetLocal.props src/Motus.GH/Motus.GH.csproj README.md AGENTS.md patches"
-    Run "git commit -m `"Release $version: pin Motus.NET $version for cell-aware planning.`""
+    Run "git commit -m `"Release ${version}: pin Motus.NET ${version} for cell-aware planning.`""
     Run "git push -u origin $branch"
     Write-Host "Merge Grasshopper PR, then press Enter to tag v$version."
     if (-not $DryRun) { [void](Read-Host) }
