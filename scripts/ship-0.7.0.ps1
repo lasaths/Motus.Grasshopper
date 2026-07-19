@@ -115,8 +115,8 @@ try {
     $csproj = Join-Path $ghRoot "src\Motus.GH\Motus.GH.csproj"
     if (-not $DryRun) {
         (Get-Content $csproj -Raw) `
-            -replace "<AssemblyVersion>$version</AssemblyVersion>", "<AssemblyVersion>$version.0</AssemblyVersion>" `
-            -replace "<FileVersion>$version</FileVersion>", "<FileVersion>$version.0</FileVersion>" |
+            -replace "<AssemblyVersion>${version}</AssemblyVersion>", "<AssemblyVersion>${version}.0</AssemblyVersion>" `
+            -replace "<FileVersion>${version}</FileVersion>", "<FileVersion>${version}.0</FileVersion>" |
             Set-Content $csproj -NoNewline
     }
 
