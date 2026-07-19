@@ -1,15 +1,13 @@
+using Motus.Core;
+
 namespace Motus.GH.Rhino;
 
-/// <summary>Width → Robotiq 2F-85 driver joint q (Motus.NET TreeFK + URDF mimic own finger FK).</summary>
+/// <summary>ponytail: thin alias — logic lives in Motus.NET <see cref="ToolParameterBinding"/>.</summary>
 internal static class Robotiq2F85Kinematics
 {
-    public const double OpenWidthMeters = 0.085;
-    public const double ClosedDriverRadians = 0.8;
+    public const double OpenWidthMeters = ToolParameterBinding.Robotiq2F85OpenWidthMeters;
+    public const double ClosedDriverRadians = ToolParameterBinding.Robotiq2F85ClosedDriverRadians;
 
-    public static double DriverAngleRadians(double widthMeters, double openWidthMeters = OpenWidthMeters)
-    {
-        var open = openWidthMeters > 1e-9 ? openWidthMeters : OpenWidthMeters;
-        var ratio = Math.Clamp(widthMeters / open, 0, 1);
-        return (1.0 - ratio) * ClosedDriverRadians;
-    }
+    public static double DriverAngleRadians(double widthMeters, double openWidthMeters = OpenWidthMeters) =>
+        ToolParameterBinding.Robotiq2F85DriverAngleRadians(widthMeters, openWidthMeters);
 }

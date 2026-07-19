@@ -588,11 +588,11 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     Ok("Tool GeometryForState scales collision with width parameter");
 }
 
-// Robotiq: width→driver q + TreeFK mimic moves finger tip (no GH hardcode FK)
+// Wave 2: ToolParameterBinding width→driver + TreeFK mimic moves finger tip
 {
-    if (Math.Abs(Robotiq2F85Kinematics.DriverAngleRadians(0.085)) > 1e-9)
+    if (Math.Abs(ToolParameterBinding.Robotiq2F85DriverAngleRadians(0.085)) > 1e-9)
         Fail("Open width should map to driver angle 0");
-    if (Math.Abs(Robotiq2F85Kinematics.DriverAngleRadians(0.0) - 0.8) > 1e-9)
+    if (Math.Abs(ToolParameterBinding.Robotiq2F85DriverAngleRadians(0.0) - 0.8) > 1e-9)
         Fail("Closed width should map to driver angle 0.8");
     var tree = UrdfRobotLoader.LoadTree(Path.Combine(resources, "ur10e_robotiq", "ur10e_robotiq.urdf"));
     var treeFk = new TreeForwardKinematics(tree);
@@ -600,14 +600,14 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
     var qOpen = new double[tree.DriverCount];
     var qClosed = (double[])qOpen.Clone();
+    var driverNames = new string[tree.DriverCount];
     for (var i = 0; i < tree.DriverCount; i++)
-    {
-        var name = tree.Joints[tree.DriverJointIndices[i]].Name;
-        if (name.Contains("robotiq_left_knuckle", StringComparison.OrdinalIgnoreCase)
-            && !name.Contains("finger", StringComparison.OrdinalIgnoreCase)
-            && !name.Contains("inner", StringComparison.OrdinalIgnoreCase))
-            qClosed[i] = 0.8;
-    }
+        driverNames[i] = tree.Joints[tree.DriverJointIndices[i]].Name;
+    ToolParameterBinding.ApplyInto(
+        ToolCapabilities.Robotiq2F85,
+        new EndEffectorState(new Dictionary<string, double> { ["width"] = 0 }),
+        driverNames,
+        qClosed);
     var tip = tree.IndexOfLink("robotiq_left_finger_tip");
     treeFk.ComputeLinkTransformsInto(qOpen, mats);
     var x0 = mats[tip][3];
@@ -616,7 +616,7 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     var dist = Math.Sqrt(Math.Pow(mats[tip][3] - x0, 2) + Math.Pow(mats[tip][7] - y0, 2));
     if (dist < 1e-3)
         Fail($"TreeFK mimic should move finger tip on close; dist={dist}");
-    Ok("Robotiq 2F-85 TreeFK + mimic moves finger tip from width driver q");
+    Ok("ToolParameterBinding + TreeFK mimic moves finger tip from width");
 }
 
 // Motion program collision path (LIN segment validation)
@@ -792,6 +792,41 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     if (n != 64)
         Fail($"ReachSampling expected 64 samples, got {n}");
     Ok("SerialKinematicTrees + TreeFK + ReachSampling (64 TCP samples)");
+}
+
+// Wave 2: Joint Table branching + Mobility SE2 + rail N-DOF numerical IK
+{
+    var tree = JointTableTrees.FromRows(new[]
+    {
+        new JointTableRow("j0", "base_link", "link1", "R", 0, 0, 0.1, 0, 0, 1, -1, 1),
+        new JointTableRow("j1", "link1", "left", "R", 0.1, 0.05, 0, 0, 0, 1, -1, 1),
+        new JointTableRow("j2", "link1", "right", "R", 0.1, -0.05, 0, 0, 0, 1, -1, 1),
+    });
+    if (tree.DriverCount != 3) Fail($"JointTable branching expected 3 drivers, got {tree.DriverCount}");
+    var mob = new MobilityModel.HolonomicSE2(1, 2, Math.PI / 2);
+    if (Math.Abs(mob.BaseFrame.X - 1) > 1e-9 || Math.Abs(mob.BaseFrame.Y - 2) > 1e-9)
+        Fail("HolonomicSE2 base frame XY");
+    var rail = SerialKinematicTrees.FromLengths(new[] { 1.0, 0.3, 0.3, 0.2, 0.15, 0.1, 0.08 }, rail: true);
+    var tip = rail.ExtractSerialTip("base_link", "tool0");
+    var limits = new List<JointLimit>(rail.DriverCount);
+    for (var i = 0; i < rail.DriverCount; i++)
+    {
+        var j = rail.Joints[rail.DriverJointIndices[i]];
+        limits.Add(new JointLimit(j.Lower, j.Upper, Math.PI, Math.PI * 2));
+    }
+    var preset = new RobotPreset
+    {
+        Manufacturer = RobotManufacturer.Unknown,
+        ModelName = "rail_arm",
+        Family = "serial",
+        AxisCount = tip.Chain.Joints.Length,
+        JointLimits = limits,
+        BaseFrame = BaseFrame.Identity,
+        ToolFrame = ToolFrame.Identity,
+    };
+    if (KinematicsResolver.CreateInverseKinematics(preset, tip.Chain) is not NumericalInverseKinematics)
+        Fail("Rail 7-DOF must use numerical IK, not UR analytic");
+    Ok("Wave 2 JointTable + Mobility SE2 + rail numerical IK");
 }
 
 Console.WriteLine("\nAll automated QA checks passed.");

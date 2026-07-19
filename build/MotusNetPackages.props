@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.7.1</MotusNetVersion>
+    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">0.7.2</MotusNetVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">

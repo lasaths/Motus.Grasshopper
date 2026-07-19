@@ -9,6 +9,7 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Motus UR10e Robotiq | *(none)* | Bundled UR10e + Robotiq 2F-85 robot |
 | Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
 | Motus Serial Chain | **Lengths** list (m); optional Base, Home `Q`, **Rail**, Types, TCP | Same Robot goo — parametric serial / rail+arm (concept sizing) |
+| Motus Joint Table | Parent / Child / Type / Ox lists; optional Oy,Oz, Name, Base, Home, **Mob** (SE2 X,Y,yaw) | Same Robot goo — branching trees from one table (not Link×N) |
 | Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
 | Motus Tool | Name, TCP plane (flange frame), optional gripper Mesh/Brep | Tool definition |
 | Motus Tool State | Optional Tool; Preset (Open/Closed/Custom); Width, Speed, Force | End-effector state (`EndEffectorStateGoo`) |
