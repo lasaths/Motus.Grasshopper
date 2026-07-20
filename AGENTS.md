@@ -75,6 +75,14 @@ Icon name in component ctor maps to `{name}-duotone.png` (e.g. Waypoints → `pa
 
 ## Manual Rhino checks (not covered by qa-smoke)
 
+GitHub-hosted CI **compiles** qa-smoke but **skips the run** (no Rhino 8). Before release / merge of Rhino-touching changes, run locally:
+
+`./scripts/verify-qa.ps1 -Configuration Release -Install`
+
+Also check in Rhino:
+
 - Motus tab visible; Plan button vs Auto Plan; unreachable plane Status
 - Preview meshes + Scrub/Play handoff
 - Waypoints `Q` tree wires into UR Write MoveJ without GH transpose
+- Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
+- Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)

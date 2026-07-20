@@ -67,7 +67,7 @@ jobs:
           $candidates += (Join-Path ${env:ProgramFiles} 'Rhino 8\System\RhinoCommon.dll')
           $rhino = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $rhino) {
-            Write-Host '::notice title=qa-smoke skipped::No Rhino 8 install on this runner. validate-ghx + compile still ran. Full smoke needs Rhino 8 (or Rhino8Dir) — run locally via ./scripts/verify-qa.ps1 or dotnet run --project scripts/qa-smoke/QaSmoke.csproj -c Release'
+            Write-Host '::notice title=qa-smoke skipped::No Rhino 8 on this runner — validate-ghx + compile only. REQUIRED before Rhino-touching releases: ./scripts/verify-qa.ps1 -Configuration Release -Install (or dotnet run --project scripts/qa-smoke/QaSmoke.csproj -c Release) on a machine with Rhino 8 / Rhino8Dir.'
             exit 0
           }
           Write-Host "Using RhinoCommon: $rhino"

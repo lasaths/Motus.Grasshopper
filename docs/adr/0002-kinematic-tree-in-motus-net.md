@@ -51,8 +51,14 @@ URDF load and GH **Motus Serial Chain** both build the **same** Motus.NET `Kinem
 ### Mobility (Wave 2)
 
 - `MobilityModel.HolonomicSE2` / `Fixed` in Motus.NET — base frame from (x, y, yaw)
-- GH **Motus Joint Table** optional `Mob` pin; Serial Chain keeps plane `Base`
+- GH **Motus Joint Table** optional `SE2` pin = base pose override only (**not** mobile RRT / SE2 state in the planner)
+- Serial Chain keeps plane `Base`
 - Nonholonomic / climbing base swaps remain later
+
+### Branching vs Plan (Wave 2)
+
+- Full `KinematicTree` may branch; **Motus Plan / Joint State** use `ExtractSerialTip` along the Tip link path.
+- `AxisCount` and `JointLimits` must match tip-path length (not `tree.DriverCount`). Side-branch drivers are TreeFK/preview-only until tree planning exists.
 
 ### Out of scope
 
