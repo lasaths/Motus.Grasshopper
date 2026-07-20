@@ -119,6 +119,7 @@ public static class KinematicsPreview
         private readonly bool _toolInFlangeFrame;
         private readonly Frame? _toolAttachOffset;
         private readonly double _toolOpenWidth;
+        private readonly ToolCapabilities? _toolCapabilities;
         private readonly IReadOnlyList<Color?> _meshColors;
         private List<Mesh>? _frameMeshes;
 
@@ -140,6 +141,7 @@ public static class KinematicsPreview
             bool toolInFlangeFrame,
             Frame? toolAttachOffset,
             double toolOpenWidth,
+            ToolCapabilities? toolCapabilities,
             IReadOnlyList<Color?> meshColors)
         {
             _fk = fk;
@@ -158,6 +160,7 @@ public static class KinematicsPreview
             _toolInFlangeFrame = toolInFlangeFrame;
             _toolAttachOffset = toolAttachOffset;
             _toolOpenWidth = toolOpenWidth > 1e-9 ? toolOpenWidth : Robotiq2F85Kinematics.OpenWidthMeters;
+            _toolCapabilities = toolCapabilities;
             _meshColors = meshColors;
         }
 
@@ -240,6 +243,7 @@ public static class KinematicsPreview
                     toolCapabilities?.Parameters.FirstOrDefault(p =>
                         string.Equals(p.Name, "width", StringComparison.Ordinal))?.Max
                         ?? Robotiq2F85Kinematics.OpenWidthMeters,
+                    toolCapabilities,
                     meshColors);
         }
 
@@ -374,15 +378,18 @@ public static class KinematicsPreview
             }
 
             // Wave 2: Motus.NET ToolParameterBinding owns width→driver (mimic owns fingers).
-            var driverNames = new string[tree.DriverCount];
-            for (var di = 0; di < tree.DriverCount; di++)
-                driverNames[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
-            ToolParameterBinding.ApplyInto(
-                ToolCapabilities.Robotiq2F85,
-                new EndEffectorState(new Dictionary<string, double> { ["width"] = jawWidthMeters }),
-                driverNames,
-                q.AsSpan(),
-                _toolOpenWidth);
+            if (_toolCapabilities is not null)
+            {
+                var driverNames = new string[tree.DriverCount];
+                for (var di = 0; di < tree.DriverCount; di++)
+                    driverNames[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
+                ToolParameterBinding.ApplyInto(
+                    _toolCapabilities,
+                    new EndEffectorState(new Dictionary<string, double> { ["width"] = jawWidthMeters }),
+                    driverNames,
+                    q.AsSpan(),
+                    _toolOpenWidth);
+            }
 
             _treeFk!.ComputeLinkTransformsInto(q, _treeMats!);
         }

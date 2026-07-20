@@ -9,7 +9,7 @@ namespace Motus.GH.Components;
 
 /// <summary>
 /// Wave 2: one Joint Table → Motus.NET tree (branching OK). Not Link×N spaghetti.
-/// Rows: Parent, Child, Type (R/P/C/F), Ox, Oy, Oz [, Ax, Ay, Az, Lo, Hi] — parallel lists.
+/// Plan/Joint State use the <b>tip path</b> only; full tree stays on goo for TreeFK preview.
 /// </summary>
 public sealed class MotusJointTableComponent : RobotSourceComponentBase
 {
@@ -17,7 +17,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         : base(
             "Motus Joint Table",
             "JointTbl",
-            "Build a Motus robot from a joint table (parent/child/type/origin). Same Robot goo as Motus Robot.",
+            "Build a Motus robot from a joint table (parent/child/type/origin). Plan uses tip path; side branches are TreeFK preview only.",
             "tree-structure")
     {
     }
@@ -34,11 +34,14 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("Name", "N", "Optional joint names", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
-        p.AddPlaneParameter("Base", "B", "Optional base frame (or use Mobility SE2)", GH_ParamAccess.item);
+        p.AddTextParameter("Tip", "Tip", "Tip link for Plan/serial chain (default: last Child)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Home", "Q", "Optional home driver q", GH_ParamAccess.list);
+        p.AddPlaneParameter("Base", "B", "Optional base frame (ignored when BaseSE2 wired)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Mobility", "Mob", "Optional holonomic SE2: X, Y, Yaw(rad) — overrides Base origin/yaw", GH_ParamAccess.list);
+        p.AddNumberParameter("Home", "Q", "Optional home q along tip path (Plan/Joint State order)", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        // ponytail: SE2 pose only — not mobile RRT
+        p.AddNumberParameter("BaseSE2", "SE2", "Optional base pose X, Y, Yaw(rad) — frame override only, not mobile planning", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -67,12 +70,14 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         da.GetDataList(4, oy);
         da.GetDataList(5, oz);
         da.GetDataList(6, names);
+        var tipLink = "";
+        da.GetData(7, ref tipLink);
         var basePl = Plane.Unset;
-        da.GetData(7, ref basePl);
+        da.GetData(8, ref basePl);
         var home = new List<double>();
-        da.GetDataList(8, home);
-        var mob = new List<double>();
-        da.GetDataList(9, mob);
+        da.GetDataList(9, home);
+        var baseSe2 = new List<double>();
+        da.GetDataList(10, baseSe2);
 
         var n = parents.Count;
         if (children.Count != n || types.Count != n || ox.Count != n)
@@ -99,14 +104,25 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             }
 
             var tree = JointTableTrees.FromRows(rows, "joint_table");
-            var tipLink = children[^1];
-            var tip = tree.ExtractSerialTip(parents[0], tipLink);
-            var limits = new List<JointLimit>(tree.DriverCount);
-            for (var i = 0; i < tree.DriverCount; i++)
+            var root = string.IsNullOrWhiteSpace(parents[0]) ? "base_link" : parents[0].Trim();
+            if (string.IsNullOrWhiteSpace(tipLink))
+                tipLink = children[^1];
+            tipLink = tipLink.Trim();
+
+            var tip = tree.ExtractSerialTip(root, tipLink);
+            // Plan contract: AxisCount + limits must match tip-path actuated joints only.
+            var limits = LimitsAlongTip(tree, tip.JointNames);
+            if (limits.Count != tip.Chain.Joints.Length)
             {
-                var j = tree.Joints[tree.DriverJointIndices[i]];
-                var vel = j.Velocity ?? Math.PI;
-                limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                    $"Tip path joint count mismatch ({limits.Count} vs {tip.Chain.Joints.Length}).");
+                return;
+            }
+
+            if (tree.DriverCount != tip.Chain.Joints.Length)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"Tree has {tree.DriverCount} drivers; Plan/Joint State use tip path '{tipLink}' ({tip.Chain.Joints.Length} axes). Side branches are TreeFK preview only.");
             }
 
             var preset = new RobotPreset
@@ -130,8 +146,8 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
                 Tree = tree,
             };
 
-            if (mob.Count >= 3)
-                goo.BaseFrameOverride = new MobilityModel.HolonomicSE2(mob[0], mob[1], mob[2]).BaseFrame;
+            if (baseSe2.Count >= 3)
+                goo.BaseFrameOverride = new MobilityModel.HolonomicSE2(baseSe2[0], baseSe2[1], baseSe2[2]).BaseFrame;
             else if (basePl.IsValid)
                 goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
 
@@ -140,7 +156,15 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
                 var q = new double[preset.AxisCount];
                 for (var i = 0; i < q.Length; i++)
                     q[i] = i < home.Count ? home[i] : 0;
-                goo.PreviewHome = new JointState(q);
+                var homeState = new JointState(q);
+                var val = homeState.Validate(preset.JointLimits);
+                if (!val.IsValid)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                        string.Join(" ", val.Errors));
+                    return;
+                }
+                goo.PreviewHome = homeState;
             }
 
             ApplyPreview(goo, sourcePath: $"jointtbl:{tree.Fingerprint}");
@@ -151,6 +175,24 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             ClearPreview();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
         }
+    }
+
+    /// <summary>Joint limits in tip-path order (same as <see cref="SerialTipExtraction.JointNames"/>).</summary>
+    private static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)
+    {
+        var byName = new Dictionary<string, KinematicJoint>(tree.Joints.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var j in tree.Joints)
+            byName[j.Name] = j;
+
+        var limits = new List<JointLimit>(tipJointNames.Count);
+        foreach (var name in tipJointNames)
+        {
+            if (!byName.TryGetValue(name, out var j))
+                throw new InvalidOperationException($"Tip joint '{name}' missing from tree.");
+            var vel = j.Velocity ?? Math.PI;
+            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+        }
+        return limits;
     }
 
     public override Guid ComponentGuid => new("d9e3b2c1-5f4a-4b8d-9e2f-3c7a1d0b6f82");

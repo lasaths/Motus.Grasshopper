@@ -794,7 +794,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     Ok("SerialKinematicTrees + TreeFK + ReachSampling (64 TCP samples)");
 }
 
-// Wave 2: Joint Table branching + Mobility SE2 + rail N-DOF numerical IK
+// Wave 2: Joint Table branching — Plan DOF = tip path; limits must Validate
 {
     var tree = JointTableTrees.FromRows(new[]
     {
@@ -803,6 +803,22 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         new JointTableRow("j2", "link1", "right", "R", 0.1, -0.05, 0, 0, 0, 1, -1, 1),
     });
     if (tree.DriverCount != 3) Fail($"JointTable branching expected 3 drivers, got {tree.DriverCount}");
+    var tipLeft = tree.ExtractSerialTip("base_link", "left");
+    if (tipLeft.Chain.Joints.Length != 2)
+        Fail($"Tip path base→left should be 2 axes, got {tipLeft.Chain.Joints.Length}");
+    var tipLimits = new List<JointLimit>(tipLeft.JointNames.Count);
+    foreach (var name in tipLeft.JointNames)
+    {
+        var j = tree.Joints.First(jj => string.Equals(jj.Name, name, StringComparison.OrdinalIgnoreCase));
+        tipLimits.Add(new JointLimit(j.Lower, j.Upper, Math.PI, Math.PI * 2));
+    }
+    if (tipLimits.Count != tipLeft.Chain.Joints.Length)
+        Fail("Tip-path limits must match tip chain length");
+    var tipHome = new JointState(new double[tipLeft.Chain.Joints.Length]);
+    if (!tipHome.Validate(tipLimits).IsValid)
+        Fail("Tip-path home must Validate against tip limits (premortem AxisCount/limits tiger)");
+    if (tree.DriverCount == tipLeft.Chain.Joints.Length)
+        Fail("Branching tree should have more drivers than one tip path");
     var mob = new MobilityModel.HolonomicSE2(1, 2, Math.PI / 2);
     if (Math.Abs(mob.BaseFrame.X - 1) > 1e-9 || Math.Abs(mob.BaseFrame.Y - 2) > 1e-9)
         Fail("HolonomicSE2 base frame XY");
@@ -826,7 +842,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     };
     if (KinematicsResolver.CreateInverseKinematics(preset, tip.Chain) is not NumericalInverseKinematics)
         Fail("Rail 7-DOF must use numerical IK, not UR analytic");
-    Ok("Wave 2 JointTable + Mobility SE2 + rail numerical IK");
+    Ok("Wave 2 JointTable tip-path Validate + Mobility SE2 + rail numerical IK");
 }
 
 Console.WriteLine("\nAll automated QA checks passed.");
