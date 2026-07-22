@@ -25,6 +25,7 @@ internal sealed class PlanInputSnapshot
     public bool IsAutoPlan { get; init; }
 
     public SerialJointChain? Chain { get; init; }
+    public KinematicTree? Tree { get; init; }
     public RobotCollisionModel? PreviewGeometry { get; init; }
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
@@ -109,6 +110,7 @@ internal sealed class PlanInputSnapshot
             Fingerprint = fingerprint,
             IsAutoPlan = owner.AutoPlanEnabled,
             Chain = robotGoo.Chain,
+            Tree = robotGoo.Tree,
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,

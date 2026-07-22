@@ -8,8 +8,10 @@ param(
     [switch]$Zip,
     [switch]$Yak,
     [switch]$Install,
-    # Force Motus.NET NuGet packages (recommended for Yak/release zips when ../Motus.NET exists).
-    [switch]$UseNuGet
+    # Force Motus.NET NuGet packages (default; kept for scripts that already pass -UseNuGet).
+    [switch]$UseNuGet,
+    # Use sibling ../Motus.NET project refs instead of NuGet (CLI only; VS needs Motus.NET in the solution).
+    [switch]$UseLocal
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,9 +29,12 @@ function Stage-MotusPlugin([string]$StageDir, [string]$OutputDir = $out) {
 }
 
 $msbuildProps = @()
-if ($UseNuGet -or $Yak) {
+if ($UseLocal -and -not $Yak) {
+    $msbuildProps += "-p:UseMotusNetProjectReference=true"
+    Write-Host "Using sibling Motus.NET project refs."
+} else {
     $msbuildProps += "-p:UseMotusNetProjectReference=false"
-    Write-Host "Using Motus.NET from NuGet (not sibling project refs)."
+    Write-Host "Using Motus.NET from NuGet."
 }
 
 Write-Host "Building Motus.Grasshopper ($Configuration)..."
@@ -51,6 +56,8 @@ Write-Host "  resources\robots\ (from Motus.Presets package)"
 if ($Install) {
     $ghLib = Join-Path $env:APPDATA "Grasshopper\Libraries\Motus"
     New-Item -ItemType Directory -Force -Path $ghLib | Out-Null
+    # Drop stale Motus.*.dll left from older layouts (e.g. Motus.Rhino) so GH cannot pick them up.
+    Remove-Item "$ghLib\Motus.*.dll", "$ghLib\Motus.GH.gha" -Force -ErrorAction SilentlyContinue
     Copy-Item "$out\Motus.GH.gha" $ghLib -Force
     Copy-Item "$out\Motus.*.dll" $ghLib -Force
     $destResources = Join-Path $ghLib "resources"

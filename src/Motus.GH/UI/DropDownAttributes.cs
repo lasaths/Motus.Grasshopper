@@ -231,15 +231,22 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
     private static float MinWidth(Model model)
     {
         float max = 96;
-        foreach (var list in model.Lists)
+        try
         {
-            foreach (var item in list)
-                max = Math.Max(max, GH_FontServer.StringWidth(item, GH_FontServer.Standard) + 28);
+            foreach (var list in model.Lists)
+            {
+                foreach (var item in list)
+                    max = Math.Max(max, GH_FontServer.StringWidth(item, GH_FontServer.Standard) + 28);
+            }
+            foreach (var spacer in model.Spacers)
+            {
+                if (!string.IsNullOrEmpty(spacer))
+                    max = Math.Max(max, GH_FontServer.StringWidth(spacer, GH_FontServer.Small) + 12);
+            }
         }
-        foreach (var spacer in model.Spacers)
+        catch
         {
-            if (!string.IsNullOrEmpty(spacer))
-                max = Math.Max(max, GH_FontServer.StringWidth(spacer, GH_FontServer.Small) + 12);
+            // ponytail: GH_FontServer can NRE during GHA registration before UI fonts exist
         }
         return max;
     }

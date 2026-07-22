@@ -15,11 +15,15 @@ internal static class RobotViewportPreview
   // White ghost for robot-source components; Motus Preview keeps its own emerald styling.
   private static readonly Color MeshColor = Color.FromArgb(180, 255, 255, 255);
   private static readonly Color WireColor = Color.FromArgb(200, 255, 255, 255);
-  private static readonly DisplayMaterial MeshMaterial = new(MeshColor) { Transparency = 0.55 };
+  // ponytail: lazy — DisplayMaterial static ctors during GHA type-scan can NRE before Rhino display is ready
+  private static DisplayMaterial? _meshMaterial;
+  private static DisplayMaterial MeshMaterial => _meshMaterial ??= new(MeshColor) { Transparency = 0.55 };
 
   // Planning collision hull — peach tint, more transparent than URDF visual preview.
   private static readonly Color CollisionMeshColor = Color.FromArgb(88, MotusPalette.Peach);
-  private static readonly DisplayMaterial CollisionMeshMaterial = new(CollisionMeshColor) { Transparency = 0.82 };
+  private static DisplayMaterial? _collisionMeshMaterial;
+  private static DisplayMaterial CollisionMeshMaterial =>
+      _collisionMeshMaterial ??= new(CollisionMeshColor) { Transparency = 0.82 };
 
   public static void Build(
     RobotModelGoo goo,

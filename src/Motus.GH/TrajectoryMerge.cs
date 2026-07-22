@@ -113,6 +113,7 @@ internal static class TrajectoryMerge
         return new TrajectoryGoo(merged)
         {
             Chain = first.Chain,
+            Tree = first.Tree,
             PreviewGeometry = first.PreviewGeometry,
             PreviewMeshColors = first.PreviewMeshColors,
             BaseFrameOverride = first.BaseFrameOverride,

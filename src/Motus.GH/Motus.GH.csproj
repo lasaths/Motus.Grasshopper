@@ -76,7 +76,8 @@
     <ItemGroup>
       <MotusDeployFiles Include="$(TargetDir)Motus*.gha" />
       <MotusDeployFiles Include="$(TargetDir)Motus*.dll" />
-      <MotusDeployFiles Include="$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll" Condition="Exists('$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll')" />
+      <!-- Only overlay sibling Native when using project refs — otherwise NuGet Motus.Native is overwritten by Debug sibling. -->
+      <MotusDeployFiles Include="$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll" Condition="'$(UseMotusNetProjectReference)' == 'true' and Exists('$(MotusNetSiblingRoot)src/Motus.Native/bin/$(Configuration)/net8.0/Motus.Native.dll')" />
       <MotusDeployResources Include="$(TargetDir)resources/**/*" />
     </ItemGroup>
     <Copy SourceFiles="@(MotusDeployFiles)" DestinationFolder="$(GrasshopperLibraryDir)" SkipUnchangedFiles="true" Retries="3" RetryDelayMilliseconds="500" ContinueOnError="WarnAndContinue" />

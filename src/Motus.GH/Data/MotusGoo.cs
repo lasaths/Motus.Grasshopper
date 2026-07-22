@@ -43,6 +43,7 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
+    public KinematicTree? Tree { get; set; }
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
@@ -59,7 +60,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
         var model = Value!.Robot;
         var session = ApplyTool(model, ToolSnapshot, BaseFrameOverride);
         var preview = RobotPreviewGeometry.ForViewport(PreviewGeometry, ToolSnapshot);
-        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors);
+        // Tree required so Robotiq tip-descendant meshes pose via TreeFK (not stuck at base).
+        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors, Tree);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)

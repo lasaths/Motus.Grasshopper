@@ -151,6 +151,7 @@ public sealed class MotusScrubSlider : GH_NumberSlider
     {
         Slider.Minimum = 0;
         Slider.Maximum = 1;
+        Slider.Type = GH_SliderAccuracy.Float; // ponytail: R not N — 0–1 scrub needs fractions
         Slider.DecimalPlaces = 3;
         Slider.Value = Math.Clamp(Slider.Value, 0, 1);
         Expression = string.Empty;

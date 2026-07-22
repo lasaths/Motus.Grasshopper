@@ -47,6 +47,9 @@ internal readonly struct ScrubTimeline
                 : Math.Clamp(waypointTimes[i] / duration, 0, 1);
             displayFracs[i] = count <= 1 ? 0 : (double)i / (count - 1);
         }
+        // ponytail: force endpoints so scrub 0/1 always maps to trajectory start/end
+        timeFracs[0] = 0;
+        timeFracs[^1] = 1;
         return new ScrubTimeline(duration, timeFracs, displayFracs, waypointTimes);
     }
 
@@ -87,6 +90,8 @@ internal readonly struct ScrubTimeline
         if (DisplayFractions.Count == 0) return Math.Clamp(displayFraction, 0, 1);
         if (DisplayFractions.Count == 1) return TimeFractions[0];
         var t = Math.Clamp(displayFraction, 0, 1);
+        if (t <= 1e-9) return 0;
+        if (t >= 1.0 - 1e-9) return 1;
         if (t <= DisplayFractions[0]) return TimeFractions[0];
         if (t >= DisplayFractions[^1]) return TimeFractions[^1];
         for (var i = 0; i < DisplayFractions.Count - 1; i++)
@@ -107,6 +112,8 @@ internal readonly struct ScrubTimeline
         if (TimeFractions.Count == 0) return Math.Clamp(timeFraction, 0, 1);
         if (TimeFractions.Count == 1) return DisplayFractions[0];
         var t = Math.Clamp(timeFraction, 0, 1);
+        if (t <= 1e-9) return 0;
+        if (t >= 1.0 - 1e-9) return 1;
         if (t <= TimeFractions[0]) return DisplayFractions[0];
         if (t >= TimeFractions[^1]) return DisplayFractions[^1];
         for (var i = 0; i < TimeFractions.Count - 1; i++)

@@ -26,8 +26,13 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
 
     protected override void Layout()
     {
+        // ponytail: lock 0–1 so Value=1 sits at rail end (GH lets users widen Max)
+        var slider = ScrubOwner.Slider;
+        if (slider.Minimum != 0) slider.Minimum = 0;
+        if (slider.Maximum != 1) slider.Maximum = 1;
+
         base.Layout();
-        const float labelH = 16f;
+        const float labelH = 14f;
         var b = Bounds;
         Bounds = new RectangleF(b.X, b.Y - labelH, b.Width, b.Height + labelH);
     }
@@ -95,10 +100,17 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
 
     private void DrawHeader(Graphics graphics, ScrubTimeline timeline, double t)
     {
-        var labelBounds = new RectangleF(Bounds.X + 4, Bounds.Y + 1, Bounds.Width - 8, 14);
-        using var format = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+        var labelBounds = new RectangleF(Bounds.X + 4, Bounds.Y + 1, Bounds.Width - 8, 12);
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Near,
+            LineAlignment = StringAlignment.Center,
+            FormatFlags = StringFormatFlags.NoWrap,
+            Trimming = StringTrimming.EllipsisCharacter,
+        };
+        // ponytail: Standard is huge on the 12px strip — Small fits the label row
         var text = FormatHeader(timeline, t);
-        graphics.DrawString(text, GH_FontServer.Standard, Brushes.DimGray, labelBounds, format);
+        graphics.DrawString(text, GH_FontServer.Small, Brushes.DimGray, labelBounds, format);
     }
 
     private static string FormatHeader(ScrubTimeline timeline, double t)
@@ -108,7 +120,7 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
         var idx = timeline.NearestDisplayIndex(t);
         var time = timeline.TimeAt(t);
         var dur = timeline.DurationSeconds;
-        return $"{t * 100:0}% · {time:0.00} / {dur:0.00} s · keyframe {idx + 1}/{timeline.Count}";
+        return $"{t:0.000} · {time:0.00}/{dur:0.00}s · kf {idx + 1}/{timeline.Count}";
     }
 
     private static void DrawKeyframeTicks(Graphics graphics, RectangleF track, ScrubTimeline timeline, double t)

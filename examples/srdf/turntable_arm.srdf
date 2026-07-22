@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reference SRDF. Motus SrdfLoader currently requires <chain>; example 06
+     sets arm joints on Motus Planning Group J so turntable is locked. -->
+<robot name="turntable_arm">
+  <group name="arm">
+    <chain base_link="turntable_link" tip_link="tool0"/>
+    <joint name="shoulder"/>
+    <joint name="elbow"/>
+    <joint name="wrist"/>
+  </group>
+</robot>

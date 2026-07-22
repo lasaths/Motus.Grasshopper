@@ -884,6 +884,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             _cachedGoo = new TrajectoryGoo(_cached.Trajectory)
             {
                 Chain = robotGoo.Chain,
+                Tree = robotGoo.Tree,
                 PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
                 PreviewMeshColors = robotGoo.PreviewMeshColors,
                 BaseFrameOverride = robotGoo.BaseFrameOverride,

@@ -80,10 +80,28 @@ internal static class MotusIcon
         if (Cache.TryGetValue(cacheKey, out var cached)) return cached;
 
         var resourceName = $"Motus.GH.Resources.icons.{iconName}-duotone.png";
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Phosphor icon resource not found: {resourceName}");
-        using var raw = new Bitmap(stream);
-        var bmp = tint is { } color ? Recolor(raw, color) : new Bitmap(raw);
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+            if (stream is null)
+                return Placeholder(cacheKey);
+
+            using var raw = new Bitmap(stream);
+            var bmp = tint is { } color ? Recolor(raw, color) : new Bitmap(raw);
+            Cache[cacheKey] = bmp;
+            return bmp;
+        }
+        catch
+        {
+            // ponytail: Icon getters run during GHA registration — never throw into GH loader
+            return Placeholder(cacheKey);
+        }
+    }
+
+    private static Bitmap Placeholder(string cacheKey)
+    {
+        if (Cache.TryGetValue(cacheKey, out var cached)) return cached;
+        var bmp = new Bitmap(24, 24, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         Cache[cacheKey] = bmp;
         return bmp;
     }

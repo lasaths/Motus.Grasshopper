@@ -44,8 +44,11 @@ jobs:
       - name: Fetch UR10e example meshes
         run: node scripts/fetch-ur10e-assets.mjs
 
-      - name: Validate example GHX files
-        run: node scripts/validate-ghx.mjs
+      - name: Regenerate + validate example GHX
+        run: |
+          node scripts/generate-examples.mjs
+          git diff --exit-code -- examples/*.ghx
+          node scripts/validate-ghx.mjs
 
       - name: Planner-only dependency fence
         shell: bash

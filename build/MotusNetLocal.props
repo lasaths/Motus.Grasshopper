@@ -1,8 +1,12 @@
 <Project>
-  <!-- When Motus.NET is a sibling repo, use project references instead of NuGet packages. -->
+  <!--
+    Opt-in local Motus.NET: -p:UseMotusNetProjectReference=true
+    (or ./build.ps1 -UseLocal). Default is NuGet — VS cannot restore
+    ProjectReferences that are outside Motus.Grasshopper.slnx.
+  -->
   <PropertyGroup>
     <MotusNetSiblingRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Motus.NET\'))</MotusNetSiblingRoot>
-    <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == '' and Exists('$(MotusNetSiblingRoot)src\Motus.Core\Motus.Core.csproj')">true</UseMotusNetProjectReference>
+    <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == ''">false</UseMotusNetProjectReference>
     <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.7.2-local</MotusNetVersion>
   </PropertyGroup>
 

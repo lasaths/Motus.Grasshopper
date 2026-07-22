@@ -387,13 +387,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         ResolveFrame(out var state, out var elapsed, out _, out var toolState);
         var duration = _trajectory.DurationSeconds;
-        if (elapsed >= duration)
+        if (elapsed >= duration - 1e-6)
         {
+            // ponytail: snap to exact end so the last frame is not skipped by timer jitter
             StopPlayTimer();
             _playing = false;
             _position = duration > 0 ? 1 : 0;
+            ResolveFrame(out state, out _, out _, out toolState);
+            if (_meshCache is not null && _currentMeshes.Count > 0)
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
             SyncScrubSlider(_position, expireDownstream: false);
+            ExpirePreview(true);
             OnDisplayExpired(false);
+            RhinoDoc.ActiveDoc?.Views.Redraw();
             ExpireSolution(false);
             return;
         }

@@ -11,7 +11,10 @@ namespace Motus.GH.Preview;
 internal static class CollisionViewportPreview
 {
     private static readonly Color ObstacleColor = Color.FromArgb(160, MotusPalette.Collision);
-    private static readonly DisplayMaterial ObstacleMaterial = new(ObstacleColor) { Transparency = 0.25 };
+    // ponytail: lazy — avoid DisplayMaterial during GHA type-scan
+    private static DisplayMaterial? _obstacleMaterial;
+    private static DisplayMaterial ObstacleMaterial =>
+        _obstacleMaterial ??= new(ObstacleColor) { Transparency = 0.25 };
 
     public static List<Mesh> MeshesFor(CollisionObject obj)
     {

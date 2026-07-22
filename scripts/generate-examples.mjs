@@ -25,6 +25,9 @@ const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
 /** Collision-free home-ish start for obstacle demos (away from table/box). */
 const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
 const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
+/** 4-DOF turntable_arm.urdf: [turntable, shoulder, elbow, wrist] — goal rotates table. */
+const TURNTABLE_START = [0.0, 0.4, -0.9, 0.6];
+const TURNTABLE_GOAL = [1.2, 0.8, -0.5, 0.2];
 
 /** GH / Motus param type GUIDs (ComponentGuid). Required for IGH_VariableParameterComponent ParameterData. */
 const PTYPE = {
@@ -246,6 +249,47 @@ const MOTUS = {
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings' },
     ] },
   scrub: { guid: 'e1f2a3b4-c5d6-4789-a012-3456789abc01', name: 'Motus Scrub', nick: 'Scrub', w: 220, h: 44 },
+  serialChain: {
+    guid: 'c8f2a1d0-4e3b-4a7c-9d1e-2b6f8a0c5e71', name: 'Motus Serial Chain', nick: 'Serial', w: 74, h: 124,
+    desc: 'Parametric serial / rail+arm from link lengths (same Robot goo as Motus Robot)',
+    inputs: [
+      { name: 'Lengths', nick: 'L', desc: 'Link lengths (m). With Rail: first = stroke, rest = arm.', optional: false, list: true, access: 1 },
+      { name: 'Base', nick: 'B', desc: 'Optional base frame', optional: true, plane: true },
+      { name: 'Home', nick: 'Q', desc: 'Optional home joint values (driver order)', optional: true, list: true, access: 1 },
+      { name: 'Rail', nick: 'Rail', desc: 'First length is prismatic stroke (+Z); rest revolute', optional: true, bool: false },
+      { name: 'Types', nick: 'Types', desc: 'Optional R/P per joint (ignored when Rail)', optional: true, access: 1 },
+      { name: 'TCP', nick: 'TCP', desc: 'Optional tip tool frame in last-link frame', optional: true, plane: true },
+    ],
+    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model (same as Motus Robot)' }],
+  },
+  reachSamples: {
+    guid: 'a1b2c3d4-5e6f-7081-92a3-b4c5d6e7f809', name: 'Motus Reach Samples', nick: 'Reach', w: 74, h: 64,
+    desc: 'Stratified TCP reach samples (capped). Overlay on structure in Rhino.',
+    inputs: [
+      { name: 'Robot', nick: 'Rb', desc: 'Motus Robot (Serial Chain or URDF)', optional: false },
+      { name: 'Count', nick: 'N', desc: 'Max TCP samples (default 512, max 512)', optional: true, number: 128 },
+      { name: 'Seed', nick: 'Seed', desc: 'Reserved (Halton; currently unused)', optional: true, number: 0 },
+    ],
+    outputs: [{ name: 'Points', nick: 'Pts', desc: 'Sampled TCP points in base frame', access: 1 }],
+  },
+  jointTable: {
+    guid: 'd9e3b2c1-5f4a-4b8d-9e2f-3c7a1d0b6f82', name: 'Motus Joint Table', nick: 'JointTbl', w: 74, h: 164,
+    desc: 'Joint table → tree. Plan uses Tip path only; side branches are TreeFK preview only.',
+    inputs: [
+      { name: 'Parent', nick: 'Par', desc: 'Parent link names', optional: false, access: 1 },
+      { name: 'Child', nick: 'Ch', desc: 'Child link names', optional: false, access: 1 },
+      { name: 'Type', nick: 'Ty', desc: 'R / P / C / F per joint', optional: false, access: 1 },
+      { name: 'Ox', nick: 'Ox', desc: 'Joint origin X (m)', optional: false, list: true, access: 1 },
+      { name: 'Oy', nick: 'Oy', desc: 'Joint origin Y (m)', optional: true, list: true, access: 1 },
+      { name: 'Oz', nick: 'Oz', desc: 'Joint origin Z (m)', optional: true, list: true, access: 1 },
+      { name: 'Name', nick: 'N', desc: 'Optional joint names', optional: true, access: 1 },
+      { name: 'Tip', nick: 'Tip', desc: 'Tip link for Plan/serial chain (default: last Child)', optional: true, text: '' },
+      { name: 'Base', nick: 'B', desc: 'Optional base frame', optional: true, plane: true },
+      { name: 'Home', nick: 'Q', desc: 'Optional home q along tip path', optional: true, list: true, access: 1 },
+      { name: 'BaseSE2', nick: 'SE2', desc: 'Optional base pose X, Y, Yaw(rad) — frame only, not mobile planning', optional: true, list: true, access: 1 },
+    ],
+    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model (same as Motus Robot)' }],
+  },
 };
 
 const NATIVE = {
@@ -329,6 +373,16 @@ function persistentNumbers(values) {
 }
 
 function persistentText(text) {
+  return persistentTexts([text]);
+}
+
+function persistentTexts(values) {
+  const items = values.map((t, i) => `<chunk name="Item" index="${i}">
+                                  <items count="2">
+                                    ${item('null_string', 'gh_bool', '1', 'false')}
+                                    ${item('string', 'gh_string', '10', esc(t))}
+                                  </items>
+                                </chunk>`).join('\n                                ');
   return `<chunk name="PersistentData">
                           <items count="1">
                             ${item('Count', 'gh_int32', '3', '1')}
@@ -336,16 +390,11 @@ function persistentText(text) {
                           <chunks count="1">
                             <chunk name="Branch" index="0">
                               <items count="2">
-                                ${item('Count', 'gh_int32', '3', '1')}
+                                ${item('Count', 'gh_int32', '3', String(values.length))}
                                 ${item('Path', 'gh_string', '10', '{0}')}
                               </items>
-                              <chunks count="1">
-                                <chunk name="Item" index="0">
-                                  <items count="2">
-                                    ${item('null_string', 'gh_bool', '1', 'false')}
-                                    ${item('string', 'gh_string', '10', esc(text))}
-                                  </items>
-                                </chunk>
+                              <chunks count="${values.length}">
+                                ${items}
                               </chunks>
                             </chunk>
                           </chunks>
@@ -452,7 +501,10 @@ function parameterDataChunk(inputs, outputs, x, y, compW, wireMapSafe, options) 
     const access = inp.access === 1 ? item('Access', 'gh_int32', '3', '1') : '';
     const optional = item('Optional', 'gh_bool', '1', inp.optional ? 'true' : 'false');
     let persistent = null;
-    if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
+    if (options.textList?.[inp.name])
+      persistent = persistentTexts(options.textList[inp.name]);
+    else if (inp.list && (options.numberList?.[inp.name] ?? (inp.name === 'Lengths' || inp.name === 'Joints' ? options.jointValues : null)))
+      persistent = persistentNumbers(options.numberList?.[inp.name] ?? options.jointValues);
     else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
     else if (inp.number !== undefined && !sources.length) persistent = persistentNumbers([inp.number]);
     else if (inp.text !== undefined && !sources.length) persistent = persistentText(inp.text);
@@ -629,7 +681,10 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     const inChunks = inputs.map((inp, i) => {
       const sources = (wireMapSafe[inp.name] ?? []).map((ref) => ref._guid);
       let persistent = null;
-      if (inp.list && options.jointValues) persistent = persistentNumbers(options.jointValues);
+      if (options.textList?.[inp.name])
+        persistent = persistentTexts(options.textList[inp.name]);
+      else if (inp.list && (options.numberList?.[inp.name] ?? (inp.name === 'Lengths' || inp.name === 'Joints' ? options.jointValues : null)))
+        persistent = persistentNumbers(options.numberList?.[inp.name] ?? options.jointValues);
       else if (inp.bool !== undefined && !sources.length) persistent = persistentBool(inp.bool);
       else if (inp.number !== undefined && !sources.length) persistent = persistentNumbers([inp.number]);
       else if (inp.text !== undefined && !sources.length) persistent = persistentText(inp.text);
@@ -691,7 +746,7 @@ function motusScrub(x, y, value = 0, w = MOTUS.scrub.w) {
                       <items count="7">
                         ${item('Digits', 'gh_int32', '3', '3')}
                         ${item('GripDisplay', 'gh_int32', '3', '1')}
-                        ${item('Interval', 'gh_int32', '3', '1')}
+                        ${item('Interval', 'gh_int32', '3', '0')}
                         ${item('Max', 'gh_double', '6', '1')}
                         ${item('Min', 'gh_double', '6', '0')}
                         ${item('SnapCount', 'gh_int32', '3', '0')}
@@ -1557,7 +1612,107 @@ function graph04() {
   return buildGraph(flat);
 }
 
-const graphs = [graph01, graph02, graph03, graph04];
+/** 05 — Serial Chain + Reach Samples (on-component preview; no Plan). */
+function graph05() {
+  // Bands: title → serial chain → reach samples. Preview is on-component.
+  const title = nativeScribble(40, -60, '05  Serial + Reach', 28);
+  const note = nativePanel(420, -60, 'No Plan — Serial/Reach draw in Rhino. Edit Lengths.', 'Note', 300, 40);
+  const chain = motusComponent('serialChain', 40, 40, {}, {
+    jointValues: [0.15, 0.35, 0.30, 0.20, 0.15, 0.10],
+  });
+  const reach = motusComponent('reachSamples', 280, 40, {
+    Robot: [outRef(chain.node, 'Robot')],
+  });
+  const gChain = nativeGroup('Serial Chain', [chain], GROUP_COLOUR.robot);
+  const gReach = nativeGroup('Reach Samples', [reach], GROUP_COLOUR.preview);
+  const objs = [title, note, chain, reach, gChain, gReach];
+  objs._meta = {
+    fileName: '05_serial_reach.ghx',
+    description: 'Serial Chain (link lengths) → Reach Samples (N=128). On-component preview; no Plan.',
+  };
+  return buildGraph(objs);
+}
+
+/**
+ * 06 — Turntable (1-DOF) + arm: coupled vs decoupled via Planning Group.
+ * Group locking applies on the RRT path (joint-linear ignores GroupMap), so both
+ * Plans share a far keep-out sphere to force RRT.
+ */
+function graph06() {
+  const title = nativeScribble(40, -60, '06  Turntable + Group', 28);
+  const note = nativePanel(
+    420,
+    -60,
+    'Coupled: Group unwired (turntable moves). Decoupled: arm group locks turntable. Scrub both Previews.',
+    'Note',
+    420,
+    40,
+  );
+  const urdfFile = nativeFilePath(40, 40, absPath('examples/urdf/turntable_arm.urdf'));
+  const robot = motusComponent('robot', 280, 40, {
+    Path: [outRef(urdfFile.node, 'Path')],
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: TURNTABLE_START });
+  const goal = motusComponent('joints', 40, 300, {}, { jointValues: TURNTABLE_GOAL });
+
+  // Far sphere: SceneHasObstacles → RRT (required for GroupMap lock). Not on the path.
+  const keepCenter = nativeConstructPoint(40, 420, [2.0, 2.0, 0.4]);
+  const keep = motusComponent('colSphere', 220, 420, {
+    Center: [outRef(keepCenter.node, 'Point')],
+  }, { text: { Name: 'keepout' }, numbers: { Radius: 0.08 } });
+  // Far keep-out forces RRT (GroupMap). Arm joints listed on Group J — locks turntable.
+  const scene = motusComponent('colScene', 420, 420, {
+    Objects: [outRef(keep.node, 'Object')],
+  });
+  const group = motusComponent('group', 620, 420, {}, {
+    text: { Name: 'arm', BaseLink: 'turntable_link', TipLink: 'tool0' },
+    textList: { Joints: ['shoulder', 'elbow', 'wrist'] },
+  });
+  const rrt = motusComponent('rrtSettings', 800, 420, {});
+
+  const planCoupled = motusComponent('plan', 40, 680, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
+    Collision: [outRef(scene.node, 'Scene')],
+    RrtSettings: [outRef(rrt.node, 'Settings')],
+  }, { advanced: ['Collision', 'RrtSettings'] });
+  const coupled = previewWithScrub(40, 680, outRef(planCoupled.node, 'Trajectory'));
+
+  const planDecoupled = motusComponent('plan', 40, 980, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
+    Collision: [outRef(scene.node, 'Scene')],
+    Group: [outRef(group.node, 'Group')],
+    RrtSettings: [outRef(rrt.node, 'Settings')],
+  }, { advanced: ['Collision', 'Group', 'RrtSettings'] });
+  const decoupled = previewWithScrub(40, 980, outRef(planDecoupled.node, 'Trajectory'));
+
+  const gRobot = nativeGroup('URDF + joints', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
+  const gScene = nativeGroup('Scene + arm group', [
+    keepCenter, keep, scene, group, rrt,
+  ], GROUP_COLOUR.collision);
+  const gCoupled = nativeGroup('Coupled (no Group)', [planCoupled, coupled.scrub, coupled.preview], GROUP_COLOUR.plan);
+  const gDecoupled = nativeGroup('Decoupled (arm Group)', [planDecoupled, decoupled.scrub, decoupled.preview], GROUP_COLOUR.preview);
+
+  const objs = [
+    title, note,
+    urdfFile, robot, start, goal,
+    { xml: keepCenter.xml }, keep, scene, group, rrt,
+    planCoupled, coupled.scrub, coupled.preview,
+    planDecoupled, decoupled.scrub, decoupled.preview,
+    gRobot, gScene, gCoupled, gDecoupled,
+  ];
+  objs._meta = {
+    fileName: '06_turntable_group.ghx',
+    description:
+      'Turntable+arm URDF: coupled Plan (Group unwired) vs decoupled Plan (arm Group locks turntable). Shared RRT scene; scrub both Previews.',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06];
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',

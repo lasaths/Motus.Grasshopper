@@ -27,7 +27,8 @@ public abstract class MotusAsyncComponentBase : GH_AsyncComponent
     {
         get
         {
-            foreach (var k in base.Keywords)
+            // ponytail: GH_DocumentObject.Keywords is null during GHA registration
+            foreach (var k in base.Keywords ?? [])
                 yield return k;
             foreach (var k in AiKeywords)
                 yield return k;

@@ -33,6 +33,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public bool IsAutoPlan { get; private set; }
 
     public SerialJointChain? Chain { get; private set; }
+    public KinematicTree? Tree { get; private set; }
     public RobotCollisionModel? PreviewGeometry { get; private set; }
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
@@ -71,6 +72,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         Fingerprint = snap.Fingerprint;
         IsAutoPlan = snap.IsAutoPlan;
         Chain = snap.Chain;
+        Tree = snap.Tree;
         PreviewGeometry = snap.PreviewGeometry;
         PreviewMeshColors = snap.PreviewMeshColors;
         BaseFrameOverride = snap.BaseFrameOverride;
@@ -241,10 +243,12 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         return new TrajectoryGoo(trajectory)
         {
             Chain = Chain,
+            Tree = Tree,
             PreviewGeometry = PreviewGeometry ?? robot.CollisionModel,
             PreviewMeshColors = PreviewMeshColors,
             BaseFrameOverride = BaseFrameOverride,
             ToolSnapshot = ToolSnapshot,
+            ToolCapabilitiesSnapshot = ToolSnapshot?.Capabilities,
             DiagnosticsSnapshot = diagnostics,
             ProvenanceSnapshot = new PlannerProvenance
             {

@@ -17,7 +17,7 @@ src/Motus.GH/
   Data/ Params/   # TrajectoryGoo, Param_Motus*
   Preview/ UI/    # Scrub, ButtonAttributes, FK preview
   Resources/icons/# Phosphor duotone PNGs (embedded)
-examples/         # Generated .ghx — scripts/generate-examples.mjs
+examples/         # Generated .ghx — never hand-edit; regenerate via node scripts/generate-examples.mjs after Motus GUID/pin/component changes
 scripts/          # build helpers, qa-smoke, validate-ghx
 ```
 
@@ -27,7 +27,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.7.2** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Sibling `../Motus.NET` → project refs ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)).
+Pinned **0.7.2** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly). Sibling `../Motus.NET` project refs only with `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)).
 
 | Package | Role |
 |---------|------|
@@ -86,3 +86,4 @@ Also check in Rhino:
 - Waypoints `Q` tree wires into UR Write MoveJ without GH transpose
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
+- `06_turntable_group`: coupled Preview rotates table; decoupled (arm Group) keeps table fixed
