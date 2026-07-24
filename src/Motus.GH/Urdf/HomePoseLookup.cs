@@ -17,13 +17,29 @@ internal static class HomePoseLookup
 
   public static JointState HomeOrZeros(RobotModel robot, string? sourcePath = null)
   {
+    if (Units.IsStewart(robot.Preset))
+      return MidStrokeOrZeros(robot);
     if (IsUr10e(robot, sourcePath))
       return new JointState((double[])Ur10eReadyRadians.Clone());
     return new JointState(new double[robot.Preset.AxisCount]);
   }
 
+  private static JointState MidStrokeOrZeros(RobotModel robot)
+  {
+    var n = robot.Preset.AxisCount;
+    var q = new double[n];
+    var limits = robot.Preset.JointLimits;
+    for (var i = 0; i < n; i++)
+    {
+      if (i < limits.Count)
+        q[i] = 0.5 * (limits[i].Min + limits[i].Max);
+    }
+    return new JointState(q);
+  }
+
   internal static bool IsUr10e(RobotModel robot, string? sourcePath = null)
   {
+    if (Units.IsStewart(robot.Preset)) return false;
     if (robot.Preset.AxisCount != 6) return false;
 
     var name = robot.Preset.ModelName ?? robot.DisplayName ?? "";

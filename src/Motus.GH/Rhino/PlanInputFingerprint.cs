@@ -22,7 +22,8 @@ public static class PlanInputFingerprint
         int rrtMaxIterations = 4000,
         double rrtMaxPlanTimeSeconds = 0,
         double rrtGoalBias = 0.08,
-        double rrtStepRadians = 0.12)
+        double rrtStepRadians = 0.12,
+        long? treeFingerprint = null)
     {
         var sb = new StringBuilder(512);
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
@@ -33,12 +34,26 @@ public static class PlanInputFingerprint
             .Append(rrtGoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
             .Append(rrtStepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         AppendFrame(sb, "base", baseFrameOverride);
+        if (treeFingerprint is { } tfp)
+            sb.Append("tree:").Append(tfp).Append('|');
         if (toolOverride is not null)
         {
             sb.Append("toolName:").Append(toolOverride.Name).Append('|');
             AppendFrame(sb, "toolTcp", toolOverride.Tcp);
             if (toolOverride.Geometry is { } geom)
                 AppendCollisionObject(sb, geom);
+            if (toolOverride.Bindings is { Count: > 0 } bindings)
+            {
+                sb.Append("bd:");
+                foreach (var b in bindings)
+                {
+                    sb.Append(b.Parameter).Append('=')
+                        .Append(b.DriverJoint).Append(',')
+                        .Append(b.OpenValue.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                        .Append(b.ClosedDriverValue.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+                }
+                sb.Append('|');
+            }
         }
         AppendJoints(sb, "start", start.Positions);
         for (var i = 0; i < goals.Count; i++)

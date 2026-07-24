@@ -47,12 +47,9 @@ public static class PreviewColorResolver
 
         var aligned = new List<Color?>();
         for (var gi = 0; gi < geometry.Links.Count; gi++)
-        {
-            if (geometry.Links[gi].LocalGeometry.Shape != CollisionShape.Mesh) continue;
             aligned.Add(gi < geometryColors.Length ? geometryColors[gi] : null);
-        }
 
-        if (geometry.ToolGeometry is { Shape: CollisionShape.Mesh })
+        if (geometry.ToolGeometry is not null)
             aligned.Add(null);
 
         return aligned.ToArray();

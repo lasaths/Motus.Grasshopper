@@ -6,35 +6,68 @@ on:
   pull_request:
     branches: [master, main]
 
+# Motus.NET lives as a sibling of Motus.Grasshopper (see build/MotusNetLocal.props).
+# Checkout both so CI can UseLocal until/unless the MotusNetVersion NuGet package is on nuget.org.
+defaults:
+  run:
+    working-directory: Motus.Grasshopper
+
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: Motus.Grasshopper
+
+      - name: Checkout Motus.NET (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: lasaths/Motus.NET
+          path: Motus.NET
+          ref: master
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
       - name: Build Motus.GH (net8.0-windows)
-        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release
+        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true
 
   build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: Motus.Grasshopper
+
+      - name: Checkout Motus.NET (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: lasaths/Motus.NET
+          path: Motus.NET
+          ref: master
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
       - name: Build Motus.GH (net8.0)
-        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release -f net8.0
+        run: dotnet build src/Motus.GH/Motus.GH.csproj -c Release -f net8.0 -p:UseMotusNetProjectReference=true
 
   smoke:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: Motus.Grasshopper
+
+      - name: Checkout Motus.NET (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: lasaths/Motus.NET
+          path: Motus.NET
+          ref: master
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -60,7 +93,7 @@ jobs:
 
       # Compiles against NuGet RhinoCommon (ref-only). Runtime loads Rhino 8 System\RhinoCommon.dll.
       - name: Build QA smoke
-        run: dotnet build scripts/qa-smoke/QaSmoke.csproj -c Release
+        run: dotnet build scripts/qa-smoke/QaSmoke.csproj -c Release -p:UseMotusNetProjectReference=true
 
       - name: QA smoke (requires Rhino 8 install)
         shell: pwsh

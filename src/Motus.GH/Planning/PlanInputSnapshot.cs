@@ -26,6 +26,7 @@ internal sealed class PlanInputSnapshot
 
     public SerialJointChain? Chain { get; init; }
     public KinematicTree? Tree { get; init; }
+    public StewartPlatform? Stewart { get; init; }
     public RobotCollisionModel? PreviewGeometry { get; init; }
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
@@ -95,7 +96,8 @@ internal sealed class PlanInputSnapshot
             fingerprintRrt.MaxIterations,
             fingerprintRrt.MaxPlanTimeSeconds,
             fingerprintRrt.GoalBias,
-            fingerprintRrt.StepRadians);
+            fingerprintRrt.StepRadians,
+            robotGoo.Tree?.Fingerprint);
 
         snapshot = new PlanInputSnapshot
         {
@@ -111,6 +113,7 @@ internal sealed class PlanInputSnapshot
             IsAutoPlan = owner.AutoPlanEnabled,
             Chain = robotGoo.Chain,
             Tree = robotGoo.Tree,
+            Stewart = robotGoo.Stewart,
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,

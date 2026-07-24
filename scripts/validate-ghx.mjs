@@ -39,6 +39,12 @@ const MOTUS_COMPONENTS = new Map([
   ['c8f2a1d0-4e3b-4a7c-9d1e-2b6f8a0c5e71', 'Motus Serial Chain'],
   ['a1b2c3d4-5e6f-7081-92a3-b4c5d6e7f809', 'Motus Reach Samples'],
   ['d9e3b2c1-5f4a-4b8d-9e2f-3c7a1d0b6f82', 'Motus Joint Table'],
+  ['2b3c4d5e-6f7a-4b2c-9d3e-4f5a6b7c8d92', 'Motus Urdf Link'],
+  ['3c4d5e6f-7a8b-4c3d-ae4f-5a6b7c8d9ea3', 'Motus Urdf Joint'],
+  ['4d5e6f7a-8b9c-4d4e-bf5a-6b7c8d9eafb4', 'Motus Urdf Assemble'],
+  ['5e6f7a8b-9c0d-4e5f-ca6b-7c8d9eafb0c5', 'Motus Urdf Explode'],
+  ['6f7a8b9c-0d1e-4f60-db7c-8d9eafb0c1d6', 'Motus Urdf Attach'],
+  ['2f6c1d3a-9b7e-4c5a-8e2d-6a1f4b3c7d90', 'Motus Export URDF'],
 ]);
 
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';

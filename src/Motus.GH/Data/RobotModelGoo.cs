@@ -12,6 +12,8 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
 {
     public SerialJointChain? Chain { get; set; }
     public KinematicTree? Tree { get; set; }
+    /// <summary>When set, robot is a Stewart/Gough platform (<c>Family=stewart</c>).</summary>
+    public StewartPlatform? Stewart { get; set; }
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
@@ -25,6 +27,7 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
 
     public void EnsureChainFromPath(string? path = null)
     {
+        if (Stewart is not null) return;
         if (Chain is not null) return;
         path = UrdfPathResolver.ResolveUrdfPath(path ?? UrdfSourcePath ?? "");
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
@@ -55,7 +58,8 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
 
     public void EnsureBundledTool()
     {
-        if (Tool?.Geometry is not null) return;
+        // Respect any wired Tool (incl. Rd-only Cap=None with no static Geometry).
+        if (Tool is not null) return;
         var path = UrdfSourcePath;
         if (string.IsNullOrWhiteSpace(path)) return;
         if (BundledToolLoader.TryDefaultForUrdfPath(path) is { } tool)

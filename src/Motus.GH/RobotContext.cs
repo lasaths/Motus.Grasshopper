@@ -1,34 +1,21 @@
 using Motus.Core;
-
 using Motus.Geometry;
-
 using Motus.GH.Data;
-
 using System.Drawing;
-
-
 
 namespace Motus.GH;
 
-
-
 public readonly struct RobotContext
-
 {
-
     public RobotModel Model { get; }
-
     public RobotModel EffectiveModel { get; }
-
     public SerialJointChain? Chain { get; }
-
     public BaseFrame Base { get; }
-
     public ToolFrame Tool { get; }
-
     public RobotCollisionModel? PreviewGeometry { get; }
     public Color?[]? PreviewMeshColors { get; }
     public KinematicTree? Tree { get; }
+    public StewartPlatform? Stewart { get; }
 
     public RobotContext(
         RobotModel model,
@@ -38,7 +25,8 @@ public readonly struct RobotContext
         ToolFrame tool,
         RobotCollisionModel? previewGeometry = null,
         Color?[]? previewMeshColors = null,
-        KinematicTree? tree = null)
+        KinematicTree? tree = null,
+        StewartPlatform? stewart = null)
     {
         Model = model;
         EffectiveModel = effectiveModel;
@@ -48,7 +36,11 @@ public readonly struct RobotContext
         PreviewGeometry = previewGeometry;
         PreviewMeshColors = previewMeshColors;
         Tree = tree;
+        Stewart = stewart;
     }
+
+    public bool IsStewart =>
+        Stewart is not null || Units.IsStewart(EffectiveModel.Preset);
 
     public static RobotContext FromGoo(RobotModelGoo goo)
     {
@@ -63,7 +55,7 @@ public readonly struct RobotContext
             goo.EffectiveTool(),
             goo.EffectivePreviewGeometry(),
             goo.PreviewMeshColors,
-            goo.Tree);
+            goo.Tree,
+            goo.Stewart);
     }
 }
-

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (Waves 0–2). Wave 2 adds `ToolParameterBinding`, `JointTableTrees`, and `MobilityModel.HolonomicSE2` in Motus.NET.
+Accepted (Waves 0–2). Wave 2 adds `ToolParameterBinding`, `JointTableTrees`, and `MobilityModel.HolonomicSE2` in Motus.NET. Amended below for typed Link/Joint GH goo (structural authoring via `RobotDescription`).
 
 ## Context
 
@@ -69,7 +69,38 @@ URDF load and GH **Motus Serial Chain** both build the **same** Motus.NET `Kinem
 ## Consequences
 
 - Motus.NET owns tree FK, mimic, fingerprint, reach sampling, and tip-chain parity; GH wires and previews only.
-- Planners keep using `SerialJointChain` as a tip-group view over the tree, not a parallel kinematics stack.
+- For **serial / open-tree** robots, planners keep using `SerialJointChain` as a tip-group view over the tree.
+- **Parallel Stewart/Gough platforms** are a sibling Motus.NET stack (`Family=stewart`) — see [ADR 0003](0003-parallel-kinematics-stewart.md). They do **not** use `ExtractSerialTip` or closed loops inside `KinematicTree` / `RobotDescription`.
 - Wave 1 GH assemble must target Motus.NET tree construction; perf budgets constrain scrub/preview and reach UX.
 - Gate 0 is an API freeze **intent** for Motus.NET; Grasshopper Wave 0 does not implement Motus.NET kinematics.
 - Mobility / SE(2) / climbing remain documented extension points until a later wave.
+
+### Amendment: typed Link/Joint GH goo (structural authoring)
+
+The Wave 1 rejection of "Link×N / Joint×N Grasshopper spaghetti" (above) targeted **anonymous**
+parameter spaghetti — a robot assembled from bare numbers/planes with no schema, re-derived and
+re-validated ad hoc per graph. It did not anticipate a **typed** authoring surface. This amendment
+narrows the rule:
+
+- **Allowed:** typed, per-node GH goo — `UrdfLinkGoo`, `UrdfJointGoo`, `RobotDescriptionGoo` —
+  wired through dedicated components (**Motus Urdf Link / Joint / Assemble / Explode / Attach**).
+  Link visuals are native GH Box/Mesh/Brep (no Motus geometry goo). Each goo wraps a validated
+  Motus.NET value type (`UrdfLink`, `UrdfJoint`, `RobotDescription`); GH never invents its own
+  link/joint schema.
+- **Still rejected:** wiring raw numbers/planes/strings directly into a from-scratch tree builder
+  in Grasshopper with no Motus.NET-owned type in between. If a component accepts bare doubles for
+  origins/axes/limits and assembles a tree itself, that is the spaghetti this ADR rejects.
+- **Motus.NET owns assemble/attach.** Topology validation (single root, no orphan/duplicate
+  links, mimic target resolution) and mechanism composition happen in `RobotDescription.TryAssemble`
+  / `RobotDescription.Attach` / `RobotDescription.Explode` (Motus.Geometry), and projection to
+  `KinematicTree` happens via `RobotDescriptionSession.Project`. **Motus Urdf Assemble** and
+  **Motus Urdf Attach** call into these — they do not re-implement tree construction or attach
+  math on the GH side.
+- **GH stays a thin wrapper.** Grasshopper components collect per-node inputs (geometry dims/mesh,
+  parent/child names, axis line, limits) into the typed goo above and hand the assembled
+  `RobotDescription` back to Motus.NET (`RobotDescriptionSession.Project`) for FK/planning — the
+  same pattern as URDF-file load and **Motus Serial Chain** building the same `KinematicTree`.
+- Rationale: this is how a driven mechanism (gripper, turntable, rail) gets authored *without* a
+  URDF file on disk, while keeping GH out of the kinematics-implementation business per the
+  Decision above. **Motus Export URDF** calls Motus.NET `UrdfWriter` on a `RobotDescription` (no
+  GH-local URDF XML) for handoff to other URDF-consuming tools.

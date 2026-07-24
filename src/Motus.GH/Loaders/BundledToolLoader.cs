@@ -5,7 +5,18 @@ using Motus.GH.Urdf;
 
 namespace Motus.GH.Loaders;
 
-/// <summary>Default end-effectors and bundled robot assets beside the plugin.</summary>
+/// <summary>
+/// Default end-effectors and bundled robot assets beside the plugin.
+/// </summary>
+/// <remarks>
+/// The Robotiq 2F-85 tool built here (<see cref="TryDefaultForUrdfPath"/>) is <see cref="ToolCapabilities.Robotiq2F85"/>
+/// + a single flange-frame STL hull (<c>Cap+STL</c>) with <see cref="ToolDefinition.Bindings"/> left null, so
+/// <see cref="ToolDefinition.GeometryForState"/> squashes/legacy-scales that one static mesh with jaw width —
+/// it is a closed-envelope hull, not articulated fingers. For real finger FK (mimic joints driven at the
+/// URDF/<see cref="Motus.Geometry.KinematicTree"/> level), attach an actuated mechanism via Motus Tool's
+/// Description pin (<see cref="Motus.Geometry.RobotDescription"/>) instead — see <see cref="Motus.GH.Data.ToolGoo.Mechanism"/>
+/// and <see cref="Motus.Geometry.KinematicTree.Attach"/>.
+/// </remarks>
 internal static class BundledToolLoader
 {
     public const string Ur10eRobotiqUrdf = "resources/robots/ur10e_robotiq/ur10e_robotiq.urdf";

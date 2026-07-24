@@ -34,6 +34,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
 
     public SerialJointChain? Chain { get; private set; }
     public KinematicTree? Tree { get; private set; }
+    public StewartPlatform? Stewart { get; private set; }
     public RobotCollisionModel? PreviewGeometry { get; private set; }
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
@@ -73,6 +74,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         IsAutoPlan = snap.IsAutoPlan;
         Chain = snap.Chain;
         Tree = snap.Tree;
+        Stewart = snap.Stewart;
         PreviewGeometry = snap.PreviewGeometry;
         PreviewMeshColors = snap.PreviewMeshColors;
         BaseFrameOverride = snap.BaseFrameOverride;
@@ -244,6 +246,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         {
             Chain = Chain,
             Tree = Tree,
+            Stewart = Stewart,
             PreviewGeometry = PreviewGeometry ?? robot.CollisionModel,
             PreviewMeshColors = PreviewMeshColors,
             BaseFrameOverride = BaseFrameOverride,

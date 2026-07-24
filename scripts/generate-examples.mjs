@@ -25,9 +25,9 @@ const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
 /** Collision-free home-ish start for obstacle demos (away from table/box). */
 const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
 const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
-/** 4-DOF turntable_arm.urdf: [turntable, shoulder, elbow, wrist] — goal rotates table. */
-const TURNTABLE_START = [0.0, 0.4, -0.9, 0.6];
-const TURNTABLE_GOAL = [1.2, 0.8, -0.5, 0.2];
+/** ur10e_on_turntable.xacro: [turntable, …UR10e×6] — goal rotates table. */
+const TURNTABLE_START = [0.0, ...START_JOINTS];
+const TURNTABLE_GOAL = [1.2, ...GOAL_JOINTS];
 
 /** GH / Motus param type GUIDs (ComponentGuid). Required for IGH_VariableParameterComponent ParameterData. */
 const PTYPE = {
@@ -66,15 +66,56 @@ const MOTUS = {
   ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
     inputs: [],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
-  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 104,
+  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 124,
     inputs: [
       { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
-      { name: 'TCP', nick: 'P', desc: 'TCP in flange frame (Z = tool axis)', optional: false, plane: true },
-      { name: 'Geometry', nick: 'G', desc: 'Optional gripper mesh or brep (TCP-local)', optional: true },
+      { name: 'TCP', nick: 'P', desc: 'TCP in flange frame (Z = tool axis); unwired + Description → TipTcp', optional: true, plane: true },
+      { name: 'Geometry', nick: 'G', desc: 'Optional static gripper mesh (legacy Cap+STL); ignored when Description wired', optional: true },
       { name: 'GeomPlane', nick: 'L', desc: 'Geometry pose in TCP-local frame', optional: true, plane: true },
       { name: 'Capabilities', nick: 'Cap', desc: 'None or Robotiq2F85 (jaw presets for Motus Tool State)', optional: true, text: 'None' },
+      { name: 'Description', nick: 'Rd', desc: 'Optional actuated mechanism (Motus Urdf Assemble) grafted on Motus Robot Tl', optional: true },
+      { name: 'Binding', nick: 'Bd', desc: 'Optional driver joint name for Cap width', optional: true, text: '' },
     ],
     outputs: [{ name: 'Tool', nick: 'Tl', desc: 'Tool definition' }] },
+  urdfLink: { guid: '2b3c4d5e-6f7a-4b2c-9d3e-4f5a6b7c8d92', name: 'Motus Urdf Link', nick: 'ULink', w: 74, h: 64,
+    inputs: [
+      { name: 'Name', nick: 'N', desc: 'Link name', optional: false, text: 'link' },
+      { name: 'Visual', nick: 'V', desc: 'Rhino geometry (Box/Mesh/Brep/Surface/…, meters)', optional: false, access: 1 },
+      { name: 'Collision', nick: 'C', desc: 'Optional collision geometry', optional: true, access: 1 },
+    ],
+    outputs: [{ name: 'Link', nick: 'L', desc: 'URDF link' }] },
+  urdfJoint: { guid: '3c4d5e6f-7a8b-4c3d-ae4f-5a6b7c8d9ea3', name: 'Motus Urdf Joint', nick: 'UJoint', w: 74, h: 164,
+    inputs: [
+      { name: 'Name', nick: 'N', desc: 'Joint name', optional: false, text: 'joint' },
+      { name: 'Type', nick: 'T', desc: 'Revolute / Continuous / Prismatic / Fixed', optional: true, text: 'Revolute' },
+      { name: 'Parent', nick: 'Pa', desc: 'Parent link name', optional: false, text: 'palm' },
+      { name: 'Child', nick: 'Ch', desc: 'Child link name', optional: false, text: 'finger' },
+      { name: 'Axis', nick: 'Ax', desc: 'Origin (Start) + axis (End-Start); default +Z', optional: true },
+      { name: 'Lower', nick: 'Lo', desc: 'Lower limit', optional: true, number: 0 },
+      { name: 'Upper', nick: 'Up', desc: 'Upper limit', optional: true, number: 0.8 },
+      { name: 'MimicJoint', nick: 'Mj', desc: 'Optional mimic target joint name', optional: true, text: '' },
+      { name: 'MimicMult', nick: 'Mm', desc: 'Mimic multiplier', optional: true, number: 1 },
+      { name: 'MimicOffset', nick: 'Mo', desc: 'Mimic offset', optional: true, number: 0 },
+    ],
+    outputs: [{ name: 'Joint', nick: 'J', desc: 'URDF joint' }] },
+  urdfAssemble: { guid: '4d5e6f7a-8b9c-4d4e-bf5a-6b7c8d9eafb4', name: 'Motus Urdf Assemble', nick: 'UAssemble', w: 74, h: 84,
+    inputs: [
+      { name: 'Name', nick: 'N', desc: 'Description name', optional: true, text: 'gripper' },
+      { name: 'Links', nick: 'L', desc: 'URDF links', optional: false, access: 1 },
+      { name: 'Joints', nick: 'J', desc: 'URDF joints', optional: true, access: 1 },
+      { name: 'Tip', nick: 'Tip', desc: 'Optional tip link', optional: true, text: 'palm' },
+    ],
+    outputs: [{ name: 'Description', nick: 'D', desc: 'Assembled robot description' }] },
+  urdfExport: { guid: '2f6c1d3a-9b7e-4c5a-8e2d-6a1f4b3c7d90', name: 'Motus Export URDF', nick: 'UrdfExport', w: 74, h: 64,
+    inputs: [
+      { name: 'Description', nick: 'D', desc: 'RobotDescription from Assemble/Attach', optional: false },
+      { name: 'Folder', nick: 'F', desc: 'Output folder for .urdf (+ meshes/)', optional: false, text: '' },
+      { name: 'Name', nick: 'N', desc: 'Optional file name override', optional: true, text: '' },
+    ],
+    outputs: [
+      { name: 'Path', nick: 'P', desc: 'Written .urdf path' },
+      { name: 'Status', nick: 'Msg', desc: 'Status message' },
+    ] },
   loadMesh: { guid: 'c3d4e5f6-a7b8-4901-c234-56789abcdef2', name: 'Motus Load Mesh', nick: 'LoadMesh', w: 74, h: 54,
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Path to .stl file', optional: false, text: '' },
@@ -290,6 +331,19 @@ const MOTUS = {
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model (same as Motus Robot)' }],
   },
+  stewart: {
+    guid: 'a9e1c3f0-7b2d-4e8a-9c1f-6d4b2a0e8f73', name: 'Motus Stewart', nick: 'Stewart', w: 74, h: 124,
+    desc: 'Stewart/Gough hexapod (Family=stewart; Q = leg lengths in meters)',
+    inputs: [
+      { name: 'Path', nick: 'P', desc: 'Optional Stewart JSON (schemaVersion=1)', optional: true, text: '' },
+      { name: 'BaseRadius', nick: 'Br', desc: 'Classic base anchor radius (m)', optional: true, number: 0.5 },
+      { name: 'PlatformRadius', nick: 'Pr', desc: 'Classic platform anchor radius (m)', optional: true, number: 0.3 },
+      { name: 'MinStroke', nick: 'Lmin', desc: 'Min leg length (m)', optional: true, number: 0.35 },
+      { name: 'MaxStroke', nick: 'Lmax', desc: 'Max leg length (m)', optional: true, number: 0.90 },
+      { name: 'Name', nick: 'N', desc: 'Model name', optional: true, text: 'stewart_classic' },
+    ],
+    outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Stewart robot (Family=stewart)' }],
+  },
 };
 
 const NATIVE = {
@@ -302,6 +356,12 @@ const NATIVE = {
   plane: { guid: 'cfb6b17f-ca82-4f5d-b604-d4f69f569de3', name: 'Plane Normal', nick: 'Pl', w: 44, h: 44,
     inputs: ['Origin', 'Z-Axis'], outputs: ['Plane'] },
   xyPlane: { guid: '17b7152b-d30d-4d50-b9ef-c9fe25576fc2', name: 'XY Plane', nick: 'XY', w: 44, h: 22, outputs: ['Plane'] },
+  // SurfaceComponents.gha — Center Box (Base plane + X/Y/Z size → Box)
+  centerBox: { guid: '28061aae-04fb-4cb5-ac45-16f3b66bc0a4', name: 'Center Box', nick: 'Box', w: 54, h: 64,
+    inputs: ['Base', 'X', 'Y', 'Z'], outputs: ['Box'] },
+  // CurveComponents.gha — Line SDL (Start + Direction + Length → Line)
+  lineSdl: { guid: '4c619bc9-39fd-4717-82a6-1e07ea237bbe', name: 'Line SDL', nick: 'Ln', w: 44, h: 64,
+    inputs: ['Start', 'Direction', 'Length'], outputs: ['Line'] },
   filePath: { guid: '06953bda-1d37-4d58-9b38-4b3c74e54c8f', name: 'File Path', nick: 'Path', w: 50, h: 24 },
   move: { guid: '4f7cd4e3-9b20-41d8-9c00-2940fe7f3aa0', name: 'Move', nick: 'Move', w: 44, h: 44,
     inputs: ['Geometry', 'Motion'], outputs: ['Geometry'] },
@@ -929,6 +989,86 @@ function nativeConstructPoint(x, y, coords) {
             </chunk>`, node };
 }
 
+/** Line SDL: Start point + Direction vector + Length → Line (for Motus Urdf Joint Axis). */
+function nativeLineSdl(x, y, startRef, dirRef, length = 0.05) {
+  const spec = NATIVE.lineSdl;
+  const instance = id();
+  const inGuids = [id(), id(), id()];
+  const outGuid = id();
+  const node = {
+    key: 'lineSdl',
+    instance,
+    inputs: spec.inputs.map((n, i) => ({ name: n, _guid: inGuids[i] })),
+    outputs: [{ name: 'Line', _guid: outGuid }],
+  };
+  const sources = [
+    [startRef._guid],
+    [dirRef._guid],
+    [],
+  ];
+  const persist = [
+    null,
+    null,
+    persistentNumbers([length]),
+  ];
+  const inChunks = spec.inputs.map((name, i) => {
+    const srcItems = (sources[i] ?? []).map((s, si) => sourceItem(si, s)).join('\n');
+    const chunks = [bounds(x + 2, y + 2 + i * 20, 17, 20)];
+    if (persist[i]) chunks.push(persist[i]);
+    return `<chunk name="param_input" index="${i}">
+                      <items count="${6 + (sources[i]?.length ?? 0)}">
+                        ${item('Description', 'gh_string', '10', name)}
+                        ${item('InstanceGuid', 'gh_guid', '9', inGuids[i])}
+                        ${item('Name', 'gh_string', '10', name)}
+                        ${item('NickName', 'gh_string', '10', name[0])}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${srcItems}
+                        ${item('SourceCount', 'gh_int32', '3', String(sources[i]?.length ?? 0))}
+                      </items>
+                      <chunks count="${chunks.length}">
+                        ${chunks.join('\n                        ')}
+                      </chunks>
+                    </chunk>`;
+  });
+  const outChunk = `<chunk name="param_output" index="0">
+                      <items count="6">
+                        ${item('Description', 'gh_string', '10', 'Line')}
+                        ${item('InstanceGuid', 'gh_guid', '9', outGuid)}
+                        ${item('Name', 'gh_string', '10', 'Line')}
+                        ${item('NickName', 'gh_string', '10', 'L')}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${item('SourceCount', 'gh_int32', '3', '0')}
+                      </items>
+                      <chunks count="1">
+                        ${bounds(x + spec.w - 18, y + 2, 16, 20)}
+                      </chunks>
+                    </chunk>`;
+  return {
+    xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', spec.guid)}
+                ${item('Name', 'gh_string', '10', spec.name)}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="4">
+                    ${item('Description', 'gh_string', '10', 'Line SDL')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', spec.name)}
+                    ${item('NickName', 'gh_string', '10', spec.nick)}
+                  </items>
+                  <chunks count="4">
+                    ${bounds(x, y, spec.w, spec.h)}
+                    ${inChunks.join('\n                    ')}
+                    ${outChunk}
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`,
+    node,
+  };
+}
+
 function nativeUnitZ(x, y) {
   const instance = id();
   const outGuid = id();
@@ -1101,6 +1241,78 @@ function nativeXYPlane(x, y) {
                 </chunk>
               </chunks>
             </chunk>`, node };
+}
+
+/** Native Center Box — Base plane + full-extent X/Y/Z (meters). */
+function nativeCenterBox(x, y, baseRef, size) {
+  const instance = id();
+  const outGuid = id();
+  const baseIn = id();
+  const sizeIns = ['X', 'Y', 'Z'].map((name, i) => {
+    const g = id();
+    return `<chunk name="param_input" index="${i + 1}">
+                      <items count="6">
+                        ${item('Description', 'gh_string', '10', `Size of box in {${name.toLowerCase()}} direction.`)}
+                        ${item('InstanceGuid', 'gh_guid', '9', g)}
+                        ${item('Name', 'gh_string', '10', name)}
+                        ${item('NickName', 'gh_string', '10', name)}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${item('SourceCount', 'gh_int32', '3', '0')}
+                      </items>
+                      <chunks count="2">
+                        ${bounds(x + 2, y + 16 + i * 14, 15, 14)}
+                        ${persistentNumbers([size[i]])}
+                      </chunks>
+                    </chunk>`;
+  });
+  const node = { key: 'centerBox', instance, outputs: [{ name: 'Box', _guid: outGuid }] };
+  return {
+    xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', NATIVE.centerBox.guid)}
+                ${item('Name', 'gh_string', '10', 'Center Box')}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="5">
+                    ${item('Description', 'gh_string', '10', 'Create a box centered on a plane.')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', 'Center Box')}
+                    ${item('NickName', 'gh_string', '10', 'Box')}
+                    ${item('SourceCount', 'gh_int32', '3', '0')}
+                  </items>
+                  <chunks count="6">
+                    ${bounds(x, y, NATIVE.centerBox.w, NATIVE.centerBox.h)}
+                    <chunk name="param_input" index="0">
+                      <items count="7">
+                        ${item('Description', 'gh_string', '10', 'Base plane')}
+                        ${item('InstanceGuid', 'gh_guid', '9', baseIn)}
+                        ${item('Name', 'gh_string', '10', 'Base')}
+                        ${item('NickName', 'gh_string', '10', 'B')}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${sourceItem(0, baseRef._guid)}
+                        ${item('SourceCount', 'gh_int32', '3', '1')}
+                      </items>
+                      <chunks count="1">${bounds(x + 2, y + 2, 15, 14)}</chunks>
+                    </chunk>
+                    ${sizeIns.join('\n                    ')}
+                    <chunk name="param_output" index="0">
+                      <items count="6">
+                        ${item('Description', 'gh_string', '10', 'Resulting box')}
+                        ${item('InstanceGuid', 'gh_guid', '9', outGuid)}
+                        ${item('Name', 'gh_string', '10', 'Box')}
+                        ${item('NickName', 'gh_string', '10', 'B')}
+                        ${item('Optional', 'gh_bool', '1', 'false')}
+                        ${item('SourceCount', 'gh_int32', '3', '0')}
+                      </items>
+                      <chunks count="1">${bounds(x + 38, y + 24, 14, 14)}</chunks>
+                    </chunk>
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`,
+    node,
+  };
 }
 
 let lastGraphMeta = null;
@@ -1643,15 +1855,21 @@ function graph06() {
   const note = nativePanel(
     420,
     -60,
-    'Coupled: Group unwired (turntable moves). Decoupled: arm group locks turntable. Scrub both Previews.',
+    'Prefab UR10e on turntable. Coupled: Group off. Decoupled: arm Group locks turntable. Scrub both.',
     'Note',
     420,
     40,
   );
-  const urdfFile = nativeFilePath(40, 40, absPath('examples/urdf/turntable_arm.urdf'));
+  // Prefab ur10e_robotiq.urdf via thin turntable xacro (meshes stay next to bundled URDF).
+  const urdfFile = nativeFilePath(
+    40,
+    40,
+    absPath('resources/robots/ur10e_robotiq/ur10e_on_turntable.xacro'),
+    '*.xacro;*.urdf|*.xacro;*.urdf|All files|*.*',
+  );
   const robot = motusComponent('robot', 280, 40, {
     Path: [outRef(urdfFile.node, 'Path')],
-  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
+  }, { text: { BaseLink: 'world', TipLink: 'tool0' }, hidden: true });
   const start = motusComponent('joints', 40, 180, {}, { jointValues: TURNTABLE_START });
   const goal = motusComponent('joints', 40, 300, {}, { jointValues: TURNTABLE_GOAL });
 
@@ -1660,13 +1878,21 @@ function graph06() {
   const keep = motusComponent('colSphere', 220, 420, {
     Center: [outRef(keepCenter.node, 'Point')],
   }, { text: { Name: 'keepout' }, numbers: { Radius: 0.08 } });
-  // Far keep-out forces RRT (GroupMap). Arm joints listed on Group J — locks turntable.
   const scene = motusComponent('colScene', 420, 420, {
     Objects: [outRef(keep.node, 'Object')],
   });
   const group = motusComponent('group', 620, 420, {}, {
-    text: { Name: 'arm', BaseLink: 'turntable_link', TipLink: 'tool0' },
-    textList: { Joints: ['shoulder', 'elbow', 'wrist'] },
+    text: { Name: 'arm', BaseLink: 'base_link', TipLink: 'tool0' },
+    textList: {
+      Joints: [
+        'shoulder_pan_joint',
+        'shoulder_lift_joint',
+        'elbow_joint',
+        'wrist_1_joint',
+        'wrist_2_joint',
+        'wrist_3_joint',
+      ],
+    },
   });
   const rrt = motusComponent('rrtSettings', 800, 420, {});
 
@@ -1689,7 +1915,7 @@ function graph06() {
   }, { advanced: ['Collision', 'Group', 'RrtSettings'] });
   const decoupled = previewWithScrub(40, 980, outRef(planDecoupled.node, 'Trajectory'));
 
-  const gRobot = nativeGroup('URDF + joints', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
+  const gRobot = nativeGroup('Prefab UR10e + turntable', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
   const gScene = nativeGroup('Scene + arm group', [
     keepCenter, keep, scene, group, rrt,
   ], GROUP_COLOUR.collision);
@@ -1707,12 +1933,207 @@ function graph06() {
   objs._meta = {
     fileName: '06_turntable_group.ghx',
     description:
-      'Turntable+arm URDF: coupled Plan (Group unwired) vs decoupled Plan (arm Group locks turntable). Shared RRT scene; scrub both Previews.',
+      'Prefab UR10e+Robotiq on 1-DOF turntable: coupled Plan vs arm Group (locks turntable). Shared RRT scene; scrub both Previews.',
   };
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06];
+/**
+ * 07 — Author gripper → Tool Rd → Robot Tl → Program PTP (ToolMode Ramp open→closed) → Preview.
+ * Cap=Robotiq2F85 supplies width schema/DefaultState(Open); Bd=j_left drives the authored joint.
+ */
+function graph07() {
+  const title = nativeScribble(40, -60, '07  URDF gripper Tool', 28);
+  const note = nativePanel(
+    420,
+    -60,
+    'Arm = ur10e_minimal (no Robotiq). Boxes → ULink → Tool Rd → Tl. Cap=Robotiq2F85, Bd=j_left.',
+    'Note',
+    520,
+    40,
+  );
+
+  const xy = nativeXYPlane(40, 0);
+  const palmBox = nativeCenterBox(40, 40, outRef(xy.node, 'Plane'), [0.08, 0.06, 0.03]);
+  const leftBox = nativeCenterBox(40, 160, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
+  const rightBox = nativeCenterBox(40, 280, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
+
+  const palm = motusComponent('urdfLink', 220, 40, {
+    Visual: [outRef(palmBox.node, 'Box')],
+  }, { text: { Name: 'palm' } });
+  const left = motusComponent('urdfLink', 220, 160, {
+    Visual: [outRef(leftBox.node, 'Box')],
+  }, { text: { Name: 'L' } });
+  const right = motusComponent('urdfLink', 220, 280, {
+    Visual: [outRef(rightBox.node, 'Box')],
+  }, { text: { Name: 'R' } });
+
+  const uz = nativeUnitZ(40, 420);
+  const leftOrigin = nativeConstructPoint(40, 500, [0, 0.035, 0]);
+  const rightOrigin = nativeConstructPoint(40, 580, [0, -0.035, 0]);
+  const leftAxis = nativeLineSdl(220, 460, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const rightAxis = nativeLineSdl(220, 580, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+
+  const jLeft = motusComponent('urdfJoint', 420, 200, {
+    Axis: [outRef(leftAxis.node, 'Line')],
+  }, {
+    text: { Name: 'j_left', Type: 'Revolute', Parent: 'palm', Child: 'L' },
+    numbers: { Lower: 0, Upper: 0.8 },
+  });
+  const jRight = motusComponent('urdfJoint', 420, 400, {
+    Axis: [outRef(rightAxis.node, 'Line')],
+  }, {
+    text: {
+      Name: 'j_right', Type: 'Revolute', Parent: 'palm', Child: 'R', MimicJoint: 'j_left',
+    },
+    numbers: { Lower: 0, Upper: 0.8, MimicMult: -1, MimicOffset: 0 },
+  });
+
+  const linksMerge = nativeMerge(420, 40, [
+    outRef(palm.node, 'Link'),
+    outRef(left.node, 'Link'),
+    outRef(right.node, 'Link'),
+  ]);
+  const jointsMerge = nativeMerge(600, 280, [
+    outRef(jLeft.node, 'Joint'),
+    outRef(jRight.node, 'Joint'),
+  ]);
+  const assemble = motusComponent('urdfAssemble', 780, 120, {
+    Links: [outRef(linksMerge.node, 'Result')],
+    Joints: [outRef(jointsMerge.node, 'Result')],
+  }, { text: { Name: 'demo_gripper', Tip: 'palm' } });
+
+  // Cap supplies Open/Closed width schema; Bd maps width → authored driver (not robotiq_* names).
+  const tool = motusComponent('tool', 980, 120, {
+    Description: [outRef(assemble.node, 'Description')],
+  }, { text: { Name: 'demo_gripper', Capabilities: 'Robotiq2F85', Binding: 'j_left' } });
+
+  // Arm-only primitives — ur10e.urdf/.robotiq need mesh assets; minimal always previews.
+  const urdfFile = nativeFilePath(
+    780,
+    320,
+    absPath('examples/ur10e/ur10e_minimal.urdf'),
+  );
+  const robot = motusComponent('robot', 980, 320, {
+    Path: [outRef(urdfFile.node, 'Path')],
+    Tool: [outRef(tool.node, 'Tool')],
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
+
+  const start = motusComponent('joints', 1180, 200, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 1180, 340, {}, { jointValues: GOAL_JOINTS });
+  const stateClosed = motusComponent('toolState', 1180, 480, {
+    Tool: [outRef(tool.node, 'Tool')],
+  }, { text: { Preset: 'Closed' } });
+  // InitialToolState = Cap DefaultState (Open); Ramp lerps width → Closed over the PTP.
+  const segPtp = motusComponent('segment', 1380, 280, {
+    Goal: [outRef(goal.node, 'State')],
+    ToolState: [outRef(stateClosed.node, 'State')],
+  }, { text: { Type: 'PTP' }, toolMode: 'Ramp' });
+  const prog = motusComponent('progPlan', 1580, 240, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Segments: [outRef(segPtp.node, 'Segment')],
+    Start: [outRef(start.node, 'State')],
+  });
+  const { scrub, preview } = previewWithScrub(1580, 240, outRef(prog.node, 'Trajectory'));
+
+  const exportFolder = nativePanel(
+    780,
+    480,
+    absPath('examples'),
+    'Folder',
+    260,
+    40,
+  );
+  const urdfExport = motusComponent('urdfExport', 1080, 480, {
+    Description: [outRef(assemble.node, 'Description')],
+    Folder: [outRef(exportFolder.node, 'Text')],
+  }, { text: { Name: 'demo_gripper' } });
+
+  const gAuthor = nativeGroup('Box / Link / Joint', [
+    { xml: xy.xml, node: xy.node },
+    palmBox, leftBox, rightBox, palm, left, right,
+    { xml: uz.xml, node: uz.node },
+    { xml: leftOrigin.xml, node: leftOrigin.node },
+    { xml: rightOrigin.xml, node: rightOrigin.node },
+    leftAxis, rightAxis,
+    jLeft, jRight,
+  ], GROUP_COLOUR.model);
+  const gTool = nativeGroup('Assemble → Tool Rd', [
+    linksMerge, jointsMerge, assemble, tool,
+  ], GROUP_COLOUR.tool);
+  const gPlan = nativeGroup('Robot Tl + Program', [
+    urdfFile, robot, start, goal, stateClosed, segPtp, prog, scrub, preview, exportFolder, urdfExport,
+  ], GROUP_COLOUR.preview);
+
+  const objs = [
+    title, note,
+    { xml: xy.xml }, palmBox, leftBox, rightBox, palm, left, right,
+    { xml: uz.xml }, { xml: leftOrigin.xml }, { xml: rightOrigin.xml }, leftAxis, rightAxis,
+    jLeft, jRight, linksMerge, jointsMerge, assemble, tool,
+    urdfFile, robot, start, goal, stateClosed, segPtp, prog, scrub, preview,
+    exportFolder, urdfExport,
+    gAuthor, gTool, gPlan,
+  ];
+  objs._meta = {
+    fileName: '07_urdf_gripper_tool.ghx',
+    description:
+      'ur10e_minimal (no prefab gripper) + Center Box → Motus Urdf Link/Joint/Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl → Program PTP Ramp → Preview. Wire any Rhino geometry into ULink V. Export URDF Write on Assemble D.',
+  };
+  return buildGraph(objs);
+}
+
+function graph08() {
+  const title = nativeScribble(40, 40, '08 · Stewart TCP path', 28);
+  const note = nativePanel(
+    40,
+    80,
+    'Motus Stewart (classic hex) → Plan with TCP planes → Preview. Q = leg lengths (m), not UR MoveJ.',
+    'Note',
+    420,
+    60,
+  );
+  const stewart = motusComponent('stewart', 40, 200, {});
+  const startPt = nativeConstructPoint(280, 160, [0, 0, 0.625]);
+  const goalPt = nativeConstructPoint(280, 280, [0.01, 0, 0.625]);
+  const uz = nativeUnitZ(280, 100);
+  const startPl = nativePlane(400, 160, startPt.node.outputs[0], uz.node.outputs[0]);
+  const goalPl = nativePlane(400, 280, goalPt.node.outputs[0], uz.node.outputs[0]);
+  const plan = motusComponent('plan', 560, 200, {
+    Robot: [outRef(stewart.node, 'Robot')],
+    Goal: [outRef(goalPl.node, 'Plane')],
+    Start: [outRef(startPl.node, 'Plane')],
+  });
+  const { scrub, preview } = previewWithScrub(760, 200, outRef(plan.node, 'Trajectory'));
+  const waypoints = motusComponent('waypoints', 980, 200, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+
+  const gModel = nativeGroup('Stewart', [stewart], GROUP_COLOUR.model);
+  const gPlan = nativeGroup('Plan TCP', [
+    { xml: startPt.xml, node: startPt.node },
+    { xml: goalPt.xml, node: goalPt.node },
+    { xml: uz.xml, node: uz.node },
+    { xml: startPl.xml, node: startPl.node },
+    { xml: goalPl.xml, node: goalPl.node },
+    plan, scrub, preview, waypoints,
+  ], GROUP_COLOUR.plan);
+
+  const objs = [
+    title, note, stewart,
+    { xml: startPt.xml }, { xml: goalPt.xml }, { xml: uz.xml },
+    { xml: startPl.xml }, { xml: goalPl.xml },
+    plan, scrub, preview, waypoints,
+    gModel, gPlan,
+  ];
+  objs._meta = {
+    fileName: '08_stewart_tcp_path.ghx',
+    description:
+      'Motus Stewart classic hex → Plan Start/Goal TCP planes → Preview scrub + Waypoints (leg lengths in meters). Requires Motus.NET ≥ 0.9.0 (-UseLocal until NuGet publish).',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08];
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',
