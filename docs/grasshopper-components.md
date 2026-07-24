@@ -9,9 +9,10 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 | Motus UR10e Robotiq | *(none)* | Bundled UR10e + Robotiq 2F-85 robot |
 | Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
 | Motus Serial Chain | **Lengths** list (m); optional Base, Home `Q`, **Rail**, Types, TCP | Same Robot goo — parametric serial / rail+arm (concept sizing) |
+| Motus Stewart | Optional JSON Path; classic BaseRadius / PlatformRadius / MinStroke / MaxStroke / Name | Same Robot goo — Stewart/Gough hexapod (`Family=stewart`; `Q` = leg lengths in **meters**) |
 | Motus Joint Table | Parent / Child / Type / Ox; optional Oy,Oz, Name, **Tip**, Base, Home, **SE2** (X,Y,yaw) | Same Robot goo — Plan uses **tip path** only; side branches are TreeFK preview only |
 | Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
-| Motus Tool | Name, TCP plane (flange frame), optional gripper Mesh/Brep | Tool definition |
+| Motus Tool | Name, TCP plane (flange frame); optional static Geometry, Cap, **Description** (`RobotDescription`), Binding driver joint | Tool definition |
 | Motus Tool State | Optional Tool; Preset (Open/Closed/Custom); Width, Speed, Force | End-effector state (`EndEffectorStateGoo`) |
 | Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
 | Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
@@ -21,11 +22,47 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 `Motus Robot` loads any serial-chain URDF via `UrdfRobotLoader`. Optional `Base` overrides the robot base frame; optional `Tool` overrides the end-effector. Previews at home when the path resolves (UR10e heuristic or zeros).
 
-`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates. Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
+**Motus Stewart** builds a Stewart/Gough platform (`Family=stewart`) via Motus.NET classic hex geometry or a versioned JSON description (`schemaVersion=1`). Wire TCP plane goals into **Motus Plan** — IK yields six **leg lengths in meters**. Do **not** hand Stewart `Q` to UR MoveJ. See [ADR 0003](adr/0003-parallel-kinematics-stewart.md). Collision/RRT for Stewart is not implemented yet (stroke/ΔL path checks only).
+
+`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates (legacy static tool — jaw-width squash allowed). Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
+
+Optionally wire a **Description** (`RobotDescription`, e.g. from **Motus Urdf Assemble**) for an *actuated* mechanism instead of a static mesh: **Motus Robot** grafts it onto the arm's kinematic tree at the tip link (`KinematicTree.Attach`, rotation-aware) so TreeFK drives real mechanism links, not a squashed mesh. Leave **TCP** unwired to derive it from the mechanism's `TipTcp()`. **Binding** names the driver joint that Cap's `width` parameter maps to (defaults to `robotiq_left_knuckle` when Cap = Robotiq2F85 and Binding is unwired). This is the fast path when the arm itself is a URDF/xacro load (**Motus Robot**); for composing an arm *and* mechanism from scratch, the Urdf authoring family's **Motus Urdf Attach** + `RobotDescriptionSession.Project` below remains the structural, from-scratch route.
 
 `Motus Tool State` builds an `EndEffectorState` for motion program segments. Wire **Preset** Open/Closed for Robotiq jaw width, or Custom + **Width**. Optional **Tool** validates parameter names against the tool schema.
 
 `Motus Load URDF` was removed; use **Motus Robot** instead.
+
+### Urdf authoring (Link / Joint / Assemble / Explode / Attach)
+
+Use native Grasshopper geometry (e.g. **Center Box**, Mesh, Brep) into **Motus Urdf Link** — there is no Motus geom component.
+
+| Component | Inputs | Outputs |
+|-----------|--------|---------|
+| Motus Urdf Link | Name; Visual (Box/Mesh/Brep list); optional Collision list | `UrdfLink` |
+| Motus Urdf Joint | Name; Type (Revolute/Continuous/Prismatic/Fixed or R/C/P/F); Parent/Child link names; Axis (Line: Start = origin, direction = joint axis); optional Lower/Upper, MimicJoint/Mult/Offset | `UrdfJoint` |
+| Motus Urdf Assemble | Name; Links list; Joints list; optional Tip | `RobotDescription` (validated tree; debounced ~120 ms) |
+| Motus Urdf Explode | Description | Links list, Joints list |
+| Motus Urdf Attach | Parent/Child `RobotDescription`; ParentLink; optional Plane (origin only), JointName | Merged `RobotDescription` |
+
+This is a **typed** authoring path, not a return to bare-number Link×N/Joint×N spaghetti: every
+node is a validated Motus.NET goo (`UrdfLinkGoo` → `UrdfJointGoo` → `RobotDescriptionGoo`), and
+**Motus.NET owns assemble/attach** (`RobotDescription.TryAssemble` / `.Attach` / `.Explode`) —
+Grasshopper only collects per-node inputs and hands them to Motus.NET. See
+[ADR 0002](adr/0002-kinematic-tree-in-motus-net.md) for the policy and rationale.
+
+Use this family to author a driven mechanism (gripper, turntable, rail) with **no URDF file on
+disk** — e.g. **Motus Urdf Assemble** the tool mechanism, **Motus Urdf Attach** it onto the arm's
+description at a parent link, then project to a `KinematicTree` (`RobotDescriptionSession.Project`)
+for FK/planning the same way a URDF load or **Motus Serial Chain** would. **Motus Urdf Attach**'s
+`Plane` carries origin only — rotate the child's own links/axes for a tilted mount, not the attach
+frame.
+
+This is a different, structural role from **Motus Tool** above, which stays a **thin** wrapper
+around a TCP frame plus optional collision geometry or an attached mechanism — it never assembles
+or validates a kinematic tree itself. When the arm is authored from scratch (not a URDF/xacro file),
+wire a driven gripper's actuated fingers through this Urdf authoring family; when the arm is a
+URDF/xacro load (**Motus Robot**), wiring the mechanism straight into **Motus Tool**'s `Description`
+pin is simpler and grafts onto the loaded tree directly (see above).
 
 `Motus Joint State` expects joint values in **URDF chain order** when the robot has `JointNames` metadata (bundled UR presets and URDF loads).
 
@@ -174,6 +211,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 |-----------|--------|
 | Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` (default GH plane fans on `P` hidden; path viz on Motus Preview) |
 | Motus Export | `Json` and `Csv` strings |
+| Motus Export URDF | `RobotDescription` (Assemble/Attach); Folder; optional Name — click **Write** → Motus.NET `UrdfWriter` |
 
 **Motus Waypoints** reshapes a planned trajectory for live controllers (e.g. UR Write). It does not connect to or command robots.
 
@@ -185,6 +223,11 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 Dense Motus paths executed as discrete MoveJ segments are stop-and-go; use Decimate to thin. Prefer `Q` → joint moves for planned path fidelity. Use `P` → linear TCP moves only for Cartesian-intent (LIN) paths — FK planes from joint-space / RRT trajectories are not a safe MoveL path (TCP re-interpolation can diverge). Warns when `AxisCount ≠ 6`. Controller handoff notes: [AGENTS.md](../AGENTS.md).
 
 JSON export includes `jointNames` when the robot model provides them. Point count is the length of `Times`; duration is the last `Times` value (native Grasshopper list ops).
+
+**Motus Export URDF** is a thin wrapper over Motus.NET `UrdfWriter.Write`: wire a
+`RobotDescription` from **Motus Urdf Assemble** / **Attach**, set Folder (+ optional Name), click
+**Write**. Writes `.urdf` plus `meshes/` sidecars when mesh buffers are present. Normal solves only
+re-report the last path — no disk IO until Write.
 
 ## Units
 

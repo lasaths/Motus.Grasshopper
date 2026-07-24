@@ -114,6 +114,7 @@ internal static class TrajectoryMerge
         {
             Chain = first.Chain,
             Tree = first.Tree,
+            Stewart = first.Stewart,
             PreviewGeometry = first.PreviewGeometry,
             PreviewMeshColors = first.PreviewMeshColors,
             BaseFrameOverride = first.BaseFrameOverride,

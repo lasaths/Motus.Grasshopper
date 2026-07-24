@@ -49,7 +49,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private KinematicsPreview.PreviewMeshCache? _meshCache;
-    private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp) _cacheSig;
+    private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount) _cacheSig;
     private List<TrajectoryPoint> _previewPoints = [];
     private readonly Dictionary<(Color Color, float Transparency), DisplayMaterial> _materialCache = new();
 
@@ -422,7 +422,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         RhinoDoc.ActiveDoc?.Views.Redraw();
     }
 
-    private void EnsureMeshCache(RobotContext ctx, RobotCollisionModel? previewGeometry, ToolCapabilities? toolCapabilities)
+    private void EnsureMeshCache(
+        RobotContext ctx,
+        RobotCollisionModel? previewGeometry,
+        ToolCapabilities? toolCapabilities,
+        IReadOnlyList<ToolDriverBinding>? toolBindings = null)
     {
         if (previewGeometry is null)
         {
@@ -431,7 +435,15 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
 
-        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0, ctx.Tree?.Fingerprint ?? 0);
+        // Include binding identity (not just count) so Cap/Bd edits rebuild the cache.
+        var bdSig = 0;
+        if (toolBindings is { Count: > 0 })
+        {
+            foreach (var b in toolBindings)
+                bdSig = HashCode.Combine(bdSig, b.Parameter, b.DriverJoint, b.OpenValue, b.ClosedDriverValue);
+        }
+
+        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0, ctx.Tree?.Fingerprint ?? 0, bdSig);
         if (_meshCache is not null && sig == _cacheSig)
         {
             _drawMeshColors = _meshCache.MeshColors ??
@@ -449,7 +461,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             toolCapabilities,
             ctx.PreviewMeshColors,
             ctx.Tree,
-            ctx.Model.JointNames);
+            ctx.Model.JointNames,
+            toolBindings);
         _drawMeshColors = _meshCache?.MeshColors ??
                           PreviewColorResolver.AlignMeshColors(previewGeometry, ctx.PreviewMeshColors);
     }
@@ -463,7 +476,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         var previewGeometry = RobotPreviewGeometry.ForViewport(
             ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
             trajGoo.ToolSnapshot);
-        EnsureMeshCache(ctx, previewGeometry, trajGoo.ToolCapabilitiesSnapshot);
+        EnsureMeshCache(ctx, previewGeometry, trajGoo.ToolCapabilitiesSnapshot, trajGoo.ToolSnapshot?.Bindings);
         ReadCustomColors(da);
 
         if (_colorMode == PreviewColorMode.Custom && _customColors.Count == 0)
@@ -571,7 +584,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
         da.SetDataList(0, _currentMeshes);
-        da.SetDataList(1, KinematicsPreview.LinkLines(ctx.EffectiveModel, state, ctx.Chain, ctx.Base, ctx.Tool).ToList());
+        if (ctx.Stewart is not null)
+            da.SetDataList(1, KinematicsPreview.StewartLegLines(ctx.Stewart, state).ToList());
+        else
+            da.SetDataList(1, KinematicsPreview.LinkLines(ctx.EffectiveModel, state, ctx.Chain, ctx.Base, ctx.Tool).ToList());
         da.SetData(2, _tcpCurve);
         da.SetData(3, new JointStateGoo(state));
         da.SetData(4, timeSeconds);

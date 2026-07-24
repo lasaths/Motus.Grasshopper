@@ -19,6 +19,14 @@ public abstract class MotusGooBase<T> : GH_Goo<T> where T : class
 
 public sealed class ToolGoo : MotusGooBase<ToolDefinition>
 {
+    /// <summary>
+    /// Optional actuated tool mechanism (e.g. gripper fingers) authored as a <see cref="RobotDescription"/>
+    /// (Motus Urdf Link/Joint/Assemble family). When set, Motus Robot grafts
+    /// <see cref="KinematicTree.Attach"/> onto the arm's tree at its tip link so TreeFK/preview drive the
+    /// real mechanism instead of a squashed static mesh — see <see cref="ToolDefinition.Bindings"/>.
+    /// </summary>
+    public RobotDescription? Mechanism { get; set; }
+
     public ToolGoo() { }
     public ToolGoo(ToolDefinition tool) : base(tool) { }
 
@@ -44,6 +52,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
     public KinematicTree? Tree { get; set; }
+    public StewartPlatform? Stewart { get; set; }
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
@@ -61,7 +70,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
         var session = ApplyTool(model, ToolSnapshot, BaseFrameOverride);
         var preview = RobotPreviewGeometry.ForViewport(PreviewGeometry, ToolSnapshot);
         // Tree required so Robotiq tip-descendant meshes pose via TreeFK (not stuck at base).
-        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors, Tree);
+        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors, Tree, Stewart);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)
@@ -120,3 +129,6 @@ public sealed class MotionSegmentGoo : MotusGooBase<MotionSegment>
         _ => "Segment"
     };
 }
+
+// UrdfLinkGoo / UrdfJointGoo / RobotDescriptionGoo moved to MotusUrdfGoo.cs
+// (dedicated file; RobotDescriptionGoo also gained GH document Write/Read persistence there).

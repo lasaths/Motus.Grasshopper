@@ -5,10 +5,10 @@
     <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.7.2</Version>
-    <AssemblyVersion>0.7.2.0</AssemblyVersion>
-    <FileVersion>0.7.2.0</FileVersion>
-    <InformationalVersion>0.7.2</InformationalVersion>
+    <Version>0.8.0</Version>
+    <AssemblyVersion>0.8.0.0</AssemblyVersion>
+    <FileVersion>0.8.0.0</FileVersion>
+    <InformationalVersion>0.8.0</InformationalVersion>
     <TargetExt>.gha</TargetExt>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -55,6 +55,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\icons\*.png" />
     <None Include="..\..\resources\robots\ur10e_robotiq\**\*" Link="resources\robots\ur10e_robotiq\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\resources\robots\stewart\**\*" Link="resources\robots\stewart\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\..\resources\tools\robotiq_2f85_tcp_local.stl" Link="resources\tools\robotiq_2f85_tcp_local.stl">

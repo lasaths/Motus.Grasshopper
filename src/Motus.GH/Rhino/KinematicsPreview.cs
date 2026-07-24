@@ -14,12 +14,65 @@ public static class KinematicsPreview
     {
         try
         {
+            if (Units.IsStewart(robot.Preset))
+                return null;
             if (chain is null &&
                 string.Equals(robot.Preset.Family, "urdf", StringComparison.OrdinalIgnoreCase))
                 return null;
             return KinematicsResolver.CreateFkSolver(robot.Preset, chain);
         }
         catch (InvalidOperationException) { return null; }
+    }
+
+    /// <summary>Stewart leg wires: base anchors → platform anchors at the FK pose for <paramref name="lengths"/>.</summary>
+    public static IEnumerable<Line> StewartLegLines(
+        StewartPlatform platform,
+        JointState lengths,
+        CartesianPose? seedPose = null)
+    {
+        var fk = new StewartForwardKinematics(platform).TrySolve(lengths, seedPose);
+        if (!fk.Success || fk.Pose is null)
+            yield break;
+
+        var m = Transforms.FromFrame(fk.Pose.Tcp);
+        for (var i = 0; i < StewartPlatform.LegCount; i++)
+        {
+            var b = platform.BaseAnchors[i];
+            var p = platform.PlatformAnchors[i];
+            Transforms.TransformPointInto(m, p.X, p.Y, p.Z, out var wx, out var wy, out var wz);
+            yield return new Line(new Point3d(b.X, b.Y, b.Z), new Point3d(wx, wy, wz));
+        }
+
+        // Platform outline (sequential anchors).
+        for (var i = 0; i < StewartPlatform.LegCount; i++)
+        {
+            var a = platform.PlatformAnchors[i];
+            var b = platform.PlatformAnchors[(i + 1) % StewartPlatform.LegCount];
+            Transforms.TransformPointInto(m, a.X, a.Y, a.Z, out var ax, out var ay, out var az);
+            Transforms.TransformPointInto(m, b.X, b.Y, b.Z, out var bx, out var by, out var bz);
+            yield return new Line(new Point3d(ax, ay, az), new Point3d(bx, by, bz));
+        }
+    }
+
+    public static Plane TcpPlane(
+        RobotModel robot, JointState state, SerialJointChain? chain = null,
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null,
+        StewartPlatform? stewart = null)
+    {
+        var baseF = baseFrame ?? robot.Preset.BaseFrame;
+        if (stewart is not null || Units.IsStewart(robot.Preset))
+        {
+            if (stewart is null)
+                return FrameConversion.ToPlane(baseF.Frame);
+            var fk = new StewartForwardKinematics(stewart).TrySolve(state);
+            if (!fk.Success || fk.Pose is null)
+                return FrameConversion.ToPlane(baseF.Frame);
+            return FrameConversion.ToPlane(fk.Pose.Tcp);
+        }
+        if (TryFk(robot, chain) is not { } serialFk)
+            return FrameConversion.ToPlane(baseF.Frame);
+        var tool = toolFrame ?? robot.Preset.ToolFrame;
+        return FrameConversion.ToPlane(serialFk.ComputeTcp(state, baseF, tool).Tcp);
     }
 
     public static Point3d ToPoint(Frame frame) => new(frame.X, frame.Y, frame.Z);
@@ -81,7 +134,6 @@ public static class KinematicsPreview
         var baseM = Transforms.FromFrame(baseF.Frame);
         foreach (var link in geometry.Links)
         {
-            if (link.LocalGeometry.Shape != CollisionShape.Mesh) continue;
             CollisionObject world;
             if (link.LinkIndex < 0)
                 world = TransformCollision(link.LocalGeometry, baseM);
@@ -120,8 +172,11 @@ public static class KinematicsPreview
         private readonly Frame? _toolAttachOffset;
         private readonly double _toolOpenWidth;
         private readonly ToolCapabilities? _toolCapabilities;
+        private readonly IReadOnlyList<ToolDriverBinding>? _toolBindings;
+        private readonly string[]? _driverNames;
         private readonly IReadOnlyList<Color?> _meshColors;
         private List<Mesh>? _frameMeshes;
+        private Dictionary<string, double>? _toolStateScratch;
 
         public IReadOnlyList<Color?> MeshColors => _meshColors;
 
@@ -142,6 +197,8 @@ public static class KinematicsPreview
             Frame? toolAttachOffset,
             double toolOpenWidth,
             ToolCapabilities? toolCapabilities,
+            IReadOnlyList<ToolDriverBinding>? toolBindings,
+            string[]? driverNames,
             IReadOnlyList<Color?> meshColors)
         {
             _fk = fk;
@@ -161,6 +218,8 @@ public static class KinematicsPreview
             _toolAttachOffset = toolAttachOffset;
             _toolOpenWidth = toolOpenWidth > 1e-9 ? toolOpenWidth : Robotiq2F85Kinematics.OpenWidthMeters;
             _toolCapabilities = toolCapabilities;
+            _toolBindings = toolBindings;
+            _driverNames = driverNames;
             _meshColors = meshColors;
         }
 
@@ -173,7 +232,8 @@ public static class KinematicsPreview
             ToolCapabilities? toolCapabilities = null,
             Color?[]? urdfColors = null,
             KinematicTree? tree = null,
-            IReadOnlyList<string>? armJointNames = null)
+            IReadOnlyList<string>? armJointNames = null,
+            IReadOnlyList<ToolDriverBinding>? toolBindings = null)
         {
             if (TryFk(robot, chain) is not { } fk) return null;
 
@@ -185,7 +245,7 @@ public static class KinematicsPreview
             for (var gi = 0; gi < geometry.Links.Count; gi++)
             {
                 var link = geometry.Links[gi];
-                if (link.LocalGeometry.Shape != CollisionShape.Mesh) continue;
+                // Tessellate Mesh and primitives (box/sphere/capsule) — mechanism tools often use authored boxes.
                 var baked = TransformCollision(link.LocalGeometry, Transforms.Identity());
                 if (ToRhinoMesh(baked) is { } mesh)
                 {
@@ -195,7 +255,7 @@ public static class KinematicsPreview
             }
 
             Mesh? toolMesh = null;
-            if (geometry.ToolGeometry is { Shape: CollisionShape.Mesh })
+            if (geometry.ToolGeometry is not null)
             {
                 var baked = TransformCollision(geometry.ToolGeometry, Transforms.Identity());
                 toolMesh = ToRhinoMesh(baked);
@@ -208,6 +268,7 @@ public static class KinematicsPreview
             double[]? driverQ = null;
             double[][]? treeMats = null;
             int[]? treeLinkOfMesh = null;
+            string[]? driverNames = null;
             if (tree is not null)
             {
                 treeFk = new TreeForwardKinematics(tree);
@@ -221,6 +282,10 @@ public static class KinematicsPreview
                     try { treeLinkOfMesh[i] = tree.IndexOfLink(links[i].Item2); }
                     catch { treeLinkOfMesh[i] = -1; }
                 }
+
+                driverNames = new string[tree.DriverCount];
+                for (var di = 0; di < tree.DriverCount; di++)
+                    driverNames[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
             }
 
             return links.Count == 0 && toolMesh is null
@@ -244,6 +309,8 @@ public static class KinematicsPreview
                         string.Equals(p.Name, "width", StringComparison.Ordinal))?.Max
                         ?? Robotiq2F85Kinematics.OpenWidthMeters,
                     toolCapabilities,
+                    toolBindings,
+                    driverNames,
                     meshColors);
         }
 
@@ -377,17 +444,17 @@ public static class KinematicsPreview
                 q[di] = ai >= 0 && ai < armQ.Count ? armQ[ai] : 0;
             }
 
-            // Wave 2: Motus.NET ToolParameterBinding owns width→driver (mimic owns fingers).
-            if (_toolCapabilities is not null)
+            // Wave 2/3: Motus.NET ToolParameterBinding owns width→driver (mimic owns fingers).
+            if ((_toolCapabilities is not null || _toolBindings is { Count: > 0 }) && _driverNames is not null)
             {
-                var driverNames = new string[tree.DriverCount];
-                for (var di = 0; di < tree.DriverCount; di++)
-                    driverNames[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
+                var scratch = _toolStateScratch ??= new Dictionary<string, double>(1);
+                scratch["width"] = jawWidthMeters;
                 ToolParameterBinding.ApplyInto(
                     _toolCapabilities,
-                    new EndEffectorState(new Dictionary<string, double> { ["width"] = jawWidthMeters }),
-                    driverNames,
+                    new EndEffectorState(scratch),
+                    _driverNames,
                     q.AsSpan(),
+                    _toolBindings,
                     _toolOpenWidth);
             }
 
@@ -405,17 +472,6 @@ public static class KinematicsPreview
 
     public static List<Mesh> LinkMeshesCached(
         PreviewMeshCache cache, JointState state) => cache.MeshesFor(state);
-
-    public static Plane TcpPlane(
-        RobotModel robot, JointState state, SerialJointChain? chain = null,
-        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
-    {
-        var baseF = baseFrame ?? robot.Preset.BaseFrame;
-        if (TryFk(robot, chain) is not { } fk)
-            return FrameConversion.ToPlane(baseF.Frame);
-        var tool = toolFrame ?? robot.Preset.ToolFrame;
-        return FrameConversion.ToPlane(fk.ComputeTcp(state, baseF, tool).Tcp);
-    }
 
     public static Polyline TcpPath(
         RobotModel robot, IEnumerable<JointState> states, SerialJointChain? chain = null,

@@ -176,6 +176,10 @@ internal static class PlanExecutor
         var planningContext = request.PlanningContext;
         var session = ctx.EffectiveModel;
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
+
+        if (ctx.IsStewart || Units.IsStewart(session.Preset))
+            return PlanStewartLin(request, start, goal, cancellationToken, goalProgress);
+
         if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
         {
             return PlanningResult.Failed(new[]
@@ -282,6 +286,55 @@ internal static class PlanExecutor
         if (ndofNote is not null) warnings.Add(ndofNote);
         warnings.Add("TCP-LIN failed; used joint-space path to the Cartesian goal instead (not a straight TCP line).");
         return PlanningResult.Succeeded(jointResult.Trajectory!, warnings);
+    }
+
+    private static PlanningResult PlanStewartLin(
+        PlanRequest request,
+        JointState start,
+        CartesianPose goal,
+        CancellationToken cancellationToken,
+        Action<double>? goalProgress)
+    {
+        var ctx = request.Context;
+        if (ctx.Stewart is null)
+        {
+            return PlanningResult.Failed([
+                "Stewart robot is missing StewartPlatform handle. Use Motus Stewart (not Motus Robot URDF)."]);
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+            return PlanningResult.Failed(["Planning cancelled."]);
+
+        goalProgress?.Invoke(0.2);
+        var fk = new StewartForwardKinematics(ctx.Stewart);
+        var startFk = fk.TrySolve(start);
+        CartesianPose startPose;
+        if (startFk.Success && startFk.Pose is not null)
+        {
+            startPose = startFk.Pose;
+        }
+        else
+        {
+            // Fall back: re-IK mid-stroke home as start pose if FK diverges.
+            return PlanningResult.Failed([$"Stewart start FK failed: {startFk}"]);
+        }
+
+        goalProgress?.Invoke(0.4);
+        var planner = new StewartCartesianPathPlanner(ctx.Stewart);
+        var result = planner.PlanToResult(startPose, goal, start, request.LinStepMeters);
+        if (!result.Success)
+            return result;
+
+        goalProgress?.Invoke(1.0);
+        var warnings = result.Warnings.ToList();
+        warnings.Add("Stewart TCP-LIN: JointState = leg lengths (meters). Not UR MoveJ radians.");
+        if (PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
+            || request.PlanningContext.Attached.Count > 0
+            || request.CollisionInputWired)
+        {
+            warnings.Add("Stewart collision/RRT is not implemented yet — path is stroke/ΔL checked only.");
+        }
+        return PlanningResult.Succeeded(result.Trajectory!, warnings);
     }
 
     private static PlanningResult PlanRrt(

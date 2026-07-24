@@ -845,4 +845,40 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     Ok("Wave 2 JointTable tip-path Validate + Mobility SE2 + rail numerical IK");
 }
 
+{
+    Console.WriteLine("\n== Stewart platform IK / path ==");
+    var stewart = StewartRobot.CreateClassic();
+    if (!Units.IsStewart(stewart.Model.Preset))
+        Fail("Stewart Family must be stewart");
+    if (stewart.Model.Preset.JointLimits.Any(l => l.Unit != JointCoordinateUnit.Meters))
+        Fail("Stewart stroke limits must be meters");
+    var stewartMid = 0.5 * (stewart.Platform.StrokeLimits[0].Min + stewart.Platform.StrokeLimits[0].Max);
+    var stewartHome = new CartesianPose(new Frame(0, 0, stewartMid));
+    var stewartIk = stewart.InverseKinematics.TrySolveDetailed(stewartHome);
+    if (!stewartIk.Success || stewartIk.JointState is null)
+        Fail($"Stewart home IK: {stewartIk}");
+    var stewartFk = stewart.ForwardKinematics.TrySolve(stewartIk.JointState, stewartHome);
+    if (!stewartFk.Success || stewartFk.Pose is null)
+        Fail($"Stewart home FK: {stewartFk}");
+    var stewartGoal = new CartesianPose(new Frame(0.01, 0, stewartMid));
+    var stewartPath = stewart.PathPlanner.PlanToResult(stewartHome, stewartGoal, stewartIk.JointState, stepMeters: 0.005);
+    if (!stewartPath.Success || stewartPath.Trajectory is null || stewartPath.Trajectory.Points.Count < 2)
+        Fail($"Stewart LIN path failed: {string.Join("; ", stewartPath.Errors)}");
+    var stewartLines = Motus.GH.Rhino.KinematicsPreview.StewartLegLines(stewart.Platform, stewartIk.JointState, stewartHome).ToList();
+    if (stewartLines.Count < 6)
+        Fail("StewartLegLines should emit at least 6 legs");
+    var stewartJsonPath = Path.Combine(resources, "stewart", "stewart_classic.json");
+    if (File.Exists(stewartJsonPath))
+    {
+        var loaded = StewartRobot.LoadFile(stewartJsonPath);
+        var lik = loaded.InverseKinematics.TrySolveDetailed(new CartesianPose(new Frame(0, 0, 0.6)));
+        if (!lik.Success)
+            Fail($"Stewart JSON load IK: {lik}");
+        Ok("Stewart JSON fixture load + IK");
+    }
+    else
+        Console.WriteLine("  SKIP: resources/robots/stewart/stewart_classic.json not found");
+    Ok("Stewart classic IK↔FK round-trip + TCP LIN path + preview wires");
+}
+
 Console.WriteLine("\nAll automated QA checks passed.");

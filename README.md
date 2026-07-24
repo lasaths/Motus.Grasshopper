@@ -45,7 +45,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 | `RhinoCommonPackageVersion` | NuGet floor for RhinoCommon/Grasshopper (default `8.19.25132.1001`) |
 | `Rhino8Dir` | Windows Rhino 8 install (launch / path hints) |
 | `Rhino8App` | macOS Rhino 8 `.app` path |
-| `MotusNetVersion` | Override NuGet pin (default `0.7.0`) |
+| `MotusNetVersion` | Override NuGet pin (default `0.9.1`). Until that package is on nuget.org, use `./build.ps1 -UseLocal` (CI checkouts sibling Motus.NET the same way). |
 
 ## First plan (3 components)
 

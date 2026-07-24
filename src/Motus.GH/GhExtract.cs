@@ -153,6 +153,24 @@ internal static class GhExtract
 
         if (goo.CastTo<Plane>(out var plane))
         {
+            if (ctx.IsStewart || Units.IsStewart(session.Preset))
+            {
+                if (ctx.Stewart is null)
+                {
+                    error = "Stewart robot missing StewartPlatform handle. Use Motus Stewart.";
+                    return false;
+                }
+                var stewartPose = new CartesianPose(FrameConversion.FromPlane(plane));
+                var stewartIk = new StewartInverseKinematics(ctx.Stewart).TrySolveDetailed(stewartPose);
+                if (!stewartIk.Success || stewartIk.JointState is null)
+                {
+                    error = $"Start: {stewartIk}";
+                    return false;
+                }
+                start = stewartIk.JointState;
+                return true;
+            }
+
             if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
             {
                 error = $"No kinematics profile for '{session.Preset.ModelName}'.";
@@ -552,6 +570,25 @@ internal static class GhExtract
         var session = ctx.EffectiveModel;
         if (!goals.Any(g => g.plane is not null))
             return errors;
+
+        if (ctx.IsStewart || Units.IsStewart(session.Preset))
+        {
+            if (ctx.Stewart is null)
+            {
+                errors.Add("Stewart robot missing StewartPlatform handle. Use Motus Stewart.");
+                return errors;
+            }
+            var ik = new StewartInverseKinematics(ctx.Stewart);
+            for (var i = 0; i < goals.Count; i++)
+            {
+                if (goals[i].plane is not { } plane)
+                    continue;
+                var result = ik.TrySolveDetailed(new CartesianPose(FrameConversion.FromPlane(plane)));
+                if (!result.Success)
+                    errors.Add($"Goal[{i}]: {result}");
+            }
+            return errors;
+        }
 
         if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
         {

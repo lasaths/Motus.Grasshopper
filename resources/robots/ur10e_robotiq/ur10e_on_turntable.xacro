@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- Prefab UR10e+Robotiq mounted on a 1-DOF Z turntable (Motus planning-group demo).
+     Mesh paths resolve next to ur10e_robotiq.urdf. Tip path: world → turntable → … → tool0. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ur10e_on_turntable">
+  <link name="world"/>
+
+  <link name="turntable_link">
+    <visual>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry><cylinder length="0.06" radius="0.28"/></geometry>
+      <material name="turntable"><color rgba="0.2 0.55 0.45 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry><cylinder length="0.06" radius="0.28"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="turntable" type="revolute">
+    <parent link="world"/>
+    <child link="turntable_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" velocity="1.5"/>
+  </joint>
+
+  <xacro:include filename="ur10e_robotiq.urdf"/>
+
+  <joint name="turntable_mount" type="fixed">
+    <parent link="turntable_link"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+  </joint>
+</robot>

@@ -190,8 +190,22 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         try
         {
             var goo = UrdfRobotLoad.Load(path, baseLink, tipLink);
+            // PreviewGeometry/Tree come from a shared URDF cache — clone preview before Tl-merge mutates the goo.
+            goo.PreviewGeometry = ClonePreview(goo.PreviewGeometry);
             if (basePl.IsValid) goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
-            if (toolGoo?.Value is not null) goo.Tool = toolGoo.Value;
+            if (toolGoo?.Value is not null)
+            {
+                goo.Tool = toolGoo.Value;
+                if (toolGoo.Mechanism is not null)
+                    AttachMechanism(goo, toolGoo.Mechanism, tipLink);
+                else if (toolGoo.Value.Bindings is { Count: > 0 })
+                {
+                    // TL-009: Mechanism is live-wire only — internalized Tool keeps Cap/Bindings but drops Rd.
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                        "Tool has Bindings but no live Description (Rd) — re-wire Motus Tool→Tl; internalized Tool drops the mechanism.");
+                }
+            }
+
             ApplyPreview(goo, path);
             da.SetData(0, goo);
         }
@@ -199,6 +213,85 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         {
             ClearPreview();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Graft an actuated tool mechanism (Motus Tool's Description pin) onto the arm's kinematic tree at
+    /// its tip link (<see cref="KinematicTree.Attach"/> — rotation-aware, unlike <see cref="RobotDescription.Attach"/>
+    /// which is translation-only-origin and meant for the pure Urdf-authoring family). TCP/Cap semantics
+    /// for the merged tool stay on <see cref="RobotModelGoo.Tool"/> (consumed via <see cref="RobotModel.WithTool"/>
+    /// in <see cref="RobotModelGoo.EffectiveModel"/>) — this only extends <see cref="RobotModelGoo.Tree"/>
+    /// (TreeFK) and merges mechanism visuals into <see cref="RobotModelGoo.PreviewGeometry"/>.
+    /// </summary>
+    private void AttachMechanism(RobotModelGoo goo, RobotDescription mechanism, string tipLink)
+    {
+        if (goo.Tree is null)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                "Tool Description mechanism requires a kinematic tree (URDF/xacro robot) — mechanism was not attached.");
+            return;
+        }
+
+        // Tip = planning serial tip; mount prefers tool0 when present so changing Tip for IK doesn't move the graft.
+        var mountLink = ResolveMechanismMount(goo.Tree, tipLink);
+
+        try
+        {
+            var mechanismTree = mechanism.ToKinematicTree();
+            goo.Tree = goo.Tree.Attach(mountLink, mechanismTree, mechanism.RootLinkName, Frame.Identity);
+        }
+        catch (Exception ex)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Could not attach tool mechanism: {ex.Message}");
+            return;
+        }
+
+        if (MechanismPreviewGeometry.Build(mechanism) is not { } mechanismPreview)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                "Tool mechanism attached to tree, but no previewable visuals (need meshable Rhino geometry on Motus Urdf Link V).");
+            return;
+        }
+
+        var mergedLinks = new List<LinkCollisionGeometry>(goo.PreviewGeometry?.Links ?? Array.Empty<LinkCollisionGeometry>());
+        mergedLinks.AddRange(mechanismPreview.Links);
+        goo.PreviewGeometry = new RobotCollisionModel(
+            mergedLinks,
+            goo.PreviewGeometry?.ToolGeometry,
+            goo.PreviewGeometry?.ToolGeometryInFlangeFrame ?? false,
+            goo.PreviewGeometry?.ToolGeometryAttachOffset);
+
+        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+            $"Tool mechanism attached at '{mountLink}' (+{mechanismPreview.Links.Count} preview links).");
+    }
+
+    private static RobotCollisionModel? ClonePreview(RobotCollisionModel? src)
+    {
+        if (src is null) return null;
+        return new RobotCollisionModel(
+            src.Links.ToList(),
+            src.ToolGeometry,
+            src.ToolGeometryInFlangeFrame,
+            src.ToolGeometryAttachOffset);
+    }
+
+    /// <summary>Prefer <c>tool0</c> for mechanism graft when Tip is a different planning tip.</summary>
+    private string ResolveMechanismMount(KinematicTree tree, string tipLink)
+    {
+        const string flange = "tool0";
+        if (string.Equals(tipLink, flange, StringComparison.OrdinalIgnoreCase))
+            return tipLink;
+        try
+        {
+            _ = tree.IndexOfLink(flange);
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"Tool mechanism mounted at '{flange}' (Tip '{tipLink}' is planning chain only).");
+            return flange;
+        }
+        catch (Exception)
+        {
+            return tipLink;
         }
     }
 
@@ -326,13 +419,30 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
             return;
         }
 
+        if (ctx.IsStewart)
+        {
+            if (ctx.Stewart is null)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Stewart robot missing StewartPlatform handle.");
+                return;
+            }
+            var fk = new StewartForwardKinematics(ctx.Stewart).TrySolve(stateGoo.Value);
+            if (!fk.Success || fk.Pose is null)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Stewart FK failed: {fk}");
+                return;
+            }
+            da.SetData(0, FrameConversion.ToPlane(fk.Pose.Tcp));
+            return;
+        }
+
         if (KinematicsPreview.TryFk(ctx.Model, ctx.Chain) is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "FK is not available for this robot model.");
             return;
         }
 
-        var plane = KinematicsPreview.TcpPlane(ctx.EffectiveModel, stateGoo.Value, ctx.Chain, ctx.Base, ctx.Tool);
+        var plane = KinematicsPreview.TcpPlane(ctx.EffectiveModel, stateGoo.Value, ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart);
         da.SetData(0, plane);
     }
 
@@ -440,7 +550,14 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
 
         var indices = SelectDecimateIndices(t.Points.Count, decimate);
         var axisCount = t.Robot.Preset.AxisCount;
-        if (axisCount != 6)
+        var stewart = Units.IsStewart(t.Robot.Preset) || ctx.Stewart is not null;
+        if (stewart)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "Stewart Family=stewart: Q values are leg lengths in meters — do not wire to UR MoveJ (radians).");
+        }
+        else if (axisCount != 6)
         {
             AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Warning,
@@ -461,7 +578,7 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
                 tree.Append(new GH_Number(positions[j]), path);
 
             planes.Add(KinematicsPreview.TcpPlane(
-                ctx.EffectiveModel, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool));
+                ctx.EffectiveModel, pt.JointState, ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart));
             times.Add(pt.TimeSeconds);
         }
 
