@@ -518,12 +518,7 @@ public static class KinematicsPreview
                 jawWidth = width;
 
             if (_treeFk is not null && _tree is not null && _driverQ is not null && _treeMats is not null)
-            {
-                var fillErr = KinematicsPreview.TryFillTreeDriverQ(
-                    _tree, state.Positions, _armJointNames, _treeDriverHome, _driverQ);
-                if (fillErr is not null)
-                    throw new InvalidOperationException(fillErr);
-            }
+                FillTreeDriverQ(state.Positions, jawWidth);
 
             for (var i = 0; i < _links.Count; i++)
             {
