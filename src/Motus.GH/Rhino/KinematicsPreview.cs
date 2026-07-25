@@ -313,7 +313,7 @@ public static class KinematicsPreview
     /// <summary>Cache link-local meshes; per-frame cost is transform only (TreeFK Into when tree present).</summary>
     public sealed class PreviewMeshCache
     {
-        private readonly IFkSolver _fk;
+        private readonly IFkSolver? _fk;
         private readonly TreeForwardKinematics? _treeFk;
         private readonly KinematicTree? _tree;
         private readonly double[]? _driverQ;
@@ -340,7 +340,7 @@ public static class KinematicsPreview
         public IReadOnlyList<Color?> MeshColors => _meshColors;
 
         private PreviewMeshCache(
-            IFkSolver fk,
+            IFkSolver? fk,
             TreeForwardKinematics? treeFk,
             KinematicTree? tree,
             double[]? driverQ,
@@ -397,7 +397,9 @@ public static class KinematicsPreview
             IReadOnlyList<ToolDriverBinding>? toolBindings = null,
             JointState? treeDriverHome = null)
         {
-            if (TryFk(robot, chain) is not { } fk) return null;
+            var fk = TryFk(robot, chain);
+            // Branching trees (walking hex gait = 18-DOF, no serial chain / DH profile) use TreeFK only.
+            if (fk is null && tree is null) return null;
 
             var baseF = baseFrame ?? robot.Preset.BaseFrame;
             var toolF = toolFrame ?? robot.Preset.ToolFrame;
@@ -503,7 +505,7 @@ public static class KinematicsPreview
             Frame? dynamicBase = null)
         {
             var baseM = dynamicBase is { } db ? Transforms.FromFrame(db) : _baseMatrix;
-            var linkMats = _fk.ComputeLinkTransforms(state.Positions);
+            var linkMats = _fk?.ComputeLinkTransforms(state.Positions) ?? Array.Empty<double[]>();
             var meshCount = _links.Count + (_toolMesh is null ? 0 : 1);
             if (!duplicate)
             {
@@ -558,7 +560,7 @@ public static class KinematicsPreview
                 }
             }
 
-            if (_toolMesh is not null)
+            if (_toolMesh is not null && _fk is not null)
             {
                 // Fallback only when no URDF gripper links exist (planning hull viewport).
                 var toolM = ToolCollisionPlacement.WorldMatrix(

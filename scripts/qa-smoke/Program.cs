@@ -2,6 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.OMPL.NET;
 using Motus.Presets;
+using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Motus.GH.Planning;
 using Rhino.Geometry;
@@ -877,7 +878,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         return q;
     }
 
-    static KinematicTree BuildWalkingHexTree(double bodyR, double coxa, double femur, double tibia, double bodyZ)
+    static KinematicTree BuildWalkingHexTree(double bodyR, double coxa, double femur, double tibia, double bodyZ, out RobotDescription desc)
     {
         var legNames = new[] { "right-middle", "right-front", "left-front", "left-middle", "left-back", "right-back" };
         var links = new List<UrdfLink>
@@ -903,7 +904,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         }
 
         if (!RobotDescription.TryAssemble("walking_hexapod", links, joints, tipLink: "right-middle_tibia",
-                out var desc, out var diag, homeQ: null) || desc is null)
+                out desc, out var diag, homeQ: null) || desc is null)
             Fail($"Walking hex assemble: {string.Join("; ", diag.Errors)}");
         return desc.ToKinematicTree();
     }
@@ -924,7 +925,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         return limits;
     }
 
-    var tree = BuildWalkingHexTree(0.12, 0.06, 0.17, 0.19, 0.12);
+    var tree = BuildWalkingHexTree(0.12, 0.06, 0.17, 0.19, 0.12, out var hexDesc);
     const string tipLink = "right-middle_tibia";
     var tip = tree.ExtractSerialTip("body", tipLink);
     if (tip.Chain.Joints.Length != 3)
@@ -974,23 +975,43 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
     Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
 
+    var previewGeom = MechanismPreviewGeometry.Build(hexDesc);
+    if (previewGeom is null)
+        Fail("Walking hex preview geometry missing");
+    var gaitLimits = new List<JointLimit>(18);
+    for (var i = 0; i < 18; i++)
+        gaitLimits.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+    var gaitNames = new string[18];
+    for (var i = 0; i < 18; i++) gaitNames[i] = tree.Joints[tree.DriverJointIndices[i]].Name;
+    var gaitModel = new RobotModel(new RobotPreset
+    {
+        Manufacturer = RobotManufacturer.Unknown,
+        ModelName = "walking_hex_gait_smoke",
+        Family = "serial",
+        AxisCount = 18,
+        JointLimits = gaitLimits,
+        BaseFrame = BaseFrame.Identity,
+        ToolFrame = ToolFrame.Identity,
+    }, jointNames: gaitNames);
     try
     {
-        var gaitLimits = new List<JointLimit>(18);
-        for (var i = 0; i < 18; i++)
-            gaitLimits.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
-        var gaitNames = new string[18];
-        for (var i = 0; i < 18; i++) gaitNames[i] = $"j{i}";
-        var gaitModel = new RobotModel(new RobotPreset
-        {
-            Manufacturer = RobotManufacturer.Unknown,
-            ModelName = "walking_hex_gait_smoke",
-            Family = "serial",
-            AxisCount = 18,
-            JointLimits = gaitLimits,
-            BaseFrame = BaseFrame.Identity,
-            ToolFrame = ToolFrame.Identity,
-        }, jointNames: gaitNames);
+        var cache = KinematicsPreview.PreviewMeshCache.TryCreate(
+            gaitModel, previewGeom, chain: null, tree: tree, armJointNames: gaitNames,
+            treeDriverHome: new JointState(home18));
+        if (cache is null)
+            Fail("PreviewMeshCache should build for 18-DOF gait tree without serial FK");
+        var meshes = cache.MeshesFor(new JointState(home18));
+        if (meshes.Count == 0)
+            Fail("TreeFK preview meshes empty for walking hex gait");
+        Ok("Walking hex TreeFK preview cache (no serial FK)");
+    }
+    catch (DllNotFoundException)
+    {
+        Ok("Walking hex TreeFK preview smoke skipped (Rhino native DLL unavailable in this host)");
+    }
+
+    try
+    {
         var arc = new ArcCurve(new Arc(new Point3d(0.05, 0, 0), 0.45, Math.PI));
         if (!WalkingHexGait.TryBuild(
                 arc, null, 0.08, 0.06, 0.03, 7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,

@@ -237,6 +237,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 {
                     Tree = tree,
                     PreviewGeometry = goo.PreviewGeometry,
+                    PreviewMeshColors = goo.PreviewMeshColors,
+                    TreeDriverHome = new JointState(q),
                     BasePath = gait.BasePath,
                 };
                 pathCurveOut = gait.PathCurve;
