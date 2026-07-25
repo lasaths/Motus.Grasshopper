@@ -477,12 +477,12 @@ public static class KinematicsPreview
                     treeDriverHome?.Positions.ToArray());
         }
 
-        public List<Mesh> MeshesFor(JointState state, EndEffectorState? toolState = null) =>
-            UpdateMeshes(state, _frameMeshes ??= CreateFrameMeshList(), duplicate: true, toolState);
+        public List<Mesh> MeshesFor(JointState state, EndEffectorState? toolState = null, Frame? dynamicBase = null) =>
+            UpdateMeshes(state, _frameMeshes ??= CreateFrameMeshList(), duplicate: true, toolState, dynamicBase);
 
-        public void UpdateMeshes(JointState state, List<Mesh> target, EndEffectorState? toolState = null)
+        public void UpdateMeshes(JointState state, List<Mesh> target, EndEffectorState? toolState = null, Frame? dynamicBase = null)
         {
-            UpdateMeshes(state, target, duplicate: false, toolState);
+            UpdateMeshes(state, target, duplicate: false, toolState, dynamicBase);
         }
 
         private List<Mesh> CreateFrameMeshList()
@@ -499,8 +499,10 @@ public static class KinematicsPreview
             JointState state,
             List<Mesh> target,
             bool duplicate,
-            EndEffectorState? toolState = null)
+            EndEffectorState? toolState = null,
+            Frame? dynamicBase = null)
         {
+            var baseM = dynamicBase is { } db ? Transforms.FromFrame(db) : _baseMatrix;
             var linkMats = _fk.ComputeLinkTransforms(state.Positions);
             var meshCount = _links.Count + (_toolMesh is null ? 0 : 1);
             if (!duplicate)
@@ -527,20 +529,20 @@ public static class KinematicsPreview
                 if (_treeFk is not null && _treeMats is not null && _treeLinkOfMesh is not null
                     && _treeLinkOfMesh[i] >= 0)
                 {
-                    worldM = Transforms.Multiply(_baseMatrix, _treeMats[_treeLinkOfMesh[i]]);
+                    worldM = Transforms.Multiply(baseM, _treeMats[_treeLinkOfMesh[i]]);
                 }
                 else if (linkIndex == TreeLinkIndex)
                 {
                     // Tree missing: leave at base (should not happen for bundled URDF)
-                    worldM = _baseMatrix;
+                    worldM = baseM;
                 }
                 else
                 {
                     worldM = linkIndex < 0
-                        ? _baseMatrix
+                        ? baseM
                         : linkIndex < linkMats.Count
-                            ? Transforms.Multiply(_baseMatrix, linkMats[linkIndex])
-                            : _baseMatrix;
+                            ? Transforms.Multiply(baseM, linkMats[linkIndex])
+                            : baseM;
                 }
 
                 if (duplicate)

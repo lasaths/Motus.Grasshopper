@@ -3,6 +3,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
 using Motus.GH.Params;
+using Motus.GH.Planning;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino.Display;
@@ -35,7 +36,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         : base(
             "Motus Walking Hex",
             "WalkHex",
-            "Walking hexapod (6× coxa/femur/tibia). NOT Stewart — branching tree preview; Plan tip-path = one leg.",
+            "Walking hexapod (6× coxa/femur/tibia). Wire Path for tripod gait Trajectory → Preview; Plan = tip-path one leg only.",
             "polygon")
     {
     }
@@ -58,14 +59,27 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("BodyZ", "Bz", "Body height above ground (m)", GH_ParamAccess.item, 0.12);
         p[p.ParamCount - 1].Optional = true;
+        p.AddCurveParameter("Path", "P", "Walk path (Curve or Planes list, m) — gait Trajectory when wired", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddPlaneParameter("Planes", "Pl", "Optional path as plane list (origins, m)", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("Speed", "Spd", "Walk speed along path (m/s)", GH_ParamAccess.item, 0.08);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("Step", "St", "Nominal step length (m)", GH_ParamAccess.item, 0.06);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("Lift", "Lf", "Swing foot lift (m)", GH_ParamAccess.item, 0.03);
+        p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Q", "Q", "Optional full driver q (18): leg-major coxa,femur,tibia × 6", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Robot (Plan tip-path = right-middle tibia only; tree has 18 drivers)", GH_ParamAccess.item);
+        p.AddGenericParameter("Robot", "Rb", "Robot (gait=18-DOF; Plan tip-path = right-middle 3-DOF only)", GH_ParamAccess.item);
         p.AddParameter(new Param_MotusJointState(), "State", "Js", "Full 18-DOF stance (TreeFK / documentation)", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Gait trajectory when Path/Planes wired (18-DOF q + mobile base)", GH_ParamAccess.item);
+        p.AddCurveParameter("PathCurve", "Pc", "Resolved walk path curve (m)", GH_ParamAccess.item);
+        p.AddPlaneParameter("PathPlanes", "Pp", "Body planes sampled along path", GH_ParamAccess.list);
         p.AddMeshParameter("Meshes", "M", "Preview meshes (body + legs + COG)", GH_ParamAccess.list);
         p.AddCurveParameter("Support", "Sp", "Support polygon (foot tips)", GH_ParamAccess.item);
     }
@@ -80,7 +94,12 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         var fs = 30.0 * Math.PI / 180.0;
         var ts = -30.0 * Math.PI / 180.0;
         var bz = 0.12;
+        var speed = 0.08;
+        var stepLen = 0.06;
+        var lift = 0.03;
         var qIn = new List<double>();
+        Curve? pathCurve = null;
+        var pathPlanes = new List<Plane>();
         da.GetData(0, ref br);
         da.GetData(1, ref cx);
         da.GetData(2, ref fm);
@@ -89,14 +108,22 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         da.GetData(5, ref fs);
         da.GetData(6, ref ts);
         da.GetData(7, ref bz);
-        da.GetDataList(8, qIn);
+        da.GetData(8, ref pathCurve);
+        da.GetDataList(9, pathPlanes);
+        da.GetData(10, ref speed);
+        da.GetData(11, ref stepLen);
+        da.GetData(12, ref lift);
+        da.GetDataList(13, qIn);
+
+        var hasPath = (pathCurve is not null && pathCurve.IsValid) || pathPlanes.Count >= 2;
 
         if (!double.IsFinite(br) || !double.IsFinite(cx) || !double.IsFinite(fm) || !double.IsFinite(tb)
-            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts) || !double.IsFinite(bz))
+            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts) || !double.IsFinite(bz)
+            || !double.IsFinite(speed) || !double.IsFinite(stepLen) || !double.IsFinite(lift))
         {
             ClearPreview();
             _previewColors = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "BodyR / Coxa / Femur / Tibia / stance / BodyZ must be finite (no NaN/Inf).");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "BodyR / Coxa / Femur / Tibia / stance / BodyZ / Speed / Step / Lift must be finite (no NaN/Inf).");
             return;
         }
 
@@ -131,35 +158,98 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             var tree = desc.ToKinematicTree();
             const string tipLink = "right-middle_tibia";
             var tip = tree.ExtractSerialTip("body", tipLink);
-            var tipLimits = LimitsAlongTip(tree, tip.JointNames);
+            var driverNames = DriverNames(tree);
+            var allLimits = LimitsAllDrivers(tree);
 
-            var preset = new RobotPreset
+            RobotPreset preset;
+            SerialJointChain? chain;
+            JointState previewHome;
+            JointState? treeDriverHome;
+            if (hasPath)
             {
-                Manufacturer = RobotManufacturer.Unknown,
-                ModelName = "walking_hexapod",
-                Family = "serial",
-                AxisCount = tip.Chain.Joints.Length,
-                JointLimits = tipLimits,
-                BaseFrame = BaseFrame.Identity,
-                ToolFrame = tip.TipToolOffset is { } off
-                    ? new ToolFrame(off, "foot")
-                    : ToolFrame.Identity,
-                Notes = "Walking hexapod (NOT Stewart). Plan/Joint State = tip path (one leg). Full 18-DOF on Tree for preview.",
-                SourceNote = "Motus Walking Hex",
-            };
+                preset = new RobotPreset
+                {
+                    Manufacturer = RobotManufacturer.Unknown,
+                    ModelName = "walking_hexapod_gait",
+                    Family = "serial",
+                    AxisCount = tree.DriverCount,
+                    JointLimits = allLimits,
+                    BaseFrame = BaseFrame.Identity,
+                    ToolFrame = ToolFrame.Identity,
+                    Notes = "Walking hex gait (18-DOF). Use Trajectory → Preview — not UR MoveJ / not Plan tip-path.",
+                    SourceNote = "Motus Walking Hex gait",
+                };
+                chain = null;
+                previewHome = new JointState(q);
+                treeDriverHome = null;
+            }
+            else
+            {
+                var tipLimits = LimitsAlongTip(tree, tip.JointNames);
+                preset = new RobotPreset
+                {
+                    Manufacturer = RobotManufacturer.Unknown,
+                    ModelName = "walking_hexapod",
+                    Family = "serial",
+                    AxisCount = tip.Chain.Joints.Length,
+                    JointLimits = tipLimits,
+                    BaseFrame = BaseFrame.Identity,
+                    ToolFrame = tip.TipToolOffset is { } off
+                        ? new ToolFrame(off, "foot")
+                        : ToolFrame.Identity,
+                    Notes = "Walking hexapod (NOT Stewart). Plan/Joint State = tip path (one leg). Wire Path for gait Trajectory.",
+                    SourceNote = "Motus Walking Hex",
+                };
+                chain = tip.Chain;
+                var tipHome = new double[preset.AxisCount];
+                for (var i = 0; i < tipHome.Length && i < 3; i++)
+                    tipHome[i] = q[i];
+                previewHome = new JointState(tipHome);
+                treeDriverHome = new JointState(q);
+            }
 
-            var model = new RobotModel(preset);
-            var tipHome = new double[preset.AxisCount];
-            for (var i = 0; i < tipHome.Length && i < 3; i++)
-                tipHome[i] = q[i]; // right-middle = first three of leg-major q
+            var model = new RobotModel(preset, jointNames: driverNames);
             var goo = new RobotModelGoo(model)
             {
-                Chain = tip.Chain,
+                Chain = chain,
                 Tree = tree,
-                PreviewHome = new JointState(tipHome),
-                TreeDriverHome = new JointState(q),
+                PreviewHome = previewHome,
+                TreeDriverHome = treeDriverHome,
                 PreviewGeometry = MechanismPreviewGeometry.Build(desc),
             };
+
+            TrajectoryGoo? trajGoo = null;
+            Curve? pathCurveOut = null;
+            List<Plane> pathPlanesOut = [];
+            if (hasPath)
+            {
+                if (!WalkingHexGait.TryBuild(
+                        pathCurve, pathPlanes, speed, stepLen, lift, hs, fs, ts, model,
+                        out var gait, out var gaitErr))
+                {
+                    ClearPreview();
+                    _previewColors = [];
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, gaitErr);
+                    return;
+                }
+
+                trajGoo = new TrajectoryGoo(gait!.Trajectory)
+                {
+                    Tree = tree,
+                    PreviewGeometry = goo.PreviewGeometry,
+                    BasePath = gait.BasePath,
+                };
+                pathCurveOut = gait.PathCurve;
+                pathPlanesOut = gait.PathPlanes.ToList();
+                if (gait.Warning is { } warn)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, warn);
+            }
+            else
+            {
+                AddRuntimeMessage(
+                    GH_RuntimeMessageLevel.Remark,
+                    "Wire Path (curve) or Planes (≥2) for tripod gait Trajectory → Preview. Plan moves one tip leg only.");
+            }
 
             var preview = WalkingHexPreview.Build(br, cx, fm, tb, bz, q);
             _previewMeshes = preview.Meshes.ToList();
@@ -167,7 +257,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             _previewColors = preview.Colors.ToList();
             ExpirePreview(true);
 
-            if (tree.DriverCount != tip.Chain.Joints.Length)
+            if (!hasPath && tree.DriverCount != tip.Chain.Joints.Length)
             {
                 AddRuntimeMessage(
                     GH_RuntimeMessageLevel.Remark,
@@ -176,8 +266,11 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
             da.SetData(0, goo);
             da.SetData(1, new JointStateGoo(new JointState(q)));
-            da.SetDataList(2, _previewMeshes);
-            da.SetData(3, preview.SupportPolygon);
+            da.SetData(2, trajGoo);
+            da.SetData(3, pathCurveOut);
+            da.SetDataList(4, pathPlanesOut);
+            da.SetDataList(5, _previewMeshes);
+            da.SetData(6, preview.SupportPolygon);
         }
         catch (Exception ex)
         {
@@ -283,6 +376,26 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             throw new InvalidOperationException(string.Join("; ", diag.Errors));
 
         return desc;
+    }
+
+    private static List<JointLimit> LimitsAllDrivers(KinematicTree tree)
+    {
+        var limits = new List<JointLimit>(tree.DriverCount);
+        for (var di = 0; di < tree.DriverCount; di++)
+        {
+            var j = tree.Joints[tree.DriverJointIndices[di]];
+            var vel = j.Velocity ?? Math.PI;
+            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+        }
+        return limits;
+    }
+
+    private static string[] DriverNames(KinematicTree tree)
+    {
+        var names = new string[tree.DriverCount];
+        for (var di = 0; di < tree.DriverCount; di++)
+            names[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
+        return names;
     }
 
     private static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)

@@ -973,6 +973,45 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     if (missingHomeErr is null)
         Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
     Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
+
+    try
+    {
+        var gaitLimits = new List<JointLimit>(18);
+        for (var i = 0; i < 18; i++)
+            gaitLimits.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+        var gaitNames = new string[18];
+        for (var i = 0; i < 18; i++) gaitNames[i] = $"j{i}";
+        var gaitModel = new RobotModel(new RobotPreset
+        {
+            Manufacturer = RobotManufacturer.Unknown,
+            ModelName = "walking_hex_gait_smoke",
+            Family = "serial",
+            AxisCount = 18,
+            JointLimits = gaitLimits,
+            BaseFrame = BaseFrame.Identity,
+            ToolFrame = ToolFrame.Identity,
+        }, jointNames: gaitNames);
+        var arc = new ArcCurve(new Arc(new Point3d(0.05, 0, 0), 0.45, Math.PI));
+        if (!WalkingHexGait.TryBuild(
+                arc, null, 0.08, 0.06, 0.03, 7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+                gaitModel, out var gait, out var gaitErr))
+            Fail($"WalkingHexGait: {gaitErr}");
+        if (gait!.Trajectory.Points.Count < 10)
+            Fail("WalkingHexGait should sample ≥ 10 trajectory points");
+        if (gait.BasePath.Count != gait.Trajectory.Points.Count)
+            Fail("BasePath length must match trajectory point count");
+        if (gait.Trajectory.Points[0].JointState.AxisCount != 18)
+            Fail("Gait trajectory must be 18-DOF");
+        var midBase = BasePathSampler.AtTime(
+            gait.BasePath, gait.Trajectory, gait.Trajectory.DurationSeconds * 0.5);
+        if (Math.Abs(midBase.Y) < 0.08)
+            Fail("Mid-walk base frame should be displaced along arc (m)");
+        Ok("Walking hex gait builds 18-DOF trajectory + mobile BasePath");
+    }
+    catch (DllNotFoundException)
+    {
+        Ok("Walking hex gait smoke skipped (Rhino native DLL unavailable in this host)");
+    }
 }
 
 {

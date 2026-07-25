@@ -8,6 +8,7 @@ using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.UI;
+using Motus.GH.Planning;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino;
@@ -33,6 +34,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private IReadOnlyList<Color?>? _drawMeshColors;
 
     private Trajectory? _trajectory;
+    private TrajectoryGoo? _trajGoo;
     private Trajectory? _previewTrajectory;
     private DateTime _playStartUtc;
     private double _playStartPosition;
@@ -401,6 +403,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         ResolveFrame(out var state, out var elapsed, out _, out var toolState);
+        Frame? dynamicBase = null;
+        if (_trajGoo?.BasePath is { Count: > 0 } bp)
+            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), elapsed);
         var duration = _trajectory.DurationSeconds;
         if (elapsed >= duration - 1e-6)
         {
@@ -409,8 +414,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _playing = false;
             _position = duration > 0 ? 1 : 0;
             ResolveFrame(out state, out _, out _, out toolState);
+            if (_trajGoo?.BasePath is { Count: > 0 } bp2)
+                dynamicBase = BasePathSampler.AtTime(bp2, PreviewTrajectory(), duration);
             if (_meshCache is not null && _currentMeshes.Count > 0)
-                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
             SyncScrubSlider(_position, expireDownstream: false);
             ExpirePreview(true);
             OnDisplayExpired(false);
@@ -442,7 +449,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
 
-        _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+        _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
         SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
@@ -535,6 +542,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 wiredScrub.InvalidateTimelineCache();
         }
         _trajectory = t;
+        _trajGoo = trajGoo;
         if (t.Points.Count == 0)
         {
             _currentMeshes = [];
@@ -575,13 +583,24 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _previewPoints = previewPoints;
         _previewTrajectory = new Trajectory(ctx.Model, previewPoints);
         ResolveFrame(out var state, out var timeSeconds, out _index, out var toolState);
+        Frame? dynamicBase = null;
+        if (_trajGoo?.BasePath is { Count: > 0 } bp)
+            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), timeSeconds);
         // Concatenate() allocates a new Trajectory each solve — compare content, not reference.
         var staticsDirty = trajectoryChanged || _staticsFor is null;
         if (staticsDirty)
         {
-            var pl = KinematicsPreview.TcpPath(
-                ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart);
-            _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
+            if (_trajGoo?.BasePath is { Count: >= 2 } bodyPath)
+            {
+                var pts = bodyPath.Select(f => KinematicsPreview.ToPoint(f)).ToList();
+                _tcpCurve = new Polyline(pts).ToNurbsCurve();
+            }
+            else
+            {
+                var pl = KinematicsPreview.TcpPath(
+                    ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart);
+                _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
+            }
             KinematicsPreview.TrajectorySegments(
                 ctx.EffectiveModel,
                 PreviewTrajectory(),
@@ -609,9 +628,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             {
                 // Always update in place — MeshesFor duplicates every link mesh on idle solves.
                 if (_currentMeshes.Count == 0)
-                    _currentMeshes = _meshCache.MeshesFor(state, toolState);
+                    _currentMeshes = _meshCache.MeshesFor(state, toolState, dynamicBase);
                 else
-                    _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+                    _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
             }
             catch (InvalidOperationException ex)
             {

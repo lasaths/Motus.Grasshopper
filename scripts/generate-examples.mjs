@@ -348,7 +348,7 @@ const MOTUS = {
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Stewart robot (Family=stewart)' }],
   },
   walkHex: {
-    guid: 'b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', name: 'Motus Walking Hex', nick: 'WalkHex', w: 80, h: 160,
+    guid: 'b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', name: 'Motus Walking Hex', nick: 'WalkHex', w: 80, h: 320,
     desc: 'Walking hexapod 6×coxa/femur/tibia — NOT Stewart',
     inputs: [
       { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.12 },
@@ -359,13 +359,21 @@ const MOTUS = {
       { name: 'FemurStance', nick: 'Fs', desc: 'Femur stance (rad)', optional: true, number: 0.5236 },
       { name: 'TibiaStance', nick: 'Ts', desc: 'Tibia stance (rad)', optional: true, number: -0.5236 },
       { name: 'BodyZ', nick: 'Bz', desc: 'Body height (m)', optional: true, number: 0.12 },
+      { name: 'Path', nick: 'P', desc: 'Walk path curve (m)', optional: true, typeId: PTYPE.curve },
+      { name: 'Planes', nick: 'Pl', desc: 'Or path as plane origins (m)', optional: true, typeId: PTYPE.plane, access: 1 },
+      { name: 'Speed', nick: 'Spd', desc: 'Walk speed (m/s)', optional: true, number: 0.08 },
+      { name: 'Step', nick: 'St', desc: 'Step length (m)', optional: true, number: 0.06 },
+      { name: 'Lift', nick: 'Lf', desc: 'Swing lift (m)', optional: true, number: 0.03 },
       { name: 'Q', nick: 'Q', desc: 'Optional full driver q (18)', optional: true, list: true, access: 1 },
     ],
     outputs: [
-      { name: 'Robot', nick: 'Rb', desc: 'Robot (tip-path = one leg)' },
-      { name: 'State', nick: 'Js', desc: 'Full 18-DOF stance' },
+      { name: 'Robot', nick: 'Rb', desc: 'Robot (gait=18-DOF)' },
+      { name: 'State', nick: 'Js', desc: '18-DOF stance', typeId: PTYPE.jointState },
+      { name: 'Trajectory', nick: 'Tr', desc: 'Gait trajectory when Path/Planes wired', typeId: PTYPE.trajectory },
+      { name: 'PathCurve', nick: 'Pc', desc: 'Resolved path curve', typeId: PTYPE.curve },
+      { name: 'PathPlanes', nick: 'Pp', desc: 'Body planes along path', typeId: PTYPE.plane, access: 1 },
       { name: 'Meshes', nick: 'M', desc: 'Preview meshes', access: 1 },
-      { name: 'Support', nick: 'Sp', desc: 'Support polygon' },
+      { name: 'Support', nick: 'Sp', desc: 'Support polygon', typeId: PTYPE.curve },
     ],
   },
 };
@@ -2162,28 +2170,42 @@ function graph09() {
   const note = nativePanel(
     40,
     80,
-    'WalkHex → Plan tip leg (right-middle 3-DOF) → Preview scrub. Tip-path = one leg; other legs stay at stance.',
+    'WalkHex Planes → Trajectory (tripod gait) → Preview + Scrub. Body follows arc; legs cycle — heuristic preview, not Motus Plan.',
     'Note',
-    520,
+    560,
     72,
   );
-  const hex = motusComponent('walkHex', 40, 200, {});
-  const start = motusComponent('joints', 280, 160, {}, { jointValues: HEX_TIP_START });
-  const goal = motusComponent('joints', 280, 280, {}, { jointValues: HEX_TIP_GOAL });
-  const plan = motusComponent('plan', 560, 200, {
-    Robot: [outRef(hex.node, 'Robot')],
-    Goal: [outRef(goal.node, 'State')],
-    Start: [outRef(start.node, 'State')],
+  const uz = nativeUnitZ(40, 180);
+  const arcParts = [];
+  const planeRefs = [];
+  const ARC_N = 9;
+  for (let i = 0; i < ARC_N; i++) {
+    const a = Math.PI - (i / (ARC_N - 1)) * Math.PI;
+    const px = 0.4 + 0.35 * Math.cos(a);
+    const py = 0.35 * Math.sin(a);
+    const pt = nativeConstructPoint(40, 260 + i * 44, [px, py, 0]);
+    const pl = nativePlane(140, 260 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
+    planeRefs.push(outRef(pl.node, 'Plane'));
+  }
+  const planesMerge = nativeMerge(280, 420, planeRefs);
+  const hex = motusComponent('walkHex', 40, 680, {
+    Planes: [outRef(planesMerge.node, 'Result')],
   });
-  const { scrub, preview } = previewWithScrub(760, 200, outRef(plan.node, 'Trajectory'));
-  const gModel = nativeGroup('Walking Hex', [hex], GROUP_COLOUR.model);
-  const gPlan = nativeGroup('Plan tip leg', [start, goal, plan, scrub, preview], GROUP_COLOUR.plan);
+  const { scrub, preview } = previewWithScrub(560, 680, outRef(hex.node, 'Trajectory'));
+  const gModel = nativeGroup('Walking Hex path', [
+    { xml: uz.xml, node: uz.node },
+    ...arcParts,
+    planesMerge,
+    hex,
+  ], GROUP_COLOUR.model);
+  const gPreview = nativeGroup('Gait Preview', [scrub, preview], GROUP_COLOUR.preview);
 
-  const objs = [title, note, hex, start, goal, plan, scrub, preview, gModel, gPlan];
+  const objs = [title, note, { xml: uz.xml }, ...arcParts, planesMerge, hex, scrub, preview, gModel, gPreview];
   objs._meta = {
     fileName: '09_walking_hexapod.ghx',
     description:
-      'Walking hexapod (NOT Stewart): WalkHex → joint-space Plan on right-middle leg → Motus Preview + Scrub. Full 18-DOF stance on Tree; tip-path trajectory moves one leg only.',
+      'Walking hexapod: arc plane list → WalkHex gait Trajectory (18-DOF + mobile base) → Motus Preview + Scrub. Tripod heuristic — not Stewart, not terrain IK.',
   };
   return buildGraph(objs);
 }

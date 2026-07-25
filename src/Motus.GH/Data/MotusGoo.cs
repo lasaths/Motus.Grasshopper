@@ -61,6 +61,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public IReadOnlyList<PlanningMessage>? DiagnosticsSnapshot { get; set; }
     public PlannerProvenance? ProvenanceSnapshot { get; set; }
     public JointState? TreeDriverHome { get; set; }
+    /// <summary>Per-waypoint mobile base frames (driver-index parallel to trajectory points).</summary>
+    public IReadOnlyList<Frame>? BasePath { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
