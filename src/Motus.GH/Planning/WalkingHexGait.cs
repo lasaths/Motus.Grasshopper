@@ -189,7 +189,7 @@ internal static class WalkingHexGait
         for (var leg = 0; leg < 6; leg++)
         {
             var side = LegNames[leg].StartsWith("left", StringComparison.Ordinal) ? 1.0 : -1.0;
-            q[leg * 3 + 0] = side * hip;
+            q[leg * 3 + 0] = leg * (Math.PI / 3.0) + side * hip;
             q[leg * 3 + 1] = femur;
             q[leg * 3 + 2] = tibia;
         }

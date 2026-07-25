@@ -323,7 +323,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         for (var leg = 0; leg < 6; leg++)
         {
             var side = LegIsLeft(leg) ? 1.0 : -1.0;
-            q[leg * 3 + 0] = side * hip;
+            q[leg * 3 + 0] = leg * (Math.PI / 3.0) + side * hip;
             q[leg * 3 + 1] = femur;
             q[leg * 3 + 2] = tibia;
         }
@@ -470,8 +470,8 @@ internal static class WalkingHexPreview
             var femurA = q18[leg * 3 + 1];
             var tibiaA = q18[leg * 3 + 2];
 
-            // Coxa in XY about world Z at hip
-            var coxaDir = new Vector3d(Math.Cos(yaw0 + coxaA), Math.Sin(yaw0 + coxaA), 0);
+            // Coxa direction: q hip channel already includes mount yaw φᵢ
+            var coxaDir = new Vector3d(Math.Cos(coxaA), Math.Sin(coxaA), 0);
             var knee = hip + coxaDir * coxa;
 
             // Femur / tibia pitch in the vertical plane of coxaDir

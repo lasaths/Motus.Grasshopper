@@ -871,7 +871,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         for (var leg = 0; leg < 6; leg++)
         {
             var side = legNames[leg].StartsWith("left", StringComparison.Ordinal) ? 1.0 : -1.0;
-            q[leg * 3 + 0] = side * hip;
+            q[leg * 3 + 0] = leg * (Math.PI / 3.0) + side * hip;
             q[leg * 3 + 1] = femur;
             q[leg * 3 + 2] = tibia;
         }
@@ -936,6 +936,17 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     var home18 = BuildHexStanceQ(hs, fs, ts);
     if (home18.Length != 18)
         Fail($"Walking hex TreeDriverHome expected 18 drivers, got {home18.Length}");
+    {
+        var hips = Enumerable.Range(0, 6).Select(leg => home18[leg * 3]).ToArray();
+        if (hips.Max() - hips.Min() < 1.0)
+            Fail($"Walking hex stance hips should spread by mount yaw (spread={hips.Max() - hips.Min():F3} rad)");
+        for (var leg = 1; leg < 6; leg++)
+        {
+            var delta = hips[leg] - hips[leg - 1];
+            if (Math.Abs(Math.Abs(delta) - Math.PI / 3.0) > 0.35)
+                Fail($"Walking hex consecutive hip delta leg {leg - 1}→{leg} = {delta:F3} rad, expected ~±π/3");
+        }
+    }
     if (tree.DriverCount != 18)
         Fail($"Walking hex tree expected 18 drivers, got {tree.DriverCount}");
 
