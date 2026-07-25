@@ -479,11 +479,11 @@ internal static class WalkingHexPreview
             var up = Vector3d.ZAxis;
             var lat = Vector3d.CrossProduct(up, coxaDir);
             if (!lat.Unitize()) lat = Vector3d.YAxis;
-            var femurDir = coxaDir * Math.Cos(femurA) + up * Math.Sin(femurA);
+            var femurDir = coxaDir * Math.Cos(femurA) - up * Math.Sin(femurA);
             femurDir.Unitize();
             var ankle = knee + femurDir * femur;
 
-            var tibiaDir = coxaDir * Math.Cos(femurA + tibiaA) + up * Math.Sin(femurA + tibiaA);
+            var tibiaDir = coxaDir * Math.Cos(femurA + tibiaA) - up * Math.Sin(femurA + tibiaA);
             tibiaDir.Unitize();
             var foot = ankle + tibiaDir * tibia;
             feet.Add(foot);

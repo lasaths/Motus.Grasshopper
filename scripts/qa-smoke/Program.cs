@@ -1074,11 +1074,65 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         }
         if (stanceFeet < 3)
             Fail($"Mid-gait expected ≥3 stance feet at Z≈0, got {stanceFeet}");
+
+        // TreeFK preview must match analytic leg FK (URDF +Y revolute → pitch toward −Z).
+        var treeFk = new TreeForwardKinematics(tree);
+        var mats = new double[tree.Links.Count][];
+        for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+        treeFk.ComputeLinkTransformsInto(midQ, mats);
+        var hexLegNames = new[] { "right-middle", "right-front", "left-front", "left-middle", "left-back", "right-back" };
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(leg * Math.PI / 3.0),
+                bodyR * Math.Sin(leg * Math.PI / 3.0),
+                bodyZ);
+            var q0 = midQ[leg * 3];
+            var q1 = midQ[leg * 3 + 1];
+            var q2 = midQ[leg * 3 + 2];
+            var footBody = WalkingHexLegIk.FootPosition(hipBody, coxa, femur, tibia, q0, q1, q2);
+            var li = tree.IndexOfLink($"{hexLegNames[leg]}_tibia");
+            var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
+            if (Math.Abs(footBody.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK Z={footBody.Z:F4} ≠ TreeFK Z={tipBody[2]:F4} (preview would float)");
+        }
+
         Ok("Walking hex gait builds 18-DOF trajectory + foot-target IK (stance Z≈0, knees clear)");
     }
-    catch (DllNotFoundException)
+    catch (DllNotFoundException ex)
     {
-        Ok("Walking hex gait smoke skipped (Rhino native DLL unavailable in this host)");
+        Ok($"Walking hex gait smoke skipped (Rhino native DLL unavailable: {ex.Message})");
+    }
+
+    // TreeFK vs analytic FK parity (no ArcCurve / preview mesh — Motus.Geometry only).
+    try
+    {
+        var treeFk = new TreeForwardKinematics(tree);
+        var mats = new double[tree.Links.Count][];
+        for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+        treeFk.ComputeLinkTransformsInto(home18, mats);
+        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        var hexLegNames = new[] { "right-middle", "right-front", "left-front", "left-middle", "left-back", "right-back" };
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(leg * Math.PI / 3.0),
+                bodyR * Math.Sin(leg * Math.PI / 3.0),
+                bodyZ);
+            var q0 = home18[leg * 3];
+            var q1 = home18[leg * 3 + 1];
+            var q2 = home18[leg * 3 + 2];
+            var footBody = WalkingHexLegIk.FootPosition(hipBody, coxa, femur, tibia, q0, q1, q2);
+            var li = tree.IndexOfLink($"{hexLegNames[leg]}_tibia");
+            var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
+            if (Math.Abs(footBody.X - tipBody[0]) > 0.004 || Math.Abs(footBody.Y - tipBody[1]) > 0.004 || Math.Abs(footBody.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK ({footBody.X:F4},{footBody.Y:F4},{footBody.Z:F4}) ≠ TreeFK tip ({tipBody[0]:F4},{tipBody[1]:F4},{tipBody[2]:F4})");
+        }
+        Ok("Walking hex analytic FK matches TreeFK at stance (URDF +Y pitch)");
+    }
+    catch (DllNotFoundException ex)
+    {
+        Ok($"Walking hex TreeFK parity skipped (Rhino native DLL unavailable: {ex.Message})");
     }
 }
 

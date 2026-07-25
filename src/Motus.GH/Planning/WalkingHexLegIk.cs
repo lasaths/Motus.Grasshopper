@@ -5,6 +5,7 @@ namespace Motus.GH.Planning;
 /// <summary>
 /// Analytic 3-DOF leg IK (coxa yaw + femur/tibia pitch in coxa vertical plane).
 /// Matches TreeFK / WalkingHexPreview: q0 = coxa yaw in body XY (includes mount yaw φᵢ).
+/// Femur/tibia pitch uses URDF +Y revolute (positive q → −Z in body frame).
 /// </summary>
 internal static class WalkingHexLegIk
 {
@@ -30,8 +31,8 @@ internal static class WalkingHexLegIk
         var u = new Vector3d(Math.Cos(q0), Math.Sin(q0), 0);
         var w = v - u * coxa;
         var x = Vector3d.Multiply(w, u);
-        var z = w.Z;
-        var d2 = x * x + z * z;
+        var zDown = -w.Z; // leg plane +Y = downward (−world Z); matches TreeFK +Y revolute
+        var d2 = x * x + zDown * zDown;
         if (d2 < 1e-14)
             return false;
 
@@ -47,7 +48,7 @@ internal static class WalkingHexLegIk
 
         var cosFemur = (femur * femur + d2 - tibia * tibia) / (2.0 * femur * d);
         cosFemur = Math.Clamp(cosFemur, -1.0, 1.0);
-        q1 = Math.Atan2(z, x) - Math.Acos(cosFemur);
+        q1 = Math.Atan2(zDown, x) - Math.Acos(cosFemur);
 
         return double.IsFinite(q0) && double.IsFinite(q1) && double.IsFinite(q2);
     }
@@ -63,10 +64,10 @@ internal static class WalkingHexLegIk
     {
         var coxaDir = new Vector3d(Math.Cos(q0), Math.Sin(q0), 0);
         var knee = hip + coxaDir * coxa;
-        var femurDir = coxaDir * Math.Cos(q1) + Vector3d.ZAxis * Math.Sin(q1);
+        var femurDir = coxaDir * Math.Cos(q1) - Vector3d.ZAxis * Math.Sin(q1);
         if (!femurDir.Unitize()) femurDir = coxaDir;
         var ankle = knee + femurDir * femur;
-        var tibiaDir = coxaDir * Math.Cos(q1 + q2) + Vector3d.ZAxis * Math.Sin(q1 + q2);
+        var tibiaDir = coxaDir * Math.Cos(q1 + q2) - Vector3d.ZAxis * Math.Sin(q1 + q2);
         if (!tibiaDir.Unitize()) tibiaDir = femurDir;
         return ankle + tibiaDir * tibia;
     }
@@ -75,7 +76,7 @@ internal static class WalkingHexLegIk
     {
         var coxaDir = new Vector3d(Math.Cos(q0), Math.Sin(q0), 0);
         var knee = hip + coxaDir * coxa;
-        var femurDir = coxaDir * Math.Cos(q1) + Vector3d.ZAxis * Math.Sin(q1);
+        var femurDir = coxaDir * Math.Cos(q1) - Vector3d.ZAxis * Math.Sin(q1);
         if (!femurDir.Unitize()) femurDir = coxaDir;
         return knee + femurDir * femur;
     }
