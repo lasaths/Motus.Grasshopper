@@ -60,6 +60,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public ToolCapabilities? ToolCapabilitiesSnapshot { get; set; }
     public IReadOnlyList<PlanningMessage>? DiagnosticsSnapshot { get; set; }
     public PlannerProvenance? ProvenanceSnapshot { get; set; }
+    public JointState? TreeDriverHome { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
@@ -70,7 +71,9 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
         var session = ApplyTool(model, ToolSnapshot, BaseFrameOverride);
         var preview = RobotPreviewGeometry.ForViewport(PreviewGeometry, ToolSnapshot);
         // Tree required so Robotiq tip-descendant meshes pose via TreeFK (not stuck at base).
-        return new RobotContext(model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame, preview, PreviewMeshColors, Tree, Stewart);
+        return new RobotContext(
+            model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame,
+            preview, PreviewMeshColors, Tree, Stewart, TreeDriverHome);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)

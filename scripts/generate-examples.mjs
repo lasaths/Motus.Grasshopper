@@ -22,6 +22,9 @@ const absPath = (...parts) => path.resolve(repoRoot, ...parts);
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
+/** Walking hex right-middle tip leg: hip, femur, tibia (rad) at default stance. */
+const HEX_TIP_START = [-0.1309, 0.5236, -0.5236];
+const HEX_TIP_GOAL = [-0.1309, 0.6109, -0.5236];
 /** Collision-free home-ish start for obstacle demos (away from table/box). */
 const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
 const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
@@ -343,6 +346,27 @@ const MOTUS = {
       { name: 'Name', nick: 'N', desc: 'Model name', optional: true, text: 'stewart_classic' },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Stewart robot (Family=stewart)' }],
+  },
+  walkHex: {
+    guid: 'b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', name: 'Motus Walking Hex', nick: 'WalkHex', w: 80, h: 160,
+    desc: 'Walking hexapod 6×coxa/femur/tibia — NOT Stewart',
+    inputs: [
+      { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.12 },
+      { name: 'Coxa', nick: 'Cx', desc: 'Coxa length (m)', optional: true, number: 0.06 },
+      { name: 'Femur', nick: 'Fm', desc: 'Femur length (m)', optional: true, number: 0.17 },
+      { name: 'Tibia', nick: 'Tb', desc: 'Tibia length (m)', optional: true, number: 0.19 },
+      { name: 'HipStance', nick: 'Hs', desc: 'Coxa stance (rad)', optional: true, number: 0.1309 },
+      { name: 'FemurStance', nick: 'Fs', desc: 'Femur stance (rad)', optional: true, number: 0.5236 },
+      { name: 'TibiaStance', nick: 'Ts', desc: 'Tibia stance (rad)', optional: true, number: -0.5236 },
+      { name: 'BodyZ', nick: 'Bz', desc: 'Body height (m)', optional: true, number: 0.12 },
+      { name: 'Q', nick: 'Q', desc: 'Optional full driver q (18)', optional: true, list: true, access: 1 },
+    ],
+    outputs: [
+      { name: 'Robot', nick: 'Rb', desc: 'Robot (tip-path = one leg)' },
+      { name: 'State', nick: 'Js', desc: 'Full 18-DOF stance' },
+      { name: 'Meshes', nick: 'M', desc: 'Preview meshes', access: 1 },
+      { name: 'Support', nick: 'Sp', desc: 'Support polygon' },
+    ],
   },
 };
 
@@ -2133,7 +2157,38 @@ function graph08() {
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08];
+function graph09() {
+  const title = nativeScribble(40, 40, '09 · Walking hexapod', 28);
+  const note = nativePanel(
+    40,
+    80,
+    'WalkHex → Plan tip leg (right-middle 3-DOF) → Preview scrub. Tip-path = one leg; other legs stay at stance.',
+    'Note',
+    520,
+    72,
+  );
+  const hex = motusComponent('walkHex', 40, 200, {});
+  const start = motusComponent('joints', 280, 160, {}, { jointValues: HEX_TIP_START });
+  const goal = motusComponent('joints', 280, 280, {}, { jointValues: HEX_TIP_GOAL });
+  const plan = motusComponent('plan', 560, 200, {
+    Robot: [outRef(hex.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
+  });
+  const { scrub, preview } = previewWithScrub(760, 200, outRef(plan.node, 'Trajectory'));
+  const gModel = nativeGroup('Walking Hex', [hex], GROUP_COLOUR.model);
+  const gPlan = nativeGroup('Plan tip leg', [start, goal, plan, scrub, preview], GROUP_COLOUR.plan);
+
+  const objs = [title, note, hex, start, goal, plan, scrub, preview, gModel, gPlan];
+  objs._meta = {
+    fileName: '09_walking_hexapod.ghx',
+    description:
+      'Walking hexapod (NOT Stewart): WalkHex → joint-space Plan on right-middle leg → Motus Preview + Scrub. Full 18-DOF stance on Tree; tip-path trajectory moves one leg only.',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09];
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',

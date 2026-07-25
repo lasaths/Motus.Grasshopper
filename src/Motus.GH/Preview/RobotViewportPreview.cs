@@ -45,7 +45,8 @@ internal static class RobotViewportPreview
     if (geometry is not null &&
         KinematicsPreview.PreviewMeshCache.TryCreate(
             ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities,
-            goo.PreviewMeshColors, goo.Tree, goo.Value?.JointNames, goo.Tool?.Bindings) is { } cache)
+            goo.PreviewMeshColors, goo.Tree, goo.Value?.JointNames, goo.Tool?.Bindings,
+            goo.TreeDriverHome) is { } cache)
     {
       meshes = cache.MeshesFor(home);
     }
@@ -74,7 +75,8 @@ internal static class RobotViewportPreview
 
     if (KinematicsPreview.PreviewMeshCache.TryCreate(
             ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool,
-            tree: goo.Tree, armJointNames: goo.Value?.JointNames, toolBindings: goo.Tool?.Bindings) is { } cache)
+            tree: goo.Tree, armJointNames: goo.Value?.JointNames, toolBindings: goo.Tool?.Bindings,
+            treeDriverHome: goo.TreeDriverHome) is { } cache)
       return cache.MeshesFor(home);
 
     return KinematicsPreview

@@ -31,6 +31,7 @@ internal sealed class PlanInputSnapshot
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
     public ToolDefinition? ToolSnapshot { get; init; }
+    public JointState? TreeDriverHome { get; init; }
 
     public static bool TryCollect(
         IGH_DataAccess da,
@@ -61,6 +62,14 @@ internal sealed class PlanInputSnapshot
 
         if (!GhExtract.TryGoals(da, goalIdx, out var goals, out _))
             return false;
+
+        for (var gi = 0; gi < goals.Count; gi++)
+        {
+            if (goals[gi].joints is not { } goalJs)
+                continue;
+            if (!GhExtract.ValidateJointStateForPlan(goalJs, context.Model, $"Goal[{gi}]", out error))
+                return false;
+        }
 
         if (!GhExtract.TryStartOrHome(da, startIdx, context, out var start, out var usedDefaultStart, out error))
             return false;
@@ -117,7 +126,8 @@ internal sealed class PlanInputSnapshot
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,
-            ToolSnapshot = robotGoo.Tool
+            ToolSnapshot = robotGoo.Tool,
+            TreeDriverHome = robotGoo.TreeDriverHome
         };
         return true;
     }

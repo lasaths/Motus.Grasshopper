@@ -441,6 +441,22 @@ try
             Fail($"Frame roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
     }
     Ok("FrameConversion ToPlane/FromPlane roundtrip within tolerance");
+
+    for (var i = 0; i < 8; i++)
+    {
+        var origin = new Point3d(rnd.NextDouble() * 0.2, rnd.NextDouble() * 0.2, 0.5 + rnd.NextDouble() * 0.1);
+        var pl = new Plane(origin, Vector3d.XAxis, Vector3d.YAxis);
+        var frame = FrameConversion.FromPlanePlate(pl);
+        var backPl = FrameConversion.ToPlanePlate(frame);
+        var back = FrameConversion.FromPlanePlate(backPl);
+        if (Math.Abs(back.X - frame.X) > 1e-4 || Math.Abs(back.Y - frame.Y) > 1e-4 || Math.Abs(back.Z - frame.Z) > 1e-4)
+            Fail($"Stewart plate roundtrip position drift at sample {i}");
+        var dot = Math.Abs(back.Qw * frame.Qw + back.Qx * frame.Qx + back.Qy * frame.Qy + back.Qz * frame.Qz);
+        var oriErr = 2 * Math.Acos(Math.Clamp(dot, -1, 1));
+        if (oriErr > 1e-3)
+            Fail($"Stewart plate roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
+    }
+    Ok("FrameConversion ToPlanePlate/FromPlanePlate roundtrip within tolerance");
 }
 catch (DllNotFoundException)
 {
@@ -843,6 +859,120 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     if (KinematicsResolver.CreateInverseKinematics(preset, tip.Chain) is not NumericalInverseKinematics)
         Fail("Rail 7-DOF must use numerical IK, not UR analytic");
     Ok("Wave 2 JointTable tip-path Validate + Mobility SE2 + rail numerical IK");
+}
+
+// Walking hex: tip-path plan + TreeDriverHome fill contract (HI-005/006)
+{
+    static double[] BuildHexStanceQ(double hip, double femur, double tibia)
+    {
+        var legNames = new[] { "right-middle", "right-front", "left-front", "left-middle", "left-back", "right-back" };
+        var q = new double[18];
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var side = legNames[leg].StartsWith("left", StringComparison.Ordinal) ? 1.0 : -1.0;
+            q[leg * 3 + 0] = side * hip;
+            q[leg * 3 + 1] = femur;
+            q[leg * 3 + 2] = tibia;
+        }
+        return q;
+    }
+
+    static KinematicTree BuildWalkingHexTree(double bodyR, double coxa, double femur, double tibia, double bodyZ)
+    {
+        var legNames = new[] { "right-middle", "right-front", "left-front", "left-middle", "left-back", "right-back" };
+        var links = new List<UrdfLink>
+        {
+            new("body", [UrdfGeometry.Cylinder(bodyR * 0.85, 0.03, new Frame(0, 0, bodyZ))]),
+        };
+        var joints = new List<UrdfJoint>();
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var name = legNames[leg];
+            var yaw = leg * (Math.PI / 3.0);
+            var hx = bodyR * Math.Cos(yaw);
+            var hy = bodyR * Math.Sin(yaw);
+            var coxaLink = $"{name}_coxa";
+            var femurLink = $"{name}_femur";
+            var tibiaLink = $"{name}_tibia";
+            links.Add(new UrdfLink(coxaLink, [UrdfGeometry.Cylinder(0.012, coxa, new Frame(coxa * 0.5, 0, 0))]));
+            links.Add(new UrdfLink(femurLink, [UrdfGeometry.Cylinder(0.012, femur, new Frame(femur * 0.5, 0, 0))]));
+            links.Add(new UrdfLink(tibiaLink, [UrdfGeometry.Cylinder(0.010, tibia, new Frame(tibia * 0.5, 0, 0))]));
+            joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink, hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
+            joints.Add(new UrdfJoint($"{name}_femur", "revolute", coxaLink, femurLink, coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+            joints.Add(new UrdfJoint($"{name}_tibia", "revolute", femurLink, tibiaLink, femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+        }
+
+        if (!RobotDescription.TryAssemble("walking_hexapod", links, joints, tipLink: "right-middle_tibia",
+                out var desc, out var diag, homeQ: null) || desc is null)
+            Fail($"Walking hex assemble: {string.Join("; ", diag.Errors)}");
+        return desc.ToKinematicTree();
+    }
+
+    static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)
+    {
+        var byName = new Dictionary<string, KinematicJoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var j in tree.Joints)
+            byName[j.Name] = j;
+        var limits = new List<JointLimit>(tipJointNames.Count);
+        foreach (var name in tipJointNames)
+        {
+            if (!byName.TryGetValue(name, out var j))
+                Fail($"Tip joint '{name}' missing from tree.");
+            var vel = j.Velocity ?? Math.PI;
+            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+        }
+        return limits;
+    }
+
+    var tree = BuildWalkingHexTree(0.12, 0.06, 0.17, 0.19, 0.12);
+    const string tipLink = "right-middle_tibia";
+    var tip = tree.ExtractSerialTip("body", tipLink);
+    if (tip.Chain.Joints.Length != 3)
+        Fail($"Walking hex tip path expected 3 axes, got {tip.Chain.Joints.Length}");
+    var hs = 7.5 * Math.PI / 180.0;
+    var fs = 30.0 * Math.PI / 180.0;
+    var ts = -30.0 * Math.PI / 180.0;
+    var home18 = BuildHexStanceQ(hs, fs, ts);
+    if (home18.Length != 18)
+        Fail($"Walking hex TreeDriverHome expected 18 drivers, got {home18.Length}");
+    if (tree.DriverCount != 18)
+        Fail($"Walking hex tree expected 18 drivers, got {tree.DriverCount}");
+
+    var preset = new RobotPreset
+    {
+        Manufacturer = RobotManufacturer.Unknown,
+        ModelName = "walking_hexapod",
+        Family = "serial",
+        AxisCount = tip.Chain.Joints.Length,
+        JointLimits = LimitsAlongTip(tree, tip.JointNames),
+        BaseFrame = BaseFrame.Identity,
+        ToolFrame = ToolFrame.Identity,
+    };
+    var hexRobot = new RobotModel(preset);
+    var tipStart = new JointState(new[] { -0.1309, 0.5236, -0.5236 });
+    var tipGoal = new JointState(new[] { -0.1309, 0.6109, -0.5236 });
+    var hexPlan = new JointLinearPlanner().Plan(new PlanningRequest(hexRobot, tipStart, tipGoal));
+    if (!hexPlan.Success)
+        Fail($"Walking hex tip-path plan: {string.Join("; ", hexPlan.Errors)}");
+
+    var driverQ = new double[18];
+    var fillErr = KinematicsPreview.TryFillTreeDriverQ(tree, tipStart.Positions, tip.JointNames, home18, driverQ);
+    if (fillErr is not null)
+        Fail($"FillTreeDriverQ: {fillErr}");
+    for (var i = 0; i < 3; i++)
+    {
+        if (Math.Abs(driverQ[i] - tipStart.Positions[i]) > 1e-9)
+            Fail($"FillTreeDriverQ tip driver[{i}] should match trajectory");
+    }
+    for (var di = 3; di < 18; di++)
+    {
+        if (Math.Abs(driverQ[di] - home18[di]) > 1e-9)
+            Fail($"FillTreeDriverQ non-tip driver[{di}] should stay at TreeDriverHome");
+    }
+    var missingHomeErr = KinematicsPreview.TryFillTreeDriverQ(tree, tipStart.Positions, tip.JointNames, null, driverQ);
+    if (missingHomeErr is null)
+        Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
+    Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
 }
 
 {

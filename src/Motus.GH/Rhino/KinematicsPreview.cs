@@ -24,34 +24,192 @@ public static class KinematicsPreview
         catch (InvalidOperationException) { return null; }
     }
 
-    /// <summary>Stewart leg wires: base anchors → platform anchors at the FK pose for <paramref name="lengths"/>.</summary>
+    /// <summary>Stewart leg + platform outline wires at the FK pose for <paramref name="lengths"/>.</summary>
     public static IEnumerable<Line> StewartLegLines(
         StewartPlatform platform,
         JointState lengths,
         CartesianPose? seedPose = null)
     {
-        var fk = new StewartForwardKinematics(platform).TrySolve(lengths, seedPose);
-        if (!fk.Success || fk.Pose is null)
+        if (!TryStewartPose(platform, lengths, seedPose, out var m, out _))
             yield break;
 
-        var m = Transforms.FromFrame(fk.Pose.Tcp);
         for (var i = 0; i < StewartPlatform.LegCount; i++)
         {
             var b = platform.BaseAnchors[i];
-            var p = platform.PlatformAnchors[i];
-            Transforms.TransformPointInto(m, p.X, p.Y, p.Z, out var wx, out var wy, out var wz);
-            yield return new Line(new Point3d(b.X, b.Y, b.Z), new Point3d(wx, wy, wz));
+            var p = PlatformWorld(m, platform.PlatformAnchors[i]);
+            yield return new Line(new Point3d(b.X, b.Y, b.Z), p);
         }
 
-        // Platform outline (sequential anchors).
         for (var i = 0; i < StewartPlatform.LegCount; i++)
         {
-            var a = platform.PlatformAnchors[i];
-            var b = platform.PlatformAnchors[(i + 1) % StewartPlatform.LegCount];
-            Transforms.TransformPointInto(m, a.X, a.Y, a.Z, out var ax, out var ay, out var az);
-            Transforms.TransformPointInto(m, b.X, b.Y, b.Z, out var bx, out var by, out var bz);
-            yield return new Line(new Point3d(ax, ay, az), new Point3d(bx, by, bz));
+            var a = PlatformWorld(m, platform.PlatformAnchors[i]);
+            var b = PlatformWorld(m, platform.PlatformAnchors[(i + 1) % StewartPlatform.LegCount]);
+            yield return new Line(a, b);
         }
+
+        for (var i = 0; i < StewartPlatform.LegCount; i++)
+        {
+            var a = platform.BaseAnchors[i];
+            var b = platform.BaseAnchors[(i + 1) % StewartPlatform.LegCount];
+            yield return new Line(new Point3d(a.X, a.Y, a.Z), new Point3d(b.X, b.Y, b.Z));
+        }
+    }
+
+    /// <summary>
+    /// Filled Stewart preview inspired by hex-viz UIs: base plate, platform body, orange legs,
+    /// joint balls, COG. Still prismatic Stewart — not a walking coxa/femur/tibia hexapod.
+    /// </summary>
+    public static StewartPreviewGeometry StewartPreview(
+        StewartPlatform platform,
+        JointState lengths,
+        CartesianPose? seedPose = null)
+    {
+        var meshes = new List<Mesh>();
+        var colors = new List<Color>();
+        var wires = StewartLegLines(platform, lengths, seedPose).ToList();
+        if (!TryStewartPose(platform, lengths, seedPose, out var m, out var tcp))
+            return new StewartPreviewGeometry(meshes, colors, wires);
+
+        var basePts = platform.BaseAnchors.Select(a => new Point3d(a.X, a.Y, a.Z)).ToArray();
+        var platPts = platform.PlatformAnchors.Select(a => PlatformWorld(m, a)).ToArray();
+
+        // Support / base plate (ground footprint).
+        if (PolygonSlab(basePts, thickness: 0.012, upward: true) is { } baseMesh)
+        {
+            meshes.Add(baseMesh);
+            colors.Add(Color.FromArgb(160, 90, 100, 110));
+        }
+
+        // Platform body (pink hex plate — matches common hex-viz body cue).
+        if (PolygonSlab(platPts, thickness: 0.018, upward: true) is { } platMesh)
+        {
+            meshes.Add(platMesh);
+            colors.Add(Color.FromArgb(200, 255, 105, 180));
+        }
+
+        // Prismatic legs + joint spheres.
+        const double legR = 0.018;
+        const double jointR = 0.028;
+        var legColor = Color.FromArgb(220, 255, 140, 40);
+        var jointColor = Color.FromArgb(230, 255, 160, 70);
+        for (var i = 0; i < StewartPlatform.LegCount; i++)
+        {
+            var b = new Point3d(platform.BaseAnchors[i].X, platform.BaseAnchors[i].Y, platform.BaseAnchors[i].Z);
+            var p = platPts[i];
+            if (CylinderMesh(b, p, legR) is { } leg)
+            {
+                meshes.Add(leg);
+                colors.Add(legColor);
+            }
+            if (Mesh.CreateFromSphere(new Sphere(b, jointR), 10, 8) is { } jb)
+            {
+                meshes.Add(jb);
+                colors.Add(jointColor);
+            }
+            if (Mesh.CreateFromSphere(new Sphere(p, jointR), 10, 8) is { } jp)
+            {
+                meshes.Add(jp);
+                colors.Add(jointColor);
+            }
+        }
+
+        // COG / TCP marker at platform origin.
+        var cog = new Point3d(tcp.X, tcp.Y, tcp.Z);
+        if (Mesh.CreateFromSphere(new Sphere(cog, 0.035), 12, 10) is { } cogMesh)
+        {
+            meshes.Add(cogMesh);
+            colors.Add(Color.FromArgb(230, 0, 200, 100));
+        }
+
+        return new StewartPreviewGeometry(meshes, colors, wires);
+    }
+
+    public readonly record struct StewartPreviewGeometry(
+        IReadOnlyList<Mesh> Meshes,
+        IReadOnlyList<Color> Colors,
+        IReadOnlyList<Line> Wires);
+
+    private static bool TryStewartPose(
+        StewartPlatform platform,
+        JointState lengths,
+        CartesianPose? seedPose,
+        out double[] matrix,
+        out Frame tcp)
+    {
+        matrix = [];
+        tcp = default;
+        var fk = new StewartForwardKinematics(platform).TrySolve(lengths, seedPose);
+        if (!fk.Success || fk.Pose is null)
+            return false;
+        tcp = fk.Pose.Tcp;
+        matrix = Transforms.FromFrame(tcp);
+        return true;
+    }
+
+    private static Point3d PlatformWorld(double[] m, Vec3 local)
+    {
+        Transforms.TransformPointInto(m, local.X, local.Y, local.Z, out var wx, out var wy, out var wz);
+        return new Point3d(wx, wy, wz);
+    }
+
+    private static Mesh? PolygonSlab(Point3d[] ring, double thickness, bool upward)
+    {
+        if (ring.Length < 3) return null;
+        var poly = new Polyline(ring.Concat([ring[0]]));
+        if (!poly.IsValid) return null;
+        var mesh = Mesh.CreateFromClosedPolyline(poly);
+        if (mesh is null || !mesh.IsValid)
+        {
+            // Convex fan about centroid if CreateFromClosedPolyline fails on non-planar-ish rings.
+            var c = Point3d.Origin;
+            foreach (var p in ring) c += p;
+            c /= ring.Length;
+            mesh = new Mesh();
+            mesh.Vertices.Add(c);
+            foreach (var p in ring) mesh.Vertices.Add(p);
+            for (var i = 0; i < ring.Length; i++)
+            {
+                var a = i + 1;
+                var b = i + 2 <= ring.Length ? i + 2 : 1;
+                mesh.Faces.AddFace(0, a, b);
+            }
+            mesh.Normals.ComputeNormals();
+        }
+
+        var n = Vector3d.ZAxis;
+        if (mesh.Faces.Count > 0)
+        {
+            var f = mesh.Faces[0];
+            var a = mesh.Vertices[f.A];
+            var b = mesh.Vertices[f.B];
+            var c = mesh.Vertices[f.C];
+            n = Vector3d.CrossProduct(b - a, c - a);
+            if (!n.Unitize()) n = Vector3d.ZAxis;
+            if (upward && n.Z < 0) n = -n;
+        }
+
+        var top = mesh.DuplicateMesh();
+        top.Transform(Transform.Translation(n * (thickness * 0.5)));
+        var bottom = mesh.DuplicateMesh();
+        bottom.Transform(Transform.Translation(-n * (thickness * 0.5)));
+        bottom.Flip(true, true, true);
+
+        var slab = new Mesh();
+        slab.Append(top);
+        slab.Append(bottom);
+        var vCount = top.Vertices.Count;
+        // Side walls only for the outer ring (skip centroid fan vertex 0 when present).
+        var ringStart = top.Vertices.Count == ring.Length + 1 ? 1 : 0;
+        var ringCount = top.Vertices.Count - ringStart;
+        for (var i = 0; i < ringCount; i++)
+        {
+            var i0 = ringStart + i;
+            var i1 = ringStart + (i + 1) % ringCount;
+            slab.Faces.AddFace(i0, i1, vCount + i1, vCount + i0);
+        }
+        slab.Normals.ComputeNormals();
+        slab.Compact();
+        return slab.IsValid ? slab : null;
     }
 
     public static Plane TcpPlane(
@@ -66,8 +224,8 @@ public static class KinematicsPreview
                 return FrameConversion.ToPlane(baseF.Frame);
             var fk = new StewartForwardKinematics(stewart).TrySolve(state);
             if (!fk.Success || fk.Pose is null)
-                return FrameConversion.ToPlane(baseF.Frame);
-            return FrameConversion.ToPlane(fk.Pose.Tcp);
+                return FrameConversion.ToPlanePlate(baseF.Frame);
+            return FrameConversion.ToPlanePlate(fk.Pose.Tcp);
         }
         if (TryFk(robot, chain) is not { } serialFk)
             return FrameConversion.ToPlane(baseF.Frame);
@@ -175,6 +333,7 @@ public static class KinematicsPreview
         private readonly IReadOnlyList<ToolDriverBinding>? _toolBindings;
         private readonly string[]? _driverNames;
         private readonly IReadOnlyList<Color?> _meshColors;
+        private readonly double[]? _treeDriverHome;
         private List<Mesh>? _frameMeshes;
         private Dictionary<string, double>? _toolStateScratch;
 
@@ -199,7 +358,8 @@ public static class KinematicsPreview
             ToolCapabilities? toolCapabilities,
             IReadOnlyList<ToolDriverBinding>? toolBindings,
             string[]? driverNames,
-            IReadOnlyList<Color?> meshColors)
+            IReadOnlyList<Color?> meshColors,
+            double[]? treeDriverHome)
         {
             _fk = fk;
             _treeFk = treeFk;
@@ -221,6 +381,7 @@ public static class KinematicsPreview
             _toolBindings = toolBindings;
             _driverNames = driverNames;
             _meshColors = meshColors;
+            _treeDriverHome = treeDriverHome;
         }
 
         public static PreviewMeshCache? TryCreate(
@@ -233,7 +394,8 @@ public static class KinematicsPreview
             Color?[]? urdfColors = null,
             KinematicTree? tree = null,
             IReadOnlyList<string>? armJointNames = null,
-            IReadOnlyList<ToolDriverBinding>? toolBindings = null)
+            IReadOnlyList<ToolDriverBinding>? toolBindings = null,
+            JointState? treeDriverHome = null)
         {
             if (TryFk(robot, chain) is not { } fk) return null;
 
@@ -311,7 +473,8 @@ public static class KinematicsPreview
                     toolCapabilities,
                     toolBindings,
                     driverNames,
-                    meshColors);
+                    meshColors,
+                    treeDriverHome?.Positions.ToArray());
         }
 
         public List<Mesh> MeshesFor(JointState state, EndEffectorState? toolState = null) =>
@@ -355,7 +518,12 @@ public static class KinematicsPreview
                 jawWidth = width;
 
             if (_treeFk is not null && _tree is not null && _driverQ is not null && _treeMats is not null)
-                FillTreeDriverQ(state.Positions, jawWidth);
+            {
+                var fillErr = KinematicsPreview.TryFillTreeDriverQ(
+                    _tree, state.Positions, _armJointNames, _treeDriverHome, _driverQ);
+                if (fillErr is not null)
+                    throw new InvalidOperationException(fillErr);
+            }
 
             for (var i = 0; i < _links.Count; i++)
             {
@@ -423,26 +591,9 @@ public static class KinematicsPreview
         {
             var tree = _tree!;
             var q = _driverQ!;
-            for (var di = 0; di < tree.DriverCount; di++)
-            {
-                var j = tree.Joints[tree.DriverJointIndices[di]];
-                var ai = -1;
-                if (_armJointNames is not null)
-                {
-                    for (var k = 0; k < _armJointNames.Count; k++)
-                    {
-                        if (string.Equals(_armJointNames[k], j.Name, StringComparison.OrdinalIgnoreCase))
-                        {
-                            ai = k;
-                            break;
-                        }
-                    }
-                }
-
-                if (ai < 0)
-                    ai = di; // serial tree / same order
-                q[di] = ai >= 0 && ai < armQ.Count ? armQ[ai] : 0;
-            }
+            var fillErr = TryFillTreeDriverQ(tree, armQ, _armJointNames, _treeDriverHome, q.AsSpan());
+            if (fillErr is not null)
+                throw new InvalidOperationException(fillErr);
 
             // Wave 2/3: Motus.NET ToolParameterBinding owns width→driver (mimic owns fingers).
             if ((_toolCapabilities is not null || _toolBindings is { Count: > 0 }) && _driverNames is not null)
@@ -470,19 +621,88 @@ public static class KinematicsPreview
         };
     }
 
+    /// <summary>
+    /// Fill driver-index-ordered q for TreeFK. Unmatched drivers use <paramref name="treeDriverHome"/>
+    /// only when its length equals <see cref="KinematicTree.DriverCount"/> (driver-index order).
+    /// </summary>
+    public static string? TryFillTreeDriverQ(
+        KinematicTree tree,
+        IReadOnlyList<double> armQ,
+        IReadOnlyList<string>? armJointNames,
+        IReadOnlyList<double>? treeDriverHome,
+        Span<double> driverQ)
+    {
+        if (driverQ.Length != tree.DriverCount)
+            return $"TreeFK driver buffer length ({driverQ.Length}) != tree driver count ({tree.DriverCount}).";
+
+        if (treeDriverHome is not null && treeDriverHome.Count != tree.DriverCount)
+        {
+            return $"TreeDriverHome length ({treeDriverHome.Count}) must equal tree driver count ({tree.DriverCount}; driver-index order).";
+        }
+
+        var homeComplete = treeDriverHome is not null && treeDriverHome.Count == tree.DriverCount;
+        for (var di = 0; di < tree.DriverCount; di++)
+        {
+            var j = tree.Joints[tree.DriverJointIndices[di]];
+            var ai = -1;
+            if (armJointNames is not null)
+            {
+                for (var k = 0; k < armJointNames.Count; k++)
+                {
+                    if (string.Equals(armJointNames[k], j.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ai = k;
+                        break;
+                    }
+                }
+            }
+
+            if (ai < 0)
+                ai = di < armQ.Count ? di : -1;
+
+            if (ai >= 0 && ai < armQ.Count)
+                driverQ[di] = armQ[ai];
+            else if (homeComplete)
+                driverQ[di] = treeDriverHome![di];
+            else
+            {
+                return tree.DriverCount > armQ.Count
+                    ? $"TreeFK preview: trajectory has {armQ.Count} joint(s) but tree has {tree.DriverCount} drivers; set TreeDriverHome ({tree.DriverCount} values, driver-index order) on the robot source."
+                    : $"TreeFK preview: no value for driver '{j.Name}' (index {di}); provide joint in trajectory or complete TreeDriverHome.";
+            }
+        }
+
+        return null;
+    }
+
     public static List<Mesh> LinkMeshesCached(
         PreviewMeshCache cache, JointState state) => cache.MeshesFor(state);
 
     public static Polyline TcpPath(
         RobotModel robot, IEnumerable<JointState> states, SerialJointChain? chain = null,
-        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null)
+        BaseFrame? baseFrame = null, ToolFrame? toolFrame = null,
+        StewartPlatform? stewart = null)
     {
-        if (TryFk(robot, chain) is not { } fk) return new Polyline();
+        if (stewart is not null || Units.IsStewart(robot.Preset))
+        {
+            if (stewart is null) return new Polyline();
+            var fk = new StewartForwardKinematics(stewart);
+            var pts = new List<Point3d>();
+            foreach (var s in states)
+            {
+                var r = fk.TrySolve(s);
+                if (r.Success && r.Pose is not null)
+                    pts.Add(ToPoint(r.Pose.Tcp));
+            }
+            return pts.Count < 2 ? new Polyline() : new Polyline(pts);
+        }
+
+        if (TryFk(robot, chain) is not { } serialFk) return new Polyline();
 
         var baseF = baseFrame ?? robot.Preset.BaseFrame;
         var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var pts = states.Select(s => ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp)).ToList();
-        return pts.Count < 2 ? new Polyline() : new Polyline(pts);
+        var serialPts = states.Select(s => ToPoint(serialFk.ComputeTcp(s, baseF, tool).Tcp)).ToList();
+        return serialPts.Count < 2 ? new Polyline() : new Polyline(serialPts);
     }
 
     public static void TrajectorySegments(

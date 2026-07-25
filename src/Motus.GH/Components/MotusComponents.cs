@@ -432,7 +432,7 @@ public sealed class MotusTcpPoseComponent : MotusComponentBase
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Stewart FK failed: {fk}");
                 return;
             }
-            da.SetData(0, FrameConversion.ToPlane(fk.Pose.Tcp));
+            da.SetData(0, FrameConversion.ToPlanePlate(fk.Pose.Tcp));
             return;
         }
 
@@ -551,11 +551,19 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
         var indices = SelectDecimateIndices(t.Points.Count, decimate);
         var axisCount = t.Robot.Preset.AxisCount;
         var stewart = Units.IsStewart(t.Robot.Preset) || ctx.Stewart is not null;
+        var treeDrivers = ctx.Tree?.DriverCount ?? 0;
+        var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
         if (stewart)
         {
             AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Warning,
                 "Stewart Family=stewart: Q values are leg lengths in meters — do not wire to UR MoveJ (radians).");
+        }
+        else if (tipPathOnly && treeDrivers > axisCount)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                $"Tip-path robot: Q has {axisCount} joint(s) per waypoint (one serial chain) — not full mechanism ({treeDrivers} tree drivers). Do not wire to UR MoveJ for the whole robot.");
         }
         else if (axisCount != 6)
         {

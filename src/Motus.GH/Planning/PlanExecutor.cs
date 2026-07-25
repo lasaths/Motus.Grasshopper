@@ -175,10 +175,13 @@ internal static class PlanExecutor
         var ctx = request.Context;
         var planningContext = request.PlanningContext;
         var session = ctx.EffectiveModel;
-        var goal = new CartesianPose(FrameConversion.FromPlane(plane));
-
         if (ctx.IsStewart || Units.IsStewart(session.Preset))
-            return PlanStewartLin(request, start, goal, cancellationToken, goalProgress);
+        {
+            var stewartGoal = new CartesianPose(FrameConversion.FromPlanePlate(plane));
+            return PlanStewartLin(request, start, stewartGoal, cancellationToken, goalProgress);
+        }
+
+        var goal = new CartesianPose(FrameConversion.FromPlane(plane));
 
         if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
         {
