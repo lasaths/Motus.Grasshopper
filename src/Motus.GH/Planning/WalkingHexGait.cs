@@ -223,14 +223,15 @@ internal static class WalkingHexGait
             var footBody = WalkingHexLegIk.FootPosition(
                 hipBody, coxa, femur, tibia,
                 stanceQ[leg * 3 + 0], stanceQ[leg * 3 + 1], stanceQ[leg * 3 + 2]);
-            var footWorld = BodyToWorld(footBody, startBase);
-            plants[leg] = new Point3d(footWorld.X, footWorld.Y, 0);
+            var footTargetBody = new Point3d(footBody.X, footBody.Y, 0);
 
-            if (!WalkingHexLegIk.TrySolve(hipBody, new Point3d(footWorld.X, footWorld.Y, 0), coxa, femur, tibia, out _, out _, out _))
+            if (!WalkingHexLegIk.TrySolve(hipBody, footTargetBody, coxa, femur, tibia, out _, out _, out _))
             {
                 error = $"Leg {LegNames[leg]}: stance foot at Z=0 unreachable (BodyZ={bodyZ:F3} m too low or geometry infeasible).";
                 return null;
             }
+
+            plants[leg] = BodyToWorld(footTargetBody, startBase);
         }
 
         return plants;
