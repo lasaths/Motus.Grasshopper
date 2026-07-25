@@ -2170,7 +2170,7 @@ function graph09() {
   const note = nativePanel(
     40,
     80,
-    'WalkHex Planes → Trajectory (tripod gait) → Preview + Scrub. Body follows arc; legs cycle — heuristic preview, not Motus Plan.',
+    'WalkHex Planes → foot-target IK gait Trajectory → Preview + Scrub. Body follows arc; feet plant at Z=0 — no Motus Plan on this path.',
     'Note',
     560,
     72,
@@ -2205,7 +2205,7 @@ function graph09() {
   objs._meta = {
     fileName: '09_walking_hexapod.ghx',
     description:
-      'Walking hexapod: arc plane list → WalkHex gait Trajectory (18-DOF + mobile base) → Motus Preview + Scrub. Tripod heuristic — not Stewart, not terrain IK.',
+      'Walking hexapod: arc plane list → WalkHex foot-target IK gait Trajectory (18-DOF + mobile base) → Motus Preview + Scrub. Not Stewart; no Motus Plan on gait path.',
   };
   return buildGraph(objs);
 }

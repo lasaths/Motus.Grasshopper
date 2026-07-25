@@ -36,7 +36,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         : base(
             "Motus Walking Hex",
             "WalkHex",
-            "Walking hexapod (6× coxa/femur/tibia). Wire Path for tripod gait Trajectory → Preview; Plan = tip-path one leg only.",
+            "Walking hexapod (6× coxa/femur/tibia). Wire Path → foot-target IK gait Trajectory → Preview (no Motus Plan). Tip-path Plan = one leg only.",
             "polygon")
     {
     }
@@ -224,7 +224,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             if (hasPath)
             {
                 if (!WalkingHexGait.TryBuild(
-                        pathCurve, pathPlanes, speed, stepLen, lift, hs, fs, ts, model,
+                        pathCurve, pathPlanes, speed, stepLen, lift,
+                        br, cx, fm, tb, bz, hs, fs, ts, model,
                         out var gait, out var gaitErr))
                 {
                     ClearPreview();
@@ -250,7 +251,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             {
                 AddRuntimeMessage(
                     GH_RuntimeMessageLevel.Remark,
-                    "Wire Path (curve) or Planes (≥2) for tripod gait Trajectory → Preview. Plan moves one tip leg only.");
+                    "Wire Path (curve) or Planes (≥2) for foot-target IK gait Trajectory → Preview. No Motus Plan on this path — Plan moves one tip leg only.");
             }
 
             var preview = WalkingHexPreview.Build(br, cx, fm, tb, bz, q);

@@ -1025,7 +1025,9 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     {
         var arc = new ArcCurve(new Arc(new Point3d(0.05, 0, 0), 0.45, Math.PI));
         if (!WalkingHexGait.TryBuild(
-                arc, null, 0.08, 0.06, 0.03, 7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+                arc, null, 0.08, 0.06, 0.03,
+                0.12, 0.06, 0.17, 0.19, 0.12,
+                7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
                 gaitModel, out var gait, out var gaitErr))
             Fail($"WalkingHexGait: {gaitErr}");
         if (gait!.Trajectory.Points.Count < 10)
@@ -1038,7 +1040,41 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
             gait.BasePath, gait.Trajectory, gait.Trajectory.DurationSeconds * 0.5);
         if (Math.Abs(midBase.Y) < 0.08)
             Fail("Mid-walk base frame should be displaced along arc (m)");
-        Ok("Walking hex gait builds 18-DOF trajectory + mobile BasePath");
+
+        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        var midIdx = gait.Trajectory.Points.Count / 2;
+        var midQ = gait.Trajectory.Points[midIdx].JointState.Positions;
+        var gaitMidFrame = gait.BasePath[midIdx];
+        const double footTol = 0.015;
+        const double kneeMinZ = 0.02;
+        var stanceFeet = 0;
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(leg * Math.PI / 3.0),
+                bodyR * Math.Sin(leg * Math.PI / 3.0),
+                bodyZ);
+            var q0 = midQ[leg * 3];
+            var q1 = midQ[leg * 3 + 1];
+            var q2 = midQ[leg * 3 + 2];
+            var footBody = WalkingHexLegIk.FootPosition(hipBody, coxa, femur, tibia, q0, q1, q2);
+            var yaw = 2.0 * Math.Atan2(gaitMidFrame.Qz, gaitMidFrame.Qw);
+            var footWorld = new Point3d(
+                gaitMidFrame.X + Math.Cos(yaw) * footBody.X - Math.Sin(yaw) * footBody.Y,
+                gaitMidFrame.Y + Math.Sin(yaw) * footBody.X + Math.Cos(yaw) * footBody.Y,
+                footBody.Z);
+            var kneeBody = WalkingHexLegIk.KneePosition(hipBody, coxa, femur, q0, q1);
+            if (Math.Abs(footWorld.Z) < footTol)
+                stanceFeet++;
+            else if (footWorld.Z < -footTol)
+                Fail($"Mid-gait leg {leg} foot below ground Z={footWorld.Z:F4} m");
+
+            if (kneeBody.Z < kneeMinZ)
+                Fail($"Mid-gait leg {leg} knee Z={kneeBody.Z:F4} m (expected > {kneeMinZ} m)");
+        }
+        if (stanceFeet < 3)
+            Fail($"Mid-gait expected ≥3 stance feet at Z≈0, got {stanceFeet}");
+        Ok("Walking hex gait builds 18-DOF trajectory + foot-target IK (stance Z≈0, knees clear)");
     }
     catch (DllNotFoundException)
     {
