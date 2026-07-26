@@ -34,7 +34,8 @@ internal static class LeggedGaitRhino
         double tibiaStance,
         RobotModel model,
         out Result? result,
-        out string error)
+        out string error,
+        NetLeggedGait.TerrainHeight? terrain = null)
     {
         result = null;
         if (!TryResolvePath(pathCurve, pathPlanes, out var curve, out error))
@@ -44,7 +45,7 @@ internal static class LeggedGaitRhino
         if (!NetLeggedGait.TryBuild(
                 layout, poly, speed, stepLength, stepHeight,
                 hipStance, femurStance, tibiaStance, model,
-                out var net, out error))
+                out var net, out error, terrain))
             return false;
 
         var planes = new List<Plane>();

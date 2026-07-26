@@ -6,7 +6,7 @@ using Rhino.Geometry;
 namespace Motus.GH.Planning;
 
 /// <summary>
-/// Ground-contact rings for Family=legged TreeFK preview (foot tip Z ≈ 0).
+/// Ground-contact rings for Family=legged TreeFK preview (foot tip near body-floor / terrain).
 /// </summary>
 internal static class LeggedContactPreview
 {
@@ -62,10 +62,12 @@ internal static class LeggedContactPreview
 
             var local = Transforms.TransformPoint(mats[li], tipLen, 0, 0);
             var world = Transforms.TransformPoint(baseM, local[0], local[1], local[2]);
-            if (Math.Abs(world[2]) > groundTol)
+            // Body-floor ≈ base.Z; planted feet sit near it (flat or mild terrain).
+            var baseZ = dynamicBase?.Z ?? 0;
+            if (Math.Abs(world[2] - baseZ) > groundTol)
                 continue;
 
-            var center = new Point3d(world[0], world[1], 0);
+            var center = new Point3d(world[0], world[1], world[2]);
             dest.Add(new Circle(new Plane(center, Vector3d.ZAxis), radius));
         }
     }

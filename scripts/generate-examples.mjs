@@ -351,19 +351,20 @@ const MOTUS = {
     guid: 'b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', name: 'Motus Walking Hex', nick: 'WalkHex', w: 80, h: 320,
     desc: 'Walking hexapod 6×coxa/femur/tibia — NOT Stewart',
     inputs: [
-      { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.12 },
-      { name: 'Coxa', nick: 'Cx', desc: 'Coxa length (m)', optional: true, number: 0.06 },
-      { name: 'Femur', nick: 'Fm', desc: 'Femur length (m)', optional: true, number: 0.17 },
-      { name: 'Tibia', nick: 'Tb', desc: 'Tibia length (m)', optional: true, number: 0.19 },
+      { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.06 },
+      { name: 'Coxa', nick: 'Cx', desc: 'Coxa length (m)', optional: true, number: 0.035 },
+      { name: 'Femur', nick: 'Fm', desc: 'Femur length (m)', optional: true, number: 0.08 },
+      { name: 'Tibia', nick: 'Tb', desc: 'Tibia length (m)', optional: true, number: 0.10 },
       { name: 'HipStance', nick: 'Hs', desc: 'Coxa stance (rad)', optional: true, number: 0.1309 },
       { name: 'FemurStance', nick: 'Fs', desc: 'Femur stance (rad)', optional: true, number: 0.5236 },
       { name: 'TibiaStance', nick: 'Ts', desc: 'Tibia stance (rad)', optional: true, number: -0.5236 },
-      { name: 'BodyZ', nick: 'Bz', desc: 'Body height (m)', optional: true, number: 0.12 },
+      { name: 'BodyZ', nick: 'Bz', desc: 'Body height (m)', optional: true, number: 0.07 },
       { name: 'Path', nick: 'P', desc: 'Walk path curve (m)', optional: true, typeId: PTYPE.curve },
       { name: 'Planes', nick: 'Pl', desc: 'Or path as plane origins (m)', optional: true, typeId: PTYPE.plane, access: 1 },
-      { name: 'Speed', nick: 'Spd', desc: 'Walk speed (m/s)', optional: true, number: 0.08 },
-      { name: 'Step', nick: 'St', desc: 'Step length (m)', optional: true, number: 0.06 },
-      { name: 'Lift', nick: 'Lf', desc: 'Swing lift (m)', optional: true, number: 0.03 },
+      { name: 'Speed', nick: 'Spd', desc: 'Walk speed (m/s)', optional: true, number: 0.06 },
+      { name: 'Step', nick: 'St', desc: 'Step length (m)', optional: true, number: 0.04 },
+      { name: 'Lift', nick: 'Lf', desc: 'Swing lift (m)', optional: true, number: 0.02 },
+      { name: 'Terrain', nick: 'Tn', desc: 'Optional ground Mesh/Brep (m)', optional: true, access: 1 },
       { name: 'Q', nick: 'Q', desc: 'Optional full driver q (18)', optional: true, list: true, access: 1 },
     ],
     outputs: [
@@ -2165,47 +2166,62 @@ function graph08() {
   return buildGraph(objs);
 }
 
+/** Logic asserted by Motus.NET Example09_WalkingHexapod_ArcAndBoxTerrain + qa-smoke (no Rhino UI). */
 function graph09() {
   const title = nativeScribble(40, 40, '09 · Walking hexapod', 28);
   const note = nativePanel(
     40,
     80,
-    'WalkHex Planes → foot-target IK gait Trajectory → Preview + Scrub. Body follows arc; feet plant at Z=0 — no Motus Plan on this path.',
+    'WalkHex Planes + Terrain (ground box) → foot-target IK gait → Preview + Scrub. Feet plant via downward ray; omit Tn = flat Z=0. Swap Tn for a Mesh ramp for uneven ground. No Motus Plan on this path.',
     'Note',
     560,
     72,
   );
   const uz = nativeUnitZ(40, 180);
+  // ponytail: flat ground slab proves Terrain pin; wire a Mesh/Brep ramp for uneven demos.
+  const groundOrigin = nativeConstructPoint(200, 220, [0.22, 0, 0]);
+  const groundPl = nativePlane(320, 220, outRef(groundOrigin.node, 'Point'), outRef(uz.node, 'Vector'));
+  const ground = nativeCenterBox(440, 220, outRef(groundPl.node, 'Plane'), [0.7, 0.55, 0.04]);
   const arcParts = [];
   const planeRefs = [];
   const ARC_N = 9;
   for (let i = 0; i < ARC_N; i++) {
     const a = Math.PI - (i / (ARC_N - 1)) * Math.PI;
-    const px = 0.4 + 0.35 * Math.cos(a);
-    const py = 0.35 * Math.sin(a);
-    const pt = nativeConstructPoint(40, 260 + i * 44, [px, py, 0]);
-    const pl = nativePlane(140, 260 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    // Compact WalkHex (~0.2 m span) — keep path in the same scale as the robot.
+    const px = 0.22 + 0.18 * Math.cos(a);
+    const py = 0.18 * Math.sin(a);
+    // Path on top of ground box (half-height 0.02).
+    const pt = nativeConstructPoint(40, 300 + i * 44, [px, py, 0.02]);
+    const pl = nativePlane(140, 300 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
     arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
     planeRefs.push(outRef(pl.node, 'Plane'));
   }
-  const planesMerge = nativeMerge(280, 420, planeRefs);
-  const hex = motusComponent('walkHex', 40, 680, {
+  const planesMerge = nativeMerge(280, 460, planeRefs);
+  const hex = motusComponent('walkHex', 40, 720, {
     Planes: [outRef(planesMerge.node, 'Result')],
+    Terrain: [outRef(ground.node, 'Box')],
   });
-  const { scrub, preview } = previewWithScrub(560, 680, outRef(hex.node, 'Trajectory'));
+  const { scrub, preview } = previewWithScrub(560, 720, outRef(hex.node, 'Trajectory'));
   const gModel = nativeGroup('Walking Hex path', [
     { xml: uz.xml, node: uz.node },
+    groundOrigin,
+    groundPl,
+    ground,
     ...arcParts,
     planesMerge,
     hex,
   ], GROUP_COLOUR.model);
   const gPreview = nativeGroup('Gait Preview', [scrub, preview], GROUP_COLOUR.preview);
 
-  const objs = [title, note, { xml: uz.xml }, ...arcParts, planesMerge, hex, scrub, preview, gModel, gPreview];
+  const objs = [
+    title, note, { xml: uz.xml },
+    groundOrigin, groundPl, ground,
+    ...arcParts, planesMerge, hex, scrub, preview, gModel, gPreview,
+  ];
   objs._meta = {
     fileName: '09_walking_hexapod.ghx',
     description:
-      'Walking hexapod: arc plane list → WalkHex foot-target IK gait Trajectory (18-DOF + mobile base) → Motus Preview + Scrub. Not Stewart; no Motus Plan on gait path.',
+      'Walking hexapod: arc planes + Terrain box → WalkHex foot-target IK gait (18-DOF + mobile base) → Preview + Scrub. Not Stewart; no Motus Plan on gait path.',
   };
   return buildGraph(objs);
 }

@@ -1200,6 +1200,53 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     }
 }
 
+// Example 09 logic (generate-examples graph09) — Motus.NET only; does not open .ghx / Rhino UI.
+{
+    Console.WriteLine("\n== Example 09 walking hex logic ==");
+    var layout09 = LeggedLayout.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
+    var limits09 = new List<JointLimit>(18);
+    for (var i = 0; i < 18; i++)
+        limits09.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+    var model09 = new RobotModel(layout09.ToPreset("hex_ex09", 18, limits09));
+    var path09 = new List<Vec3>();
+    const int arcN09 = 9;
+    for (var i = 0; i < arcN09; i++)
+    {
+        var a = Math.PI - i / (arcN09 - 1.0) * Math.PI;
+        path09.Add(new Vec3(0.22 + 0.18 * Math.Cos(a), 0.18 * Math.Sin(a), 0));
+    }
+    const double groundZ09 = 0.02; // Center Box top in graph09
+    Motus.Geometry.LeggedGait.TerrainHeight terrain09 = static (_, _) => groundZ09;
+    if (!Motus.Geometry.LeggedGait.TryBuild(
+            layout09, path09, 0.06, 0.04, 0.02,
+            7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+            model09, out var gait09, out var err09, terrain09))
+        Fail($"Example 09 gait: {err09}");
+    if (gait09!.Trajectory.Points[0].JointState.AxisCount != 18)
+        Fail("Example 09 trajectory must be 18-DOF");
+    if (Math.Abs(gait09.BasePath[0].Z - groundZ09) > 1e-6)
+        Fail($"Example 09 base Z={gait09.BasePath[0].Z:F4} expected {groundZ09} (box top)");
+    var mid09 = gait09.Trajectory.Points.Count / 2;
+    var q09 = gait09.Trajectory.Points[mid09].JointState.Positions;
+    var bf09 = gait09.BasePath[mid09];
+    var planted09 = 0;
+    for (var leg = 0; leg < 6; leg++)
+    {
+        var hy = layout09.HipYawsRad[leg];
+        var hip = new Vec3(layout09.BodyR * Math.Cos(hy), layout09.BodyR * Math.Sin(hy), layout09.BodyZ);
+        var footBody = LegIk3R.FootPosition(hip, layout09.Coxa, layout09.Femur, layout09.Tibia,
+            q09[leg * 3], q09[leg * 3 + 1], q09[leg * 3 + 2]);
+        if (footBody.Z > 0.012) continue;
+        var fz = bf09.Z + footBody.Z;
+        if (Math.Abs(fz - groundZ09) > 0.015)
+            Fail($"Example 09 leg {leg} plant Z={fz:F4} expected ~{groundZ09}");
+        planted09++;
+    }
+    if (planted09 < 3)
+        Fail($"Example 09 mid-gait expected ≥3 plants on box top, got {planted09}");
+    Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
+}
+
 {
     Console.WriteLine("\n== Stewart platform IK / path ==");
     var stewart = StewartRobot.CreateClassic();

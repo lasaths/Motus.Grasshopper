@@ -1,4 +1,5 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
@@ -47,13 +48,14 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddNumberParameter("BodyR", "Br", "Body hex radius to hip (m)", GH_ParamAccess.item, 0.12);
+        // Compact hex defaults (m): long 0.17/0.19 femur/tibia dwarfed the body in Preview.
+        p.AddNumberParameter("BodyR", "Br", "Body hex radius to hip (m)", GH_ParamAccess.item, 0.06);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Coxa", "Cx", "Coxa length (m)", GH_ParamAccess.item, 0.06);
+        p.AddNumberParameter("Coxa", "Cx", "Coxa length (m)", GH_ParamAccess.item, 0.035);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Femur", "Fm", "Femur length (m)", GH_ParamAccess.item, 0.17);
+        p.AddNumberParameter("Femur", "Fm", "Femur length (m)", GH_ParamAccess.item, 0.08);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Tibia", "Tb", "Tibia length (m)", GH_ParamAccess.item, 0.19);
+        p.AddNumberParameter("Tibia", "Tb", "Tibia length (m)", GH_ParamAccess.item, 0.10);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("HipStance", "Hs", "Coxa stance angle (rad, signed by leg side)", GH_ParamAccess.item, 7.5 * Math.PI / 180.0);
         p[p.ParamCount - 1].Optional = true;
@@ -61,17 +63,19 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("TibiaStance", "Ts", "Fallback tibia angle (rad) if ground-plant IK fails", GH_ParamAccess.item, -30.0 * Math.PI / 180.0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("BodyZ", "Bz", "Body height above ground (m)", GH_ParamAccess.item, 0.12);
+        p.AddNumberParameter("BodyZ", "Bz", "Body height above ground (m)", GH_ParamAccess.item, 0.07);
         p[p.ParamCount - 1].Optional = true;
         p.AddCurveParameter("Path", "P", "Walk path (Curve or Planes list, m) — gait Trajectory when wired", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Planes", "Pl", "Optional path as plane list (origins, m)", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Speed", "Spd", "Walk speed along path (m/s)", GH_ParamAccess.item, 0.08);
+        p.AddNumberParameter("Speed", "Spd", "Walk speed along path (m/s)", GH_ParamAccess.item, 0.06);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Step", "St", "Nominal step length along path (m) — sets gait cadence", GH_ParamAccess.item, 0.06);
+        p.AddNumberParameter("Step", "St", "Nominal step length along path (m) — sets gait cadence", GH_ParamAccess.item, 0.04);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Lift", "Lf", "Swing foot lift (m)", GH_ParamAccess.item, 0.03);
+        p.AddNumberParameter("Lift", "Lf", "Swing foot lift (m)", GH_ParamAccess.item, 0.02);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGeometryParameter("Terrain", "Tn", "Optional ground Mesh/Brep/Surface (m) — feet plant via downward ray; omit = flat Z=0", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Q", "Q", "Optional full driver q (18): leg-major coxa,femur,tibia × 6", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
@@ -90,20 +94,21 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        var br = 0.12;
-        var cx = 0.06;
-        var fm = 0.17;
-        var tb = 0.19;
+        var br = 0.06;
+        var cx = 0.035;
+        var fm = 0.08;
+        var tb = 0.10;
         var hs = 7.5 * Math.PI / 180.0;
         var fs = 30.0 * Math.PI / 180.0;
         var ts = -30.0 * Math.PI / 180.0;
-        var bz = 0.12;
-        var speed = 0.08;
-        var stepLen = 0.06;
-        var lift = 0.03;
+        var bz = 0.07;
+        var speed = 0.06;
+        var stepLen = 0.04;
+        var lift = 0.02;
         var qIn = new List<double>();
         Curve? pathCurve = null;
         var pathPlanes = new List<Plane>();
+        var terrainGoos = new List<IGH_GeometricGoo>();
         da.GetData(0, ref br);
         da.GetData(1, ref cx);
         da.GetData(2, ref fm);
@@ -117,7 +122,16 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         da.GetData(10, ref speed);
         da.GetData(11, ref stepLen);
         da.GetData(12, ref lift);
-        da.GetDataList(13, qIn);
+        da.GetDataList(13, terrainGoos);
+        da.GetDataList(14, qIn);
+
+        var terrainGeom = new List<object>(terrainGoos.Count);
+        foreach (var goo in terrainGoos)
+        {
+            var sv = goo?.DuplicateGeometry()?.ScriptVariable();
+            if (sv is not null)
+                terrainGeom.Add(sv);
+        }
 
         var hasPath = (pathCurve is not null && pathCurve.IsValid) || pathPlanes.Count >= 2;
 
@@ -232,10 +246,14 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             List<Plane> pathPlanesOut = [];
             if (hasPath)
             {
+                var terrain = TerrainHeightRhino.TryCreate(terrainGeom, out var terrainWarn);
+                if (terrainWarn is not null)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, terrainWarn);
+
                 if (!LeggedGaitRhino.TryBuild(
                         layout, pathCurve, pathPlanes, speed, stepLen, lift,
                         hs, fs, ts, model,
-                        out var gait, out var gaitErr))
+                        out var gait, out var gaitErr, terrain))
                 {
                     ClearPreview();
                     _previewColors = [];
@@ -361,7 +379,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         var links = new List<UrdfLink>
         {
             new("body",
-                [HexPlateGeometry(layout.BodyR, thickness: 0.04, new Frame(0, 0, layout.BodyZ))],
+                [HexPlateGeometry(layout.BodyR, thickness: 0.02, new Frame(0, 0, layout.BodyZ))],
                 r: 1, g: 0.4, b: 0.7, a: 0.85),
         };
         var joints = new List<UrdfJoint>();
@@ -380,9 +398,9 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             var femurLink = $"{name}_femur";
             var tibiaLink = $"{name}_tibia";
 
-            links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.024)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.024)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.020)], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.012)], r: 1, g: 0.55, b: 0.15, a: 1));
 
             joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink,
                 hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
@@ -533,14 +551,14 @@ internal static class WalkingHexPreview
             var a = layout.HipYawsRad[i];
             bodyPts[i] = new Point3d(bodyR * Math.Cos(a), bodyR * Math.Sin(a), bodyZ);
         }
-        if (HexSlab(bodyPts, 0.04) is { } bodyMesh)
+        if (HexSlab(bodyPts, 0.02) is { } bodyMesh)
         {
             meshes.Add(bodyMesh);
             colors.Add(bodyColor);
         }
 
-        const double segR = 0.012;
-        const double jointR = 0.018;
+        const double segR = 0.007;
+        const double jointR = 0.010;
         for (var leg = 0; leg < n; leg++)
         {
             var yaw0 = layout.HipYawsRad[leg];
@@ -605,7 +623,6 @@ internal static class WalkingHexPreview
             {
                 var c = contacts[i].Center;
                 c.Transform(xform);
-                c = new Point3d(c.X, c.Y, 0);
                 contacts[i] = new Circle(new Plane(c, Vector3d.ZAxis), contacts[i].Radius);
             }
             if (support is not null)
@@ -619,7 +636,7 @@ internal static class WalkingHexPreview
     {
         var yaw = 2.0 * Math.Atan2(baseFrame.Qz, baseFrame.Qw);
         var plane = new Plane(
-            new Point3d(baseFrame.X, baseFrame.Y, 0),
+            new Point3d(baseFrame.X, baseFrame.Y, baseFrame.Z),
             new Vector3d(Math.Cos(yaw), Math.Sin(yaw), 0),
             new Vector3d(-Math.Sin(yaw), Math.Cos(yaw), 0));
         return Transform.PlaneToPlane(Plane.WorldXY, plane);
