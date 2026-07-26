@@ -105,16 +105,23 @@ internal static class WalkingHexGait
         var startFrame = new MobilityModel.HolonomicSE2(startPt.X, startPt.Y, startYaw).BaseFrame;
 
         var plants = InitializePlants(
-            startFrame, bodyR, bodyZ, coxa, femur, tibia, stanceQ, out var initErr);
+            startFrame, bodyR, bodyZ, coxa, femur, tibia, stanceQ, out var nominalFootBody, out var initErr);
         if (plants is null)
         {
             error = initErr;
             return false;
         }
 
+        // ponytail: horizontal stretch cap before forced re-plant; full FABRIK if gaits need more
+        var maxStanceReach = 0.85 * (coxa + femur + tibia);
+        const double cyclesPerPath = 4.0;
+        var swingPeriodSec = duration / (cyclesPerPath * 2.0);
+
         var qPrev = (double[])stanceQ.Clone();
-        var wasSwinging = new bool[6];
-        var swingEnd = new Point3d[6];
+        var legSwingPhase = new double[6]; // <0 stance, else 0..1 swing local phase
+        Array.Fill(legSwingPhase, -1.0);
+        var swingFrom = new Point3d[6];
+        var swingTo = new Point3d[6];
         var ikFailSamples = 0;
         string? ikWarning = null;
 
@@ -132,33 +139,48 @@ internal static class WalkingHexGait
             var baseFrame = new MobilityModel.HolonomicSE2(pt.X, pt.Y, yaw).BaseFrame;
 
             var pathPhase = duration > 1e-9 ? tSec / duration : 0;
-            var cyclePhase = (pathPhase * 3.0) % 1.0;
+            var cyclePhase = (pathPhase * cyclesPerPath) % 1.0;
             var q = (double[])qPrev.Clone();
 
             for (var leg = 0; leg < 6; leg++)
             {
-                var (swinging, swingLocal) = LegSwingPhase(leg, cyclePhase);
+                var (phaseSwinging, phaseLocal) = LegSwingPhase(leg, cyclePhase);
+                var hipWorld = HipWorld(leg, bodyR, bodyZ, baseFrame);
+                var nominalLand = NominalFootWorld(leg, nominalFootBody, baseFrame);
+                var stretched = HorizontalDistance(hipWorld, plants[leg]) > maxStanceReach;
+                var shouldSwing = phaseSwinging || stretched;
                 Point3d footWorld;
 
-                if (!swinging)
+                if (!shouldSwing)
                 {
                     footWorld = new Point3d(plants[leg].X, plants[leg].Y, 0);
-                    wasSwinging[leg] = false;
+                    legSwingPhase[leg] = -1.0;
                 }
                 else
                 {
-                    if (!wasSwinging[leg])
+                    if (legSwingPhase[leg] < 0)
                     {
-                        swingEnd[leg] = new Point3d(
-                            plants[leg].X + stepLength * Math.Cos(yaw),
-                            plants[leg].Y + stepLength * Math.Sin(yaw),
-                            0);
+                        swingFrom[leg] = plants[leg];
+                        swingTo[leg] = nominalLand;
+                        legSwingPhase[leg] = phaseSwinging ? phaseLocal : 0.0;
+                    }
+                    else if (phaseSwinging)
+                    {
+                        legSwingPhase[leg] = phaseLocal;
+                    }
+                    else
+                    {
+                        legSwingPhase[leg] = Math.Min(1.0, legSwingPhase[leg] + dt / swingPeriodSec);
                     }
 
-                    footWorld = SwingFoot(plants[leg], swingEnd[leg], swingLocal, stepHeight);
-                    if (swingLocal >= 0.999)
-                        plants[leg] = swingEnd[leg];
-                    wasSwinging[leg] = true;
+                    var local = legSwingPhase[leg];
+                    footWorld = SwingFoot(swingFrom[leg], swingTo[leg], local, stepHeight);
+                    if (local >= 0.999)
+                    {
+                        plants[leg] = swingTo[leg];
+                        if (!phaseSwinging && !stretched)
+                            legSwingPhase[leg] = -1.0;
+                    }
                 }
 
                 var footBody = WorldToBody(footWorld, baseFrame);
@@ -213,9 +235,11 @@ internal static class WalkingHexGait
         double femur,
         double tibia,
         double[] stanceQ,
+        out Point3d[] nominalFootBody,
         out string error)
     {
         error = "";
+        nominalFootBody = new Point3d[6];
         var plants = new Point3d[6];
         for (var leg = 0; leg < 6; leg++)
         {
@@ -224,6 +248,7 @@ internal static class WalkingHexGait
                 hipBody, coxa, femur, tibia,
                 stanceQ[leg * 3 + 0], stanceQ[leg * 3 + 1], stanceQ[leg * 3 + 2]);
             var footTargetBody = new Point3d(footBody.X, footBody.Y, 0);
+            nominalFootBody[leg] = footTargetBody;
 
             if (!WalkingHexLegIk.TrySolve(hipBody, footTargetBody, coxa, femur, tibia, out _, out _, out _))
             {
@@ -235,6 +260,22 @@ internal static class WalkingHexGait
         }
 
         return plants;
+    }
+
+    private static Point3d HipWorld(int leg, double bodyR, double bodyZ, Frame baseFrame) =>
+        BodyToWorld(HipBody(leg, bodyR, bodyZ), baseFrame);
+
+    private static Point3d NominalFootWorld(int leg, Point3d[] nominalFootBody, Frame baseFrame)
+    {
+        var w = BodyToWorld(nominalFootBody[leg], baseFrame);
+        return new Point3d(w.X, w.Y, 0);
+    }
+
+    private static double HorizontalDistance(Point3d a, Point3d b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private static Point3d HipBody(int leg, double bodyR, double bodyZ)
