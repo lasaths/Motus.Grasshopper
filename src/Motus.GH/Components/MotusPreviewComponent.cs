@@ -324,20 +324,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         for (var i = 0; i < meshes.Count; i++)
         {
             Color color;
-            if (_colorMode == PreviewColorMode.Custom && _customColors.Count > 0)
+            // Baked URDF/Stewart colours only when mode is Urdf — Override must win.
+            if (_colorMode == PreviewColorMode.Urdf
+                && _drawMeshColors is { Count: > 0 }
+                && i < _drawMeshColors.Count
+                && _drawMeshColors[i] is { } baked)
             {
-                color = PreviewColorResolver.Resolve(i, PreviewColorMode.Custom, null, _customColors, isStartGhost);
-            }
-            else if (_drawMeshColors is { Count: > 0 } && i < _drawMeshColors.Count && _drawMeshColors[i] is { } baked)
-            {
-                // Stewart (and URDF) bake per-mesh colours into _drawMeshColors.
                 color = isStartGhost
                     ? Color.FromArgb((int)(PreviewColorResolver.StartTransparency * 255), baked)
                     : baked;
             }
             else
             {
-                color = PreviewColorResolver.Resolve(i, _colorMode, null, _customColors, isStartGhost);
+                color = PreviewColorResolver.Resolve(i, _colorMode, _drawMeshColors, _customColors, isStartGhost);
             }
             args.Display.DrawMeshShaded(meshes[i], MaterialFor(color, transparency));
         }
