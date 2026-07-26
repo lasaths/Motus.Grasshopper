@@ -8,7 +8,8 @@ using NetLeggedLayout = Motus.Geometry.LeggedLayout;
 namespace Motus.GH.Planning;
 
 /// <summary>
-/// Rhino path adapter for Motus.NET <see cref="Motus.Geometry.LeggedGait"/> (Curve / Planes → polyline).
+/// Thin Rhino adapter: Curve/Planes → polyline for Motus.NET <see cref="Motus.Geometry.LeggedGait"/>.
+/// Algorithms and DOI provenance live in Motus.NET (<see cref="LeggedMethodRefs"/>).
 /// </summary>
 internal static class LeggedGaitRhino
 {
@@ -17,7 +18,9 @@ internal static class LeggedGaitRhino
         IReadOnlyList<Frame> BasePath,
         Curve PathCurve,
         IReadOnlyList<Plane> PathPlanes,
-        string? Warning);
+        string? Warning,
+        double MinStaticStabilityMarginMeters,
+        string MethodProvenance);
 
     public static bool TryBuild(
         NetLeggedLayout layout,
@@ -51,7 +54,14 @@ internal static class LeggedGaitRhino
                 planes.Add(FrameConversion.ToPlanePlate(net.BasePath[i]));
         }
 
-        result = new Result(net.Trajectory, net.BasePath, curve, planes, net.Warning);
+        result = new Result(
+            net.Trajectory,
+            net.BasePath,
+            curve,
+            planes,
+            net.Warning,
+            net.MinStaticStabilityMarginMeters,
+            net.MethodProvenance);
         return true;
     }
 

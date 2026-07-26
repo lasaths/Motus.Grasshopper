@@ -2,24 +2,29 @@
 
 ## Status
 
-Accepted (Motus.NET owns math).
+Accepted (Motus.NET owns math; Grasshopper is thin Rhino I/O).
 
 ## Context
 
-WalkHex needs a foot-target duty gait for TreeFK preview along a planar path. Kinematics families belong in Motus.NET (same bar as Stewart / ADR 0003). An early GH-only `WalkingHex*` stack used Rhino types and deferred the port.
+WalkHex needs a foot-target duty gait for TreeFK preview along a planar path. Kinematics families belong in Motus.NET (same bar as Stewart / ADR 0003). Methods must be NASA-traceable: named algorithms, peer-reviewed DOIs in code, explicit labels for engineering heuristics.
 
 ## Decision
 
-1. **Motus.NET owns legged math** in `Motus.Geometry`: `LeggedLayout`, `LeggedGait`, `LegIk3R` (N×3R insectoid + flat Z=0). Path input is a planar polyline (`IReadOnlyList<Vec3>`, Z ignored).
-2. **`RobotPreset.Family = Units.LeggedFamily` (`"legged"`)**. Gate Waypoints on Family: `Q` is joint **radians**, not Stewart meters and not UR MoveJ for full-driver gait.
+1. **Motus.NET owns legged math** in `Motus.Geometry`:
+   - `LegIk3R` — analytic coxa + planar 2R (Lynch & Park, *Modern Robotics*, DOI `10.1017/9781316095072`). **Not FABRIK** for the actuated 3R model; FABRIK remains the cited n-link alternative (Aristidou & Lasenby, DOI `10.1016/j.gmod.2011.05.003`).
+   - `LeggedGait` — duty-factor swing groups (Song & Waldron, DOI `10.1177/027836498700600205`) + creeping stance plants (McGhee & Frank, DOI `10.1016/0025-5564(68)90041-2`).
+   - `StaticStability` — support-polygon CoM / SSM (McGhee & Frank, same DOI); Bretl & Lall (DOI `10.1109/TRO.2008.2001360`) cited as the next step for wrench-feasible equilibrium (not implemented).
+   - `LeggedMethodRefs` — central DOI constants + `DescribeStack()` for Status/logs.
+2. **`RobotPreset.Family = Units.LeggedFamily` (`"legged"`)**. Gate Waypoints on Family: `Q` is joint **radians**, not Stewart meters.
 3. **`Step` (m)** sets cadence: `cyclesPerPath = max(1, pathLength / stepLength)`.
-4. **Swing schedule** is a partition of leg indices (`SwingGroups`); group `g` of `G` swings when cycle phase ∈ `[g/G, (g+1)/G)`.
-5. **Grasshopper is thin wiring**: `LeggedGaitRhino` samples Curve/Planes → polyline; WalkHex / preview chrome keep hex naming.
-6. **Out of scope:** FABRIK, terrain, n-DOF legs, Motus Plan for full-driver gait, a separate Quadruped GH component.
+4. **Swing schedule** is a partition of leg indices (`SwingGroups`); group `g` of `G` swings when cycle phase ∈ `[g/G, (g+1)/G)`. Specific hex tripod indices are a **design choice**, not a biology claim.
+5. **Grasshopper is thin wiring only**: `LeggedGaitRhino` samples Curve/Planes → polyline; WalkHex / chrome keep hex naming. No duplicate IK/gait math in GH.
+6. **Heuristics labeled in code**: sinusoidal swing lift, land bias, drift replant, body-XY as CoM stand-in for SSM.
+7. **Out of scope:** FABRIK cosmetic chains, terrain, Motus Plan for full-driver gait, Bretl–Lall wrench LP.
 
 ## Consequences
 
-- Hex is one factory (`LeggedLayout.HexMithi`); other N layouts (e.g. `QuadSmoke`) reuse the same gait/IK in Motus.NET.
+- Hex is one factory (`LeggedLayout.HexMithi`); other N layouts reuse the same Motus.NET stack.
+- Status/Remarks carry `LeggedMethodRefs.DescribeStack()` and min McGhee–Frank SSM.
 - Docs distinguish Stewart (`Family=stewart`, meters) from walking hex (`Family=legged`, radians).
-- Example `09_walking_hexapod.ghx` GUID/pins unchanged.
-- Build Motus.Grasshopper with `-UseLocal` / `UseMotusNetProjectReference=true` until Motus.NET with these types is published to NuGet.
+- Build Motus.Grasshopper with `-UseLocal` until Motus.NET with these types is published.

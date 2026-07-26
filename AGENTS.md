@@ -18,7 +18,7 @@ Strive for **NASA-grade engineering** on kinematics, planning, and handoff surfa
 - **Planning / preview / export only** — no RTDE, no live robot commands, no project reference to UR.RTDE.Grasshopper.
 - Execution (Session, Run, waits, ServoJ) lives in downstream control plugins.
 - User component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md).
-- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview gait (`Family=legged`, radians) lives in Motus.NET (`LeggedGait`); GH is thin WalkHex wiring.
+- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview (`Family=legged`, radians) in Motus.NET with DOI-cited methods (`LeggedMethodRefs`: analytic `LegIk3R` / Lynch&Park, duty gait / Song&Waldron, SSM / McGhee&Frank); GH is thin WalkHex wiring only.
 
 ## Layout
 
@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.9.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. Until then / for Stewart work: sibling `../Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)). CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having 0.9.0 yet.
+Pinned **0.11.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For local Motus.NET work: sibling `../Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)). CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|

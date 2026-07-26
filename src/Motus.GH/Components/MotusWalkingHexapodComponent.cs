@@ -14,7 +14,8 @@ namespace Motus.GH.Components;
 
 /// <summary>
 /// Walking / mobile hexapod (6×3-DOF legs: coxa, femur, tibia) — NOT Stewart/Gough.
-/// Thin hex wrapper over Motus.NET <see cref="LeggedLayout"/> / <see cref="LeggedGait"/> / <see cref="LegIk3R"/>.
+/// Thin hex Rhino wrapper — algorithms + DOI provenance live in Motus.NET
+/// (<see cref="LeggedMethodRefs"/>, <see cref="LegIk3R"/>, <see cref="LeggedGait"/>, <see cref="StaticStability"/>).
 /// Plan uses one tip-path leg only (side legs preview-only), same contract as Motus Joint Table.
 /// </summary>
 public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
@@ -255,6 +256,12 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 pathPlanesOut = gait.PathPlanes.ToList();
                 if (gait.Warning is { } warn)
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, warn);
+                if (double.IsFinite(gait.MinStaticStabilityMarginMeters))
+                {
+                    AddRuntimeMessage(
+                        GH_RuntimeMessageLevel.Remark,
+                        $"McGhee–Frank SSM min={gait.MinStaticStabilityMarginMeters:F4} m (DOI {LeggedMethodRefs.McGheeFrank1968Doi}; CoM≈body XY heuristic).");
+                }
             }
             else
             {
@@ -354,7 +361,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         var links = new List<UrdfLink>
         {
             new("body",
-                [UrdfGeometry.Box(layout.BodyR * 1.6, layout.BodyR * 1.1, 0.04, new Frame(0, 0, layout.BodyZ))],
+                [HexPlateGeometry(layout.BodyR, thickness: 0.04, new Frame(0, 0, layout.BodyZ))],
                 r: 1, g: 0.4, b: 0.7, a: 0.85),
         };
         var joints = new List<UrdfJoint>();
@@ -373,9 +380,9 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             var femurLink = $"{name}_femur";
             var tibiaLink = $"{name}_tibia";
 
-            links.Add(new UrdfLink(coxaLink, [UrdfGeometry.Cylinder(0.012, coxa, new Frame(coxa * 0.5, 0, 0))], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(femurLink, [UrdfGeometry.Cylinder(0.012, femur, new Frame(femur * 0.5, 0, 0))], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(tibiaLink, [UrdfGeometry.Cylinder(0.010, tibia, new Frame(tibia * 0.5, 0, 0))], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.024)], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.024)], r: 1, g: 0.55, b: 0.15, a: 1));
+            links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.020)], r: 1, g: 0.55, b: 0.15, a: 1));
 
             joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink,
                 hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
@@ -390,6 +397,65 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             throw new InvalidOperationException(string.Join("; ", diag.Errors));
 
         return desc;
+    }
+
+    /// <summary>
+    /// Leg segment along Motus link +X as a mesh (not Box — ToRhinoMesh remaps Box axes via ToPlane).
+    /// </summary>
+    private static UrdfGeometry LegSegMesh(double length, double diameter)
+    {
+        var r = diameter * 0.5;
+        // ponytail: 8-corner box 0→length on +X; Mesh preview skips tool-axis remap.
+        double[][] verts =
+        [
+            [0, -r, -r], [length, -r, -r], [length, r, -r], [0, r, -r],
+            [0, -r, r], [length, -r, r], [length, r, r], [0, r, r],
+        ];
+        int[] indices =
+        [
+            0, 1, 2, 0, 2, 3, // -Z
+            4, 6, 5, 4, 7, 6, // +Z
+            0, 4, 5, 0, 5, 1, // -Y
+            2, 6, 7, 2, 7, 3, // +Y
+            0, 3, 7, 0, 7, 4, // -X (hip)
+            1, 5, 6, 1, 6, 2, // +X (knee)
+        ];
+        return UrdfGeometry.Mesh(verts, indices);
+    }
+
+    /// <summary>Flat hex plate; vertices at hip angles so legs attach at corners.</summary>
+    private static UrdfGeometry HexPlateGeometry(double radius, double thickness, Frame origin)
+    {
+        var n = 6;
+        var verts = new List<double[]>(n * 2);
+        var hz = thickness * 0.5;
+        for (var i = 0; i < n; i++)
+        {
+            var a = i * (Math.PI / 3.0); // match HexMithi hip yaws
+            var x = radius * Math.Cos(a);
+            var y = radius * Math.Sin(a);
+            verts.Add([x, y, hz]);
+            verts.Add([x, y, -hz]);
+        }
+
+        var indices = new List<int>();
+        // Top / bottom fans
+        for (var i = 1; i < n - 1; i++)
+        {
+            indices.Add(0); indices.Add(i * 2); indices.Add((i + 1) * 2);
+            indices.Add(1); indices.Add((i + 1) * 2 + 1); indices.Add(i * 2 + 1);
+        }
+        // Side walls
+        for (var i = 0; i < n; i++)
+        {
+            var j = (i + 1) % n;
+            var t0 = i * 2; var b0 = t0 + 1;
+            var t1 = j * 2; var b1 = t1 + 1;
+            indices.Add(t0); indices.Add(t1); indices.Add(b1);
+            indices.Add(t0); indices.Add(b1); indices.Add(b0);
+        }
+
+        return UrdfGeometry.Mesh(verts, indices, origin: origin);
     }
 
     private static List<JointLimit> LimitsAllDrivers(KinematicTree tree)
@@ -430,7 +496,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
     }
 }
 
-/// <summary>Walking-hex viewport meshes: rectangular body plate, orange legs, ground-contact rings.</summary>
+/// <summary>Walking-hex viewport meshes: hex body plate at hip radius, orange legs, ground-contact rings.</summary>
 internal static class WalkingHexPreview
 {
     public readonly record struct Result(
@@ -460,16 +526,14 @@ internal static class WalkingHexPreview
         var tibia = layout.Tibia;
         var n = layout.LegCount;
 
-        // Rectangular body slab (replaces hex plate + COG sphere).
-        var hx = bodyR * 0.8;
-        var hy = bodyR * 0.55;
-        var hz = 0.02;
-        var bodyBox = new Box(
-            new Plane(new Point3d(0, 0, bodyZ), Vector3d.ZAxis),
-            new Interval(-hx, hx),
-            new Interval(-hy, hy),
-            new Interval(-hz, hz));
-        if (Mesh.CreateFromBox(bodyBox, 1, 1, 1) is { } bodyMesh)
+        // Hex/N-gon plate at hip radius so legs attach at vertices (not an inset box).
+        var bodyPts = new Point3d[n];
+        for (var i = 0; i < n; i++)
+        {
+            var a = layout.HipYawsRad[i];
+            bodyPts[i] = new Point3d(bodyR * Math.Cos(a), bodyR * Math.Sin(a), bodyZ);
+        }
+        if (HexSlab(bodyPts, 0.04) is { } bodyMesh)
         {
             meshes.Add(bodyMesh);
             colors.Add(bodyColor);
@@ -583,5 +647,31 @@ internal static class WalkingHexPreview
             meshes.Add(ja);
             colors.Add(joint);
         }
+    }
+
+    private static Mesh? HexSlab(Point3d[] ring, double thickness)
+    {
+        if (ring.Length < 3) return null;
+        var c = Point3d.Origin;
+        foreach (var p in ring) c += p;
+        c /= ring.Length;
+        var mesh = new Mesh();
+        mesh.Vertices.Add(c);
+        foreach (var p in ring) mesh.Vertices.Add(p);
+        for (var i = 0; i < ring.Length; i++)
+            mesh.Faces.AddFace(0, i + 1, i + 2 <= ring.Length ? i + 2 : 1);
+        mesh.Normals.ComputeNormals();
+
+        var top = mesh.DuplicateMesh();
+        top.Transform(Transform.Translation(0, 0, thickness * 0.5));
+        var bottom = mesh.DuplicateMesh();
+        bottom.Transform(Transform.Translation(0, 0, -thickness * 0.5));
+        bottom.Flip(true, true, true);
+        var slab = new Mesh();
+        slab.Append(top);
+        slab.Append(bottom);
+        slab.Normals.ComputeNormals();
+        slab.Compact();
+        return slab.IsValid ? slab : null;
     }
 }
