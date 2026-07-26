@@ -57,9 +57,9 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("HipStance", "Hs", "Coxa stance angle (rad, signed by leg side)", GH_ParamAccess.item, 7.5 * Math.PI / 180.0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("FemurStance", "Fs", "Femur stance angle (rad)", GH_ParamAccess.item, 30.0 * Math.PI / 180.0);
+        p.AddNumberParameter("FemurStance", "Fs", "Fallback femur angle (rad) if ground-plant IK fails", GH_ParamAccess.item, 30.0 * Math.PI / 180.0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("TibiaStance", "Ts", "Tibia stance angle (rad)", GH_ParamAccess.item, -30.0 * Math.PI / 180.0);
+        p.AddNumberParameter("TibiaStance", "Ts", "Fallback tibia angle (rad) if ground-plant IK fails", GH_ParamAccess.item, -30.0 * Math.PI / 180.0);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("BodyZ", "Bz", "Body height above ground (m)", GH_ParamAccess.item, 0.12);
         p[p.ParamCount - 1].Optional = true;
