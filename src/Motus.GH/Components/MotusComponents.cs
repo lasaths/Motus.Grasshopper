@@ -551,6 +551,7 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
         var indices = SelectDecimateIndices(t.Points.Count, decimate);
         var axisCount = t.Robot.Preset.AxisCount;
         var stewart = Units.IsStewart(t.Robot.Preset) || ctx.Stewart is not null;
+        var legged = Units.IsLegged(t.Robot.Preset);
         var treeDrivers = ctx.Tree?.DriverCount ?? 0;
         var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
         if (stewart)
@@ -558,6 +559,14 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
             AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Warning,
                 "Stewart Family=stewart: Q values are leg lengths in meters — do not wire to UR MoveJ (radians).");
+        }
+        else if (legged)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                tipPathOnly && treeDrivers > axisCount
+                    ? $"Family=legged tip-path: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
+                    : $"Family=legged: Q values are joint angles in radians (not Stewart meters) — do not wire full-driver gait to UR MoveJ.");
         }
         else if (tipPathOnly && treeDrivers > axisCount)
         {

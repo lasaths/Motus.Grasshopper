@@ -10,7 +10,7 @@ Strive for **NASA-grade engineering** on kinematics, planning, and handoff surfa
 - **No silent failures** — reject NaN/Inf at load boundaries; solvers return structured reason codes; never ship garbage poses/meshes.
 - **Deterministic solvers** — documented tolerances, iteration caps, seeded numerical FK; verified FK↔IK round-trips before GH wiring.
 - **Trust boundaries** — validate limits, schema versions, and size caps on external mechanism descriptions.
-- **Docs before new families** — ADR + component reference + example when adding a kinematics family (see [0003](docs/adr/0003-parallel-kinematics-stewart.md) for Stewart).
+- **Docs before new families** — ADR + component reference + example when adding a kinematics family (see [0003](docs/adr/0003-parallel-kinematics-stewart.md) for Stewart, [0004](docs/adr/0004-legged-mobile-preview.md) for legged preview gait).
 - Prefer correctness and reviewability over clever shortcuts. Serial UR10e paths must stay green when parallel families land.
 
 ## Boundaries
@@ -18,7 +18,7 @@ Strive for **NASA-grade engineering** on kinematics, planning, and handoff surfa
 - **Planning / preview / export only** — no RTDE, no live robot commands, no project reference to UR.RTDE.Grasshopper.
 - Execution (Session, Run, waits, ServoJ) lives in downstream control plugins.
 - User component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md).
-- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain.
+- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview gait (`Family=legged`, radians) lives in Motus.NET (`LeggedGait`); GH is thin WalkHex wiring.
 
 ## Layout
 
@@ -70,7 +70,7 @@ Controllers like UR Write MoveJ need `{waypoint → q[n]}` from **Motus Waypoint
 | `Tm` | Times (metadata) |
 
 Primary (serial 6R): Plan → Waypoints `Q` → UR Write MoveJ → Run.  
-Do **not** MoveL FK planes from joint-space RRT. Gate handoff on **`Preset.Family`**, not bare `AxisCount == 6` — Stewart (`Family=stewart`) `Q` is **leg lengths in meters**, not UR MoveJ radians. No Play/Session on Motus side.
+Do **not** MoveL FK planes from joint-space RRT. Gate handoff on **`Preset.Family`**, not bare `AxisCount == 6` — Stewart (`Family=stewart`) `Q` is **leg lengths in meters**, not UR MoveJ radians; legged (`Family=legged`) `Q` is joint **radians** (tip-path or full-driver gait — not UR MoveJ for the whole mechanism). No Play/Session on Motus side.
 
 **Motus Export** JSON/CSV stays for scripts and PlanBundle-style handoff.
 

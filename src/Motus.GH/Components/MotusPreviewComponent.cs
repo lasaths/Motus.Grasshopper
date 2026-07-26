@@ -26,6 +26,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
     private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
+    private static readonly Color ContactColor = Color.FromArgb(220, 80, 200, 120);
 
     private PreviewColorMode _colorMode = PreviewColorMode.Urdf;
     private bool _showCustomColors;
@@ -48,6 +49,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private Trajectory? _staticsFor;
     private global::Rhino.Geometry.Curve? _tcpCurve;
     private List<global::Rhino.Geometry.Line> _invalidSegments = new();
+    private List<Circle> _contactCircles = [];
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private KinematicsPreview.PreviewMeshCache? _meshCache;
@@ -171,6 +173,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             }
             if (_tcpCurve is not null)
                 bb.Union(_tcpCurve.GetBoundingBox(false));
+            foreach (var c in _contactCircles)
+                bb.Union(c.BoundingBox);
             return bb.IsValid ? bb : BoundingBox.Unset;
         }
     }
@@ -190,6 +194,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             args.Display.DrawCurve(_tcpCurve, PathColor, 2);
         foreach (var line in _invalidSegments)
             args.Display.DrawLine(line, InvalidColor, 3);
+        foreach (var c in _contactCircles)
+            args.Display.DrawCircle(c, ContactColor, 2);
     }
 
     public override bool Write(GH_IWriter writer)
@@ -418,6 +424,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 dynamicBase = BasePathSampler.AtTime(bp2, PreviewTrajectory(), duration);
             if (_meshCache is not null && _currentMeshes.Count > 0)
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
+            if (_trajGoo is not null)
+                RefreshContactCircles(_trajGoo.Context(), state, dynamicBase);
             SyncScrubSlider(_position, expireDownstream: false);
             ExpirePreview(true);
             OnDisplayExpired(false);
@@ -450,6 +458,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
+        RefreshContactCircles(_trajGoo!.Context(), state, dynamicBase);
         SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
@@ -549,6 +558,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _startMeshes = [];
             _tcpCurve = null;
             _invalidSegments = [];
+            _contactCircles = [];
             _previewTrajectory = null;
             ExpirePreview(true);
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points.");
@@ -650,6 +660,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _drawMeshColors = PreviewColorResolver.AlignMeshColors(previewGeometry!, ctx.PreviewMeshColors);
         }
 
+        RefreshContactCircles(ctx, state, dynamicBase);
+
         if (_playing)
         {
             StartPlayTimer();
@@ -684,6 +696,25 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 da.SetData(widthOut, toolState?.GetValueOrDefault("width"));
         }
         ExpirePreview(true);
+    }
+
+    private void RefreshContactCircles(RobotContext ctx, JointState state, Frame? dynamicBase)
+    {
+        _contactCircles.Clear();
+        if (ctx.Tree is null)
+            return;
+        if (!Units.IsLegged(ctx.Model.Preset) && !Units.IsLegged(ctx.EffectiveModel.Preset))
+            return;
+
+        var previewGeom = ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel;
+        LeggedContactPreview.CollectGroundCircles(
+            ctx.Tree,
+            previewGeom,
+            state.Positions,
+            ctx.Model.JointNames,
+            ctx.TreeDriverHome,
+            dynamicBase,
+            _contactCircles);
     }
 
     private void ReadCustomColors(IGH_DataAccess da)
