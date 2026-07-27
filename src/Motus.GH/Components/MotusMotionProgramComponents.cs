@@ -864,7 +864,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
         var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
-        var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached, ctx);
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
@@ -885,6 +885,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             {
                 Chain = robotGoo.Chain,
                 Tree = robotGoo.Tree,
+                TreeDriverHome = robotGoo.TreeDriverHome,
                 PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
                 PreviewMeshColors = robotGoo.PreviewMeshColors,
                 BaseFrameOverride = robotGoo.BaseFrameOverride,

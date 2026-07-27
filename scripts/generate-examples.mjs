@@ -28,9 +28,9 @@ const HEX_TIP_GOAL = [-0.1309, 0.6109, -0.5236];
 /** Collision-free home-ish start for obstacle demos (away from table/box). */
 const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
 const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
-/** ur10e_on_turntable.xacro: [turntable, …UR10e×6] — goal rotates table. */
-const TURNTABLE_START = [0.0, ...START_JOINTS];
-const TURNTABLE_GOAL = [1.2, ...GOAL_JOINTS];
+/** ur10e_with_dkp.xacro AllDrivers: […UR10e×6, dkp_yaw, dkp_tilt] — goal tilts/yaws DKP. */
+const DKP_START = [...START_JOINTS, 0.0, 0.0];
+const DKP_GOAL = [...GOAL_JOINTS, 1.0, 0.35];
 
 /** GH / Motus param type GUIDs (ComponentGuid). Required for IGH_VariableParameterComponent ParameterData. */
 const PTYPE = {
@@ -57,13 +57,14 @@ const PTYPE = {
 const USE_PARAMETER_DATA = new Set(['plan', 'preview', 'segment']);
 
 const MOTUS = {
-  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 104,
+  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 124,
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Path to .urdf or .xacro file', optional: false, text: '' },
       { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
       { name: 'TipLink', nick: 'Tip', desc: 'Tip link name', optional: true, text: 'tool0' },
       { name: 'Base', nick: 'Bf', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true, plane: true },
       { name: 'Tool', nick: 'Tl', desc: 'Optional Motus Tool definition', optional: true },
+      { name: 'AllDrivers', nick: 'All', desc: 'Plan tip path + side-branch drivers (e.g. DKP)', optional: true, bool: false },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
   ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
@@ -1980,34 +1981,31 @@ function graph05() {
 }
 
 /**
- * 06 — Turntable (1-DOF) + arm: coupled vs decoupled via Planning Group.
- * Group locking applies on the RRT path (joint-linear ignores GroupMap), so both
- * Plans share a far keep-out sphere to force RRT.
+ * 06 — UR prefab + 2-DOF DKP: coupled (arm+DKP) vs decoupled (arm Group locks DKP).
+ * AllDrivers promotes side-branch DKP into Plan DOF. Group locking needs RRT (shared keep-out).
  */
 function graph06() {
-  const title = nativeScribble(40, -60, '06  Turntable + Group', 28);
+  const title = nativeScribble(40, -60, '06  UR + DKP Group', 28);
   const note = nativePanel(
     420,
     -60,
-    'Prefab UR10e on turntable. Coupled: Group off. Decoupled: arm Group locks turntable. Scrub both.',
+    'UR10e beside 2-axis DKP. AllDrivers on. Coupled: Group off (arm+DKP). Decoupled: arm Group locks DKP. Scrub both.',
     'Note',
-    420,
+    520,
     40,
   );
-  // Prefab ur10e_robotiq.urdf via thin turntable xacro (meshes stay next to bundled URDF).
   const urdfFile = nativeFilePath(
     40,
     40,
-    absPath('resources/robots/ur10e_robotiq/ur10e_on_turntable.xacro'),
+    absPath('resources/robots/ur10e_robotiq/ur10e_with_dkp.xacro'),
     '*.xacro;*.urdf|*.xacro;*.urdf|All files|*.*',
   );
   const robot = motusComponent('robot', 280, 40, {
     Path: [outRef(urdfFile.node, 'Path')],
-  }, { text: { BaseLink: 'world', TipLink: 'tool0' }, hidden: true });
-  const start = motusComponent('joints', 40, 180, {}, { jointValues: TURNTABLE_START });
-  const goal = motusComponent('joints', 40, 300, {}, { jointValues: TURNTABLE_GOAL });
+  }, { text: { BaseLink: 'world', TipLink: 'tool0' }, bools: { AllDrivers: true }, hidden: true });
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: DKP_START });
+  const goal = motusComponent('joints', 40, 300, {}, { jointValues: DKP_GOAL });
 
-  // Far sphere: SceneHasObstacles → RRT (required for GroupMap lock). Not on the path.
   const keepCenter = nativeConstructPoint(40, 420, [2.0, 2.0, 0.4]);
   const keep = motusComponent('colSphere', 220, 420, {
     Center: [outRef(keepCenter.node, 'Point')],
@@ -2049,11 +2047,11 @@ function graph06() {
   }, { advanced: ['Collision', 'Group', 'RrtSettings'] });
   const decoupled = previewWithScrub(40, 980, outRef(planDecoupled.node, 'Trajectory'));
 
-  const gRobot = nativeGroup('Prefab UR10e + turntable', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
+  const gRobot = nativeGroup('Prefab UR10e + DKP', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
   const gScene = nativeGroup('Scene + arm group', [
     keepCenter, keep, scene, group, rrt,
   ], GROUP_COLOUR.collision);
-  const gCoupled = nativeGroup('Coupled (no Group)', [planCoupled, coupled.scrub, coupled.preview], GROUP_COLOUR.plan);
+  const gCoupled = nativeGroup('Coupled (arm+DKP)', [planCoupled, coupled.scrub, coupled.preview], GROUP_COLOUR.plan);
   const gDecoupled = nativeGroup('Decoupled (arm Group)', [planDecoupled, decoupled.scrub, decoupled.preview], GROUP_COLOUR.preview);
 
   const objs = [
@@ -2065,9 +2063,9 @@ function graph06() {
     gRobot, gScene, gCoupled, gDecoupled,
   ];
   objs._meta = {
-    fileName: '06_turntable_group.ghx',
+    fileName: '06_dkp_group.ghx',
     description:
-      'Prefab UR10e+Robotiq on 1-DOF turntable: coupled Plan vs arm Group (locks turntable). Shared RRT scene; scrub both Previews.',
+      'Prefab UR10e+Robotiq beside 2-DOF DKP: AllDrivers coupled Plan vs arm Group (locks DKP). Shared RRT scene; scrub both Previews.',
   };
   return buildGraph(objs);
 }
@@ -2077,44 +2075,44 @@ function graph06() {
  * Cap=Robotiq2F85 supplies width schema/DefaultState(Open); Bd=j_left drives the authored joint.
  */
 function graph07() {
-  const title = nativeScribble(40, -60, '07  URDF gripper Tool', 28);
+  const title = nativeScribble(40, 40, '07 · URDF gripper Tool', 28);
   const note = nativePanel(
-    420,
-    -60,
-    'Arm = ur10e_minimal (no Robotiq). Boxes → ULink → Tool Rd → Tl. Cap=Robotiq2F85, Bd=j_left.',
-    'Note',
-    520,
     40,
+    80,
+    'Boxes → ULink/UJoint → Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl (ur10e_minimal). PTP Ramp Closed → scrub: fingers pinch. Wire any Rhino geo into ULink V.',
+    'Note',
+    560,
+    88,
   );
 
-  const xy = nativeXYPlane(40, 0);
-  const palmBox = nativeCenterBox(40, 40, outRef(xy.node, 'Plane'), [0.08, 0.06, 0.03]);
-  const leftBox = nativeCenterBox(40, 160, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
-  const rightBox = nativeCenterBox(40, 280, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
+  const xy = nativeXYPlane(40, 180);
+  const palmBox = nativeCenterBox(40, 220, outRef(xy.node, 'Plane'), [0.08, 0.06, 0.03]);
+  const leftBox = nativeCenterBox(40, 300, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
+  const rightBox = nativeCenterBox(40, 380, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
 
-  const palm = motusComponent('urdfLink', 220, 40, {
+  const palm = motusComponent('urdfLink', 220, 220, {
     Visual: [outRef(palmBox.node, 'Box')],
   }, { text: { Name: 'palm' } });
-  const left = motusComponent('urdfLink', 220, 160, {
+  const left = motusComponent('urdfLink', 220, 300, {
     Visual: [outRef(leftBox.node, 'Box')],
   }, { text: { Name: 'L' } });
-  const right = motusComponent('urdfLink', 220, 280, {
+  const right = motusComponent('urdfLink', 220, 380, {
     Visual: [outRef(rightBox.node, 'Box')],
   }, { text: { Name: 'R' } });
 
-  const uz = nativeUnitZ(40, 420);
-  const leftOrigin = nativeConstructPoint(40, 500, [0, 0.035, 0]);
-  const rightOrigin = nativeConstructPoint(40, 580, [0, -0.035, 0]);
-  const leftAxis = nativeLineSdl(220, 460, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
-  const rightAxis = nativeLineSdl(220, 580, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const uz = nativeUnitZ(40, 480);
+  const leftOrigin = nativeConstructPoint(40, 540, [0, 0.035, 0]);
+  const rightOrigin = nativeConstructPoint(40, 600, [0, -0.035, 0]);
+  const leftAxis = nativeLineSdl(220, 520, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const rightAxis = nativeLineSdl(220, 600, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
 
-  const jLeft = motusComponent('urdfJoint', 420, 200, {
+  const jLeft = motusComponent('urdfJoint', 400, 300, {
     Axis: [outRef(leftAxis.node, 'Line')],
   }, {
     text: { Name: 'j_left', Type: 'Revolute', Parent: 'palm', Child: 'L' },
     numbers: { Lower: 0, Upper: 0.8 },
   });
-  const jRight = motusComponent('urdfJoint', 420, 400, {
+  const jRight = motusComponent('urdfJoint', 400, 460, {
     Axis: [outRef(rightAxis.node, 'Line')],
   }, {
     text: {
@@ -2123,62 +2121,62 @@ function graph07() {
     numbers: { Lower: 0, Upper: 0.8, MimicMult: -1, MimicOffset: 0 },
   });
 
-  const linksMerge = nativeMerge(420, 40, [
+  const linksMerge = nativeMerge(400, 200, [
     outRef(palm.node, 'Link'),
     outRef(left.node, 'Link'),
     outRef(right.node, 'Link'),
   ]);
-  const jointsMerge = nativeMerge(600, 280, [
+  const jointsMerge = nativeMerge(560, 360, [
     outRef(jLeft.node, 'Joint'),
     outRef(jRight.node, 'Joint'),
   ]);
-  const assemble = motusComponent('urdfAssemble', 780, 120, {
+  const assemble = motusComponent('urdfAssemble', 720, 240, {
     Links: [outRef(linksMerge.node, 'Result')],
     Joints: [outRef(jointsMerge.node, 'Result')],
   }, { text: { Name: 'demo_gripper', Tip: 'palm' } });
 
   // Cap supplies Open/Closed width schema; Bd maps width → authored driver (not robotiq_* names).
-  const tool = motusComponent('tool', 980, 120, {
+  const tool = motusComponent('tool', 900, 240, {
     Description: [outRef(assemble.node, 'Description')],
   }, { text: { Name: 'demo_gripper', Capabilities: 'Robotiq2F85', Binding: 'j_left' } });
 
   // Arm-only primitives — ur10e.urdf/.robotiq need mesh assets; minimal always previews.
   const urdfFile = nativeFilePath(
-    780,
-    320,
+    720,
+    400,
     absPath('examples/ur10e/ur10e_minimal.urdf'),
   );
-  const robot = motusComponent('robot', 980, 320, {
+  const robot = motusComponent('robot', 900, 400, {
     Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
 
-  const start = motusComponent('joints', 1180, 200, {}, { jointValues: START_JOINTS });
-  const goal = motusComponent('joints', 1180, 340, {}, { jointValues: GOAL_JOINTS });
-  const stateClosed = motusComponent('toolState', 1180, 480, {
+  const start = motusComponent('joints', 1100, 280, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 1100, 400, {}, { jointValues: GOAL_JOINTS });
+  const stateClosed = motusComponent('toolState', 1100, 520, {
     Tool: [outRef(tool.node, 'Tool')],
   }, { text: { Preset: 'Closed' } });
   // InitialToolState = Cap DefaultState (Open); Ramp lerps width → Closed over the PTP.
-  const segPtp = motusComponent('segment', 1380, 280, {
+  const segPtp = motusComponent('segment', 1280, 360, {
     Goal: [outRef(goal.node, 'State')],
     ToolState: [outRef(stateClosed.node, 'State')],
   }, { text: { Type: 'PTP' }, toolMode: 'Ramp' });
-  const prog = motusComponent('progPlan', 1580, 240, {
+  const prog = motusComponent('progPlan', 1460, 320, {
     Robot: [outRef(robot.node, 'Robot')],
     Segments: [outRef(segPtp.node, 'Segment')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(1580, 240, outRef(prog.node, 'Trajectory'));
+  const { scrub, preview } = previewWithScrub(1460, 320, outRef(prog.node, 'Trajectory'));
 
   const exportFolder = nativePanel(
-    780,
-    480,
+    720,
+    560,
     absPath('examples'),
     'Folder',
     260,
     40,
   );
-  const urdfExport = motusComponent('urdfExport', 1080, 480, {
+  const urdfExport = motusComponent('urdfExport', 1000, 560, {
     Description: [outRef(assemble.node, 'Description')],
     Folder: [outRef(exportFolder.node, 'Text')],
   }, { text: { Name: 'demo_gripper' } });
@@ -2211,7 +2209,7 @@ function graph07() {
   objs._meta = {
     fileName: '07_urdf_gripper_tool.ghx',
     description:
-      'ur10e_minimal (no prefab gripper) + Center Box → Motus Urdf Link/Joint/Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl → Program PTP Ramp → Preview. Wire any Rhino geometry into ULink V. Export URDF Write on Assemble D.',
+      'ur10e_minimal + Center Box → ULink/UJoint/Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl → Program PTP Ramp Closed → Preview (fingers pinch). Export URDF Write on Assemble D.',
   };
   return buildGraph(objs);
 }
@@ -2221,7 +2219,7 @@ function graph08() {
   const note = nativePanel(
     40,
     80,
-    'Sliders → Stewart (classic Br/Pr or wire Base+Plat points) → Plan TCP planes → Preview. Q = leg lengths (m), not UR MoveJ. Drag Br/Pr/Lmin/Lmax like Body N on 09.',
+    'Sliders → Stewart → Plan TCP loop (heave + sway, ~±80 mm / ±100 mm Z) → Preview. Q = leg lengths (m). Drag Br/Pr; keep Lmin/Lmax if Status hits StrokeLimit.',
     'Note',
     560,
     88,
@@ -2239,23 +2237,27 @@ function graph08() {
   });
 
   const uz = nativeUnitZ(520, 140);
-  // Multi-waypoint TCP path at mid-stroke height (0.625 = default mid of Lmin/Lmax).
+  // Closed TCP loop: large XY + Z heave (stroke-checked on classic Br=0.5/Pr=0.3).
+  // Refined from hand-tuned GoalPts (0.2 Y / −0.1/−0.1 / Z=0.5) for a scrub-friendly return home.
   const pathPts = [
-    [0, 0, 0.625],
-    [0.01, 0, 0.625],
-    [0.01, 0.01, 0.625],
-    [0, 0.01, 0.625],
+    [0, 0, 0.62],
+    [0.08, 0.02, 0.70],
+    [0.02, 0.10, 0.52],
+    [-0.08, 0.04, 0.68],
+    [-0.04, -0.08, 0.55],
+    [0.06, -0.06, 0.62],
+    [0, 0, 0.62],
   ];
   const pathParts = [];
   const planeRefs = [];
   for (let i = 0; i < pathPts.length; i++) {
     const [x, y, z] = pathPts[i];
-    const pt = nativeConstructPoint(520, 200 + i * 48, [x, y, z]);
-    const pl = nativePlane(640, 200 + i * 48, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    const pt = nativeConstructPoint(520, 180 + i * 44, [x, y, z]);
+    const pl = nativePlane(640, 180 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
     pathParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
     planeRefs.push(outRef(pl.node, 'Plane'));
   }
-  const goalsMerge = nativeMerge(760, 280, planeRefs.slice(1));
+  const goalsMerge = nativeMerge(760, 260, planeRefs.slice(1));
   const plan = motusComponent('plan', 900, 240, {
     Robot: [outRef(stewart.node, 'Robot')],
     Start: [planeRefs[0]],
@@ -2286,7 +2288,7 @@ function graph08() {
   objs._meta = {
     fileName: '08_stewart_tcp_path.ghx',
     description:
-      'Sliders Br/Pr/Lmin/Lmax → Motus Stewart → Plan multi-waypoint TCP planes → Preview + Waypoints (leg lengths in meters). Wire Base+Plat for custom anchors. Requires Motus.NET UseLocal until crossed-pair NuGet.',
+      'Sliders Br/Pr/Lmin/Lmax → Motus Stewart → dramatic multi-waypoint TCP loop (heave/sway) → Preview + Waypoints (leg lengths in meters). Wire Base+Plat for custom anchors.',
   };
   return buildGraph(objs);
 }

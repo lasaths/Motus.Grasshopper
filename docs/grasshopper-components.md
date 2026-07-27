@@ -51,7 +51,7 @@ Model ──► Plan ──► Preview
 
 `Motus UR10e Robotiq` is the zero-config bundled robot (`resources/robots/ur10e_robotiq/`). It previews at the UR10e home pose on placement.
 
-`Motus Robot` loads any serial-chain URDF via `UrdfRobotLoader`. Optional `Base` overrides the robot base frame; optional `Tool` overrides the end-effector. Previews at home when the path resolves (UR10e heuristic or zeros).
+`Motus Robot` loads any serial-chain URDF via `UrdfRobotLoader`. Optional `Base` overrides the robot base frame; optional `Tool` overrides the end-effector. Optional **AllDrivers** promotes tip-path + side-branch drivers into Plan/Joint State DOF (e.g. DKP beside the arm; tip-descendant tool knuckles stay off Plan). Previews at home when the path resolves (UR10e heuristic or zeros).
 
 **Motus Stewart** builds a Stewart/Gough platform (`Family=stewart`) via Motus.NET. Priority: JSON Path → **Base**+**Plat** (exactly 6 Rhino points each, meters) → classic hex (`Br`/`Pr`/`Sep`). Wire TCP plane goals into **Motus Plan** — IK yields six **leg lengths in meters**. Do **not** hand Stewart `Q` to UR MoveJ. See [ADR 0003](adr/0003-parallel-kinematics-stewart.md). Stewart TCP-LIN now passes the wired collision scene/checker into Motus.NET; collided LIN paths report collision, and when goal IK succeeds Plan can fall back to RRT in leg-length space (not a straight TCP platform path). TCP planes use plate mapping (`FrameConversion.FromPlanePlate`) — Rhino Z is platform normal, not serial tool-approach. Example `08_stewart_tcp_path.ghx` exposes Br/Pr/Lmin/Lmax sliders like Body N on the walking example.
 

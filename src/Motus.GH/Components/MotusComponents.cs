@@ -144,12 +144,17 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
 public sealed class MotusRobotComponent : RobotSourceComponentBase
 {
     public MotusRobotComponent()
-        : base("Motus Robot", "Robot", "Load a robot from URDF or .xacro; optional Base and Tool overrides", "file") { }
+        : base(
+            "Motus Robot",
+            "Robot",
+            "Load a robot from URDF or .xacro; optional Base, Tool, and AllDrivers (side-branch Plan DOF)",
+            "file")
+    { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Next: Rb->Motus Plan Rb",
-        "Wire: Path to .urdf/.xacro; optional Tool Tl",
+        "Wire: Path to .urdf/.xacro; optional Tool Tl; AllDrivers for DKP/branches",
     ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -163,6 +168,13 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddParameter(new Param_MotusTool(), "Tool", "Tl", "Optional Motus Tool definition", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter(
+            "AllDrivers",
+            "All",
+            "When true, Plan/Joint State = tip path + side-branch drivers (e.g. DKP). Tip-descendant tools (Robotiq) stay off Plan. Default tip path only.",
+            GH_ParamAccess.item,
+            false);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -174,11 +186,13 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         var baseLink = "base_link";
         var tipLink = "tool0";
         var basePl = Plane.Unset;
+        var allDrivers = false;
         da.GetData(1, ref baseLink);
         da.GetData(2, ref tipLink);
         da.GetData(3, ref basePl);
         ToolGoo? toolGoo = null;
         da.GetData(4, ref toolGoo);
+        da.GetData(5, ref allDrivers);
 
         if (!da.GetData(0, ref path) || string.IsNullOrWhiteSpace(path))
         {
@@ -189,7 +203,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
 
         try
         {
-            var goo = UrdfRobotLoad.Load(path, baseLink, tipLink);
+            var goo = UrdfRobotLoad.Load(path, baseLink, tipLink, allDrivers);
             // PreviewGeometry/Tree come from a shared URDF cache — clone preview before Tl-merge mutates the goo.
             goo.PreviewGeometry = ClonePreview(goo.PreviewGeometry);
             if (basePl.IsValid) goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
@@ -204,6 +218,13 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                         "Tool has Bindings but no live Description (Rd) — re-wire Motus Tool→Tl; internalized Tool drops the mechanism.");
                 }
+            }
+
+            if (allDrivers && goo.Tree is { } tree && goo.Chain is { Joints.Length: var tipN }
+                && goo.Value.Preset.AxisCount > tipN)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    $"AllDrivers: Plan has {goo.Value.Preset.AxisCount} axes (tip {tipN} + side branches). Plane/LIN = tip IK (branches held); joint goals move DKP.");
             }
 
             ApplyPreview(goo, path);
@@ -247,6 +268,10 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
             return;
         }
 
+        // Trajectory Q is tip-path (arm axes only); extra tool drivers need a full home seed so
+        // TreeFK + ToolParameterBinding can pose fingers (example 07 Cap+Bd Ramp/SET).
+        SeedTreeDriverHome(goo);
+
         if (MechanismPreviewGeometry.Build(mechanism) is not { } mechanismPreview)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
@@ -264,6 +289,15 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
 
         AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
             $"Tool mechanism attached at '{mountLink}' (+{mechanismPreview.Links.Count} preview links).");
+    }
+
+    /// <summary>Zero-fill <see cref="RobotModelGoo.TreeDriverHome"/> to tree driver count (open fingers).</summary>
+    private static void SeedTreeDriverHome(RobotModelGoo goo)
+    {
+        if (goo.Tree is null) return;
+        var n = goo.Tree.DriverCount;
+        if (goo.TreeDriverHome is { } home && home.AxisCount == n) return;
+        goo.TreeDriverHome = new JointState(new double[n]);
     }
 
     private static RobotCollisionModel? ClonePreview(RobotCollisionModel? src)

@@ -575,17 +575,64 @@ internal static class GhExtract
         RobotModel robot,
         SerialJointChain? chain = null,
         CollisionScene? scene = null,
-        IReadOnlyList<AttachedBody>? attached = null)
+        IReadOnlyList<AttachedBody>? attached = null,
+        RobotContext? ctx = null)
     {
         try
         {
             if (!KinematicsResolver.SupportsModel(robot.Preset, chain)) return null;
-            return CollisionCheckerFactory.GetOrCreate(robot, chain, attached, scene);
+            var tipN = chain?.Joints.Length ?? 0;
+            if (ctx is { Tree: { } tree }
+                && robot.Preset.AxisCount > tipN
+                && robot.CollisionModel is { Links.Count: > 0 })
+            {
+                return CollisionCheckerFactory.GetOrCreate(
+                    robot,
+                    tree,
+                    chain,
+                    robot.JointNames,
+                    ctx.Value.TreeDriverHome?.Positions,
+                    attached,
+                    scene);
+            }
+
+            var checker = CollisionCheckerFactory.GetOrCreate(robot, chain, attached, scene);
+            // AllDrivers fallback if tree missing: tip-slice serial checker.
+            if (tipN > 0 && robot.Preset.AxisCount > tipN)
+                return new TipPathCollisionChecker(checker, tipN);
+            return checker;
         }
         catch (InvalidOperationException)
         {
             return null;
         }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Forwards collision queries with tip-path joint slice (AllDrivers side branches omitted).</summary>
+    private sealed class TipPathCollisionChecker : ICollisionChecker
+    {
+        private readonly ICollisionChecker _inner;
+        private readonly int _tipCount;
+
+        public TipPathCollisionChecker(ICollisionChecker inner, int tipCount)
+        {
+            _inner = inner;
+            _tipCount = tipCount;
+        }
+
+        public bool IsCollisionFree(JointState state, CollisionScene scene) =>
+            _inner.IsCollisionFree(KinematicsPreview.TipJointState(state, _tipCount), scene);
+
+        public bool SegmentCollisionFree(JointState from, JointState to, CollisionScene scene, double stepRadians) =>
+            _inner.SegmentCollisionFree(
+                KinematicsPreview.TipJointState(from, _tipCount),
+                KinematicsPreview.TipJointState(to, _tipCount),
+                scene,
+                stepRadians);
     }
 
     /// <summary>
@@ -628,10 +675,14 @@ internal static class GhExtract
         }
 
         CartesianPose? startPose = null;
+        var tipN = ctx.Chain?.Joints.Length ?? 0;
+        var allDrivers = tipN > 0 && session.Preset.AxisCount > tipN;
+        var reachRobot = allDrivers ? TipPathModel(session, tipN) : session;
+        var reachStart = allDrivers ? KinematicsPreview.TipJointState(start, tipN) : start;
         try
         {
-            var fk = KinematicsResolver.CreateFkSolver(session.Preset, ctx.Chain);
-            startPose = fk.ComputeTcp(start, ctx.Base, ctx.Tool);
+            var fk = KinematicsResolver.CreateFkSolver(reachRobot.Preset, ctx.Chain);
+            startPose = fk.ComputeTcp(reachStart, ctx.Base, ctx.Tool);
         }
         catch (InvalidOperationException)
         {
@@ -644,14 +695,14 @@ internal static class GhExtract
                 continue;
 
             var goal = new CartesianPose(FrameConversion.FromPlane(plane));
-            var workspace = CartesianWorkspace.CheckReach(session.Preset, goal, startPose);
+            var workspace = CartesianWorkspace.CheckReach(reachRobot.Preset, goal, startPose);
             if (!workspace.IsWithinReach)
             {
                 errors.Add($"Goal[{i}]: {workspace.Reason ?? "Goal TCP is outside robot reach."}");
                 continue;
             }
 
-            var reach = CartesianGoalSolver.TryReachFromStart(session, goal, start, ctx.Chain);
+            var reach = CartesianGoalSolver.TryReachFromStart(reachRobot, goal, reachStart, ctx.Chain);
             if (!reach.Success)
             {
                 var detail = reach.Errors.Count > 0
@@ -662,6 +713,38 @@ internal static class GhExtract
         }
 
         return errors;
+    }
+
+    /// <summary>Tip-path RobotModel when Plan DOF includes side branches (AllDrivers).</summary>
+    public static RobotModel TipPathModel(RobotModel full, int tipN)
+    {
+        if (tipN <= 0 || full.Preset.AxisCount <= tipN)
+            return full;
+        var tip = full.Preset;
+        var limits = tip.JointLimits.Count >= tipN
+            ? tip.JointLimits.Take(tipN).ToList()
+            : tip.JointLimits.ToList();
+        var names = full.JointNames is { Count: > 0 } jn && jn.Count >= tipN
+            ? jn.Take(tipN).ToList()
+            : full.JointNames;
+        return new RobotModel(
+            new RobotPreset
+            {
+                Manufacturer = tip.Manufacturer,
+                ModelName = tip.ModelName,
+                Family = tip.Family,
+                AxisCount = tipN,
+                JointLimits = limits,
+                ReachMeters = tip.ReachMeters,
+                PayloadKg = tip.PayloadKg,
+                BaseFrame = tip.BaseFrame,
+                ToolFrame = tip.ToolFrame,
+                Notes = tip.Notes,
+                SourceNote = tip.SourceNote,
+                Disclaimer = tip.Disclaimer
+            },
+            full.CollisionModel,
+            names);
     }
 
     /// <summary>Fast-fail before expensive planners when start/goal already intersect obstacles.</summary>
@@ -675,7 +758,7 @@ internal static class GhExtract
         if (!PlanningCollision.SceneHasObstacles(planningContext.Scene) && planningContext.Attached.Count == 0)
             return null;
 
-        checker ??= TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached);
+        checker ??= TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached, ctx);
         if (checker is null)
             return null;
 
@@ -694,14 +777,28 @@ internal static class GhExtract
             }
             else
             {
+                var tipN = ctx.Chain?.Joints.Length ?? 0;
+                var allDrivers = tipN > 0 && ctx.EffectiveModel.Preset.AxisCount > tipN;
+                var reachRobot = allDrivers ? TipPathModel(ctx.EffectiveModel, tipN) : ctx.EffectiveModel;
+                var reachStart = allDrivers ? KinematicsPreview.TipJointState(start, tipN) : start;
                 var reach = CartesianGoalSolver.TryReachFromStart(
-                    ctx.EffectiveModel,
+                    reachRobot,
                     new CartesianPose(FrameConversion.FromPlane(plane)),
-                    start,
+                    reachStart,
                     ctx.Chain);
-                if (!reach.Success)
+                if (!reach.Success || reach.Solution is null)
                     return null;
-                goalState = reach.Solution;
+                if (!allDrivers)
+                {
+                    goalState = reach.Solution;
+                }
+                else
+                {
+                    var q = start.Positions.ToArray();
+                    for (var i = 0; i < tipN && i < reach.Solution.AxisCount; i++)
+                        q[i] = reach.Solution.Positions[i];
+                    goalState = new JointState(q);
+                }
             }
         }
 

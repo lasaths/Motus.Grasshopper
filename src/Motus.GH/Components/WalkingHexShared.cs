@@ -96,12 +96,12 @@ internal static class WalkingHexShared
     }
 
     /// <summary>
-    /// Leg segment along Motus link +X as a mesh (not Box — ToRhinoMesh remaps Box axes via ToPlane).
+    /// Leg segment along Motus link +X as a mesh (not Box — link length is +X, Box would be XYZ extents).
     /// </summary>
     private static UrdfGeometry LegSegMesh(double length, double diameter)
     {
         var r = diameter * 0.5;
-        // ponytail: 8-corner box 0→length on +X; Mesh preview skips tool-axis remap.
+        // ponytail: 8-corner box 0→length on +X.
         double[][] verts =
         [
             [0, -r, -r], [length, -r, -r], [length, r, -r], [0, r, -r],

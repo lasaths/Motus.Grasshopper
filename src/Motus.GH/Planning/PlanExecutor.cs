@@ -66,7 +66,8 @@ internal static class PlanExecutor
                     planningRobot,
                     request.Context.Chain,
                     request.PlanningContext.Scene,
-                    request.PlanningContext.Attached);
+                    request.PlanningContext.Attached,
+                    request.Context);
             if (timings is not null)
                 timings.CheckerBuildMs = checkerSw.ElapsedMilliseconds;
         }
@@ -189,8 +190,15 @@ internal static class PlanExecutor
         }
 
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
+        var tipN = ctx.Chain?.Joints.Length ?? 0;
+        var allDrivers = tipN > 0 && session.Preset.AxisCount > tipN;
+        var linRobot = allDrivers ? GhExtract.TipPathModel(session, tipN) : session;
+        var linStart = allDrivers ? KinematicsPreview.TipJointState(start, tipN) : start;
+        var checker = allDrivers && sharedChecker is not null
+            ? PadBranchesChecker.Wrap(sharedChecker, start, tipN)
+            : sharedChecker;
 
-        if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
+        if (!KinematicsResolver.SupportsModel(linRobot.Preset, ctx.Chain))
         {
             return PlanningResult.Failed(new[]
             {
@@ -203,33 +211,35 @@ internal static class PlanExecutor
 
         goalProgress?.Invoke(0.25);
 
-        // Wave 2: N-DOF / rail plane goals use numerical IK (not UR 6R analytic).
-        var ndofNote = session.Preset.AxisCount != 6
-            ? $"Plane goal on {session.Preset.AxisCount}-axis robot uses numerical IK (not UR analytic)."
-            : null;
+        var ndofNote = allDrivers
+            ? $"AllDrivers plane/LIN: tip-chain IK only; side branches held at start ({session.Preset.AxisCount - tipN} axes). Use joint goals to move them."
+            : session.Preset.AxisCount != 6
+                ? $"Plane goal on {session.Preset.AxisCount}-axis robot uses numerical IK (not UR analytic)."
+                : null;
 
         var needsCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene) || planningContext.Attached.Count > 0;
-        ICollisionChecker? checker = needsCollision ? sharedChecker : null;
+        ICollisionChecker? planChecker = needsCollision ? checker : null;
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
-            CollisionChecker = checker,
+            CollisionChecker = planChecker,
             CollisionScene = planningContext.Scene
         });
 
         var linOptions = new CartesianLinOptions(StepMeters: request.LinStepMeters, ContinueOnIkFailure: false);
-        var linRequest = new CartesianPlanningRequest(session, start, goal, opts, planningContext.Scene);
-        var linResult = new CartesianLinearPathPlanner(session.Preset, ctx.Chain).PlanToResult(linRequest, linOptions);
+        var linRequest = new CartesianPlanningRequest(linRobot, linStart, goal, opts, planningContext.Scene);
+        var linResult = new CartesianLinearPathPlanner(linRobot.Preset, ctx.Chain).PlanToResult(linRequest, linOptions);
         if (linResult.Success)
         {
             goalProgress?.Invoke(1.0);
+            var traj = EmbedSideBranches(linResult.Trajectory!, session, start, tipN);
             var linWarnings = linResult.Warnings.ToList();
             if (ndofNote is not null) linWarnings.Add(ndofNote);
             if (!request.CollisionInputWired)
                 linWarnings.Add("Collision input unwired — plane goal planned in free space (LIN only).");
             else if (needsCollision)
                 linWarnings.Add("Collision validated on link envelopes; TCP line may still intersect obstacles that do not hit link geometry.");
-            return PlanningResult.Succeeded(linResult.Trajectory!, linWarnings);
+            return PlanningResult.Succeeded(traj, linWarnings);
         }
 
         if (linResult.Errors.Any(e => e.Contains("Collision", StringComparison.OrdinalIgnoreCase)))
@@ -243,23 +253,22 @@ internal static class PlanExecutor
             goalProgress?.Invoke(0.5);
             var rrtOpts = request.RrtSettings.ToOptions(cancellationToken, goalProgress);
             var rrtFallback = LinCollisionRrtFallback.Plan(
-                session,
+                linRobot,
                 ctx.Chain,
-                start,
+                linStart,
                 goal,
                 planningContext,
-                sharedChecker,
+                checker!,
                 rrtOpts,
                 linResult.Errors);
             if (rrtFallback.Success)
             {
                 goalProgress?.Invoke(1.0);
-                if (ndofNote is not null && !rrtFallback.Warnings.Contains(ndofNote))
-                {
-                    var w = rrtFallback.Warnings.ToList();
+                var traj = EmbedSideBranches(rrtFallback.Trajectory!, session, start, tipN);
+                var w = rrtFallback.Warnings.ToList();
+                if (ndofNote is not null && !w.Contains(ndofNote))
                     w.Add(ndofNote);
-                    return PlanningResult.Succeeded(rrtFallback.Trajectory!, w);
-                }
+                return PlanningResult.Succeeded(traj, w);
             }
             return rrtFallback;
         }
@@ -270,9 +279,9 @@ internal static class PlanExecutor
         goalProgress?.Invoke(0.5);
 
         var reach = new CartesianGoalSolver().TryReach(
-            session,
+            linRobot,
             goal,
-            CartesianGoalSolver.EnumerateDefaultSeeds(start, session),
+            CartesianGoalSolver.EnumerateDefaultSeeds(linStart, linRobot),
             ctx.Chain);
         if (!reach.Success)
         {
@@ -283,7 +292,7 @@ internal static class PlanExecutor
         }
 
         var goalJoints = reach.Solution!;
-        var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(session, start, goalJoints, opts));
+        var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(linRobot, linStart, goalJoints, opts));
         if (!jointResult.Success)
         {
             return PlanningResult.Failed(jointResult.Errors
@@ -295,7 +304,89 @@ internal static class PlanExecutor
         var warnings = jointResult.Warnings.ToList();
         if (ndofNote is not null) warnings.Add(ndofNote);
         warnings.Add("TCP-LIN failed; used joint-space path to the Cartesian goal instead (not a straight TCP line).");
-        return PlanningResult.Succeeded(jointResult.Trajectory!, warnings);
+        return PlanningResult.Succeeded(EmbedSideBranches(jointResult.Trajectory!, session, start, tipN), warnings);
+    }
+
+    private static Trajectory EmbedSideBranches(Trajectory tipTraj, RobotModel full, JointState fullStart, int tipN)
+    {
+        if (tipN <= 0 || fullStart.AxisCount <= tipN)
+            return tipTraj.Robot.Preset.AxisCount == full.Preset.AxisCount
+                ? tipTraj
+                : new Trajectory(full, tipTraj.Points);
+
+        var points = new List<TrajectoryPoint>(tipTraj.Points.Count);
+        foreach (var pt in tipTraj.Points)
+        {
+            var q = new double[fullStart.AxisCount];
+            var tipQ = pt.JointState.Positions;
+            for (var i = 0; i < tipN && i < tipQ.Length; i++)
+                q[i] = tipQ[i];
+            for (var i = tipN; i < fullStart.AxisCount; i++)
+                q[i] = fullStart.Positions[i];
+            points.Add(new TrajectoryPoint(pt.TimeSeconds, new JointState(q)));
+        }
+        return new Trajectory(full, points);
+    }
+
+    /// <summary>Pads tip-only JointState with side-branch values from <paramref name="fullStart"/> for TreeFK collision.</summary>
+    private sealed class PadBranchesChecker : ICollisionChecker
+    {
+        private readonly ICollisionChecker _inner;
+        private readonly double[] _full;
+        private readonly int _tipN;
+        private JointState? _scratch;
+
+        private PadBranchesChecker(ICollisionChecker inner, JointState fullStart, int tipN)
+        {
+            _inner = inner;
+            _tipN = tipN;
+            _full = fullStart.Positions.ToArray();
+        }
+
+        public static ICollisionChecker Wrap(ICollisionChecker inner, JointState fullStart, int tipN) =>
+            tipN <= 0 || fullStart.AxisCount <= tipN
+                ? inner
+                : new PadBranchesChecker(inner, fullStart, tipN);
+
+        public bool IsCollisionFree(JointState state, CollisionScene scene) =>
+            _inner.IsCollisionFree(Pad(state), scene);
+
+        public bool SegmentCollisionFree(JointState from, JointState to, CollisionScene scene, double stepRadians)
+        {
+            // Don't share scratch across from/to — Pad mutates one buffer.
+            var fromPad = PadCopy(from);
+            var toPad = PadCopy(to);
+            return _inner.SegmentCollisionFree(fromPad, toPad, scene, stepRadians);
+        }
+
+        private JointState Pad(JointState state)
+        {
+            if (state.AxisCount >= _full.Length)
+                return state;
+            var q = _scratch?.Positions;
+            if (q is null || q.Length != _full.Length)
+            {
+                q = new double[_full.Length];
+                _scratch = JointState.Wrap(q);
+            }
+            for (var i = 0; i < _tipN && i < state.AxisCount; i++)
+                q[i] = state.Positions[i];
+            for (var i = _tipN; i < _full.Length; i++)
+                q[i] = _full[i];
+            return _scratch!;
+        }
+
+        private JointState PadCopy(JointState state)
+        {
+            if (state.AxisCount >= _full.Length)
+                return state;
+            var q = new double[_full.Length];
+            for (var i = 0; i < _tipN && i < state.AxisCount; i++)
+                q[i] = state.Positions[i];
+            for (var i = _tipN; i < _full.Length; i++)
+                q[i] = _full[i];
+            return new JointState(q);
+        }
     }
 
     private static PlanningResult PlanStewartLin(
@@ -396,7 +487,8 @@ internal static class PlanExecutor
                     planningRobot,
                     ctx.Chain,
                     planningContext.Scene,
-                    planningContext.Attached));
+                    planningContext.Attached,
+                    ctx));
         if (hasCollision && checker is null)
             return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
 

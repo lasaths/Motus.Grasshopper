@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.13.1** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.13.2** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|
@@ -100,6 +100,7 @@ Also check in Rhino:
 - Motus Stewart → Plan TCP plane list → Preview scrub; Waypoints warns meters ≠ MoveJ; drag Br/Pr sliders on `08_stewart_tcp_path`
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
-- `06_turntable_group`: coupled Preview rotates table; decoupled (arm Group) keeps table fixed
+- `06_dkp_group`: UR beside 2-DOF DKP; AllDrivers; coupled Preview moves DKP, decoupled (arm Group) keeps DKP fixed
+- `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Three.js stick viz via `Motus.NET/tools/legged-viewer`

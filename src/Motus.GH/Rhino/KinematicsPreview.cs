@@ -24,6 +24,28 @@ public static class KinematicsPreview
         catch (InvalidOperationException) { return null; }
     }
 
+    /// <summary>
+    /// Serial tip q when Plan DOF includes side branches (AllDrivers: tip joints first, then branches).
+    /// </summary>
+    public static IReadOnlyList<double> TipJointPositions(IReadOnlyList<double> q, int tipCount)
+    {
+        if (tipCount <= 0 || q.Count == tipCount)
+            return q;
+        if (q.Count < tipCount)
+            return q;
+        if (q is double[] arr)
+            return arr.AsSpan(0, tipCount).ToArray();
+        var tip = new double[tipCount];
+        for (var i = 0; i < tipCount; i++)
+            tip[i] = q[i];
+        return tip;
+    }
+
+    public static JointState TipJointState(JointState state, int tipCount) =>
+        state.AxisCount == tipCount || tipCount <= 0
+            ? state
+            : new JointState(TipJointPositions(state.Positions, tipCount));
+
     /// <summary>Stewart leg + platform outline wires at the FK pose for <paramref name="lengths"/>.</summary>
     public static IEnumerable<Line> StewartLegLines(
         StewartPlatform platform,
@@ -73,15 +95,21 @@ public static class KinematicsPreview
         var basePts = platform.BaseAnchors.Select(a => new Point3d(a.X, a.Y, a.Z)).ToArray();
         var platPts = platform.PlatformAnchors.Select(a => PlatformWorld(m, a)).ToArray();
 
+        // Filled plates use pair midpoints when anchors are classic close pairs — a 6-gon with
+        // ~4 cm pair gaps looks like a triangle and CreateFromClosedPolyline Z-fights on slivers.
+        // Joint spheres + legs stay on the true 6 anchors.
+        var basePlate = StewartPlateRing(basePts);
+        var platPlate = StewartPlateRing(platPts);
+
         // Support / base plate (ground footprint).
-        if (PolygonSlab(basePts, thickness: 0.012, upward: true) is { } baseMesh)
+        if (PolygonSlab(basePlate, thickness: 0.012, upward: true) is { } baseMesh)
         {
             meshes.Add(baseMesh);
             colors.Add(Color.FromArgb(160, 90, 100, 110));
         }
 
-        // Platform body (pink hex plate — matches common hex-viz body cue).
-        if (PolygonSlab(platPts, thickness: 0.018, upward: true) is { } platMesh)
+        // Platform body (pink plate — matches common hex-viz body cue).
+        if (PolygonSlab(platPlate, thickness: 0.018, upward: true) is { } platMesh)
         {
             meshes.Add(platMesh);
             colors.Add(Color.FromArgb(200, 255, 105, 180));
@@ -152,29 +180,51 @@ public static class KinematicsPreview
         return new Point3d(wx, wy, wz);
     }
 
+    /// <summary>
+    /// Plate outline for filled preview. Classic CreateClassic packs anchors as three angular
+    /// pairs (0–1, 2–3, 4–5); midpoints give a stable triangle. Custom 6-gons keep all vertices
+    /// when pair gaps are large.
+    /// </summary>
+    private static Point3d[] StewartPlateRing(Point3d[] anchors)
+    {
+        if (anchors.Length != StewartPlatform.LegCount)
+            return anchors;
+
+        var mids = new Point3d[3];
+        for (var i = 0; i < 3; i++)
+        {
+            var a = anchors[2 * i];
+            var b = anchors[2 * i + 1];
+            if (a.DistanceTo(b) > 0.12)
+                return anchors;
+            mids[i] = new Point3d(
+                0.5 * (a.X + b.X),
+                0.5 * (a.Y + b.Y),
+                0.5 * (a.Z + b.Z));
+        }
+        return mids;
+    }
+
     private static Mesh? PolygonSlab(Point3d[] ring, double thickness, bool upward)
     {
         if (ring.Length < 3) return null;
-        var poly = new Polyline(ring.Concat([ring[0]]));
-        if (!poly.IsValid) return null;
-        var mesh = Mesh.CreateFromClosedPolyline(poly);
-        if (mesh is null || !mesh.IsValid)
+
+        // Always fan about centroid — CreateFromClosedPolyline on skinny hex rings produces
+        // overlapping sliver faces that Z-fight (viewport flicker).
+        var c = Point3d.Origin;
+        foreach (var p in ring) c += p;
+        c /= ring.Length;
+        var mesh = new Mesh();
+        mesh.Vertices.Add(c);
+        foreach (var p in ring) mesh.Vertices.Add(p);
+        for (var i = 0; i < ring.Length; i++)
         {
-            // Convex fan about centroid if CreateFromClosedPolyline fails on non-planar-ish rings.
-            var c = Point3d.Origin;
-            foreach (var p in ring) c += p;
-            c /= ring.Length;
-            mesh = new Mesh();
-            mesh.Vertices.Add(c);
-            foreach (var p in ring) mesh.Vertices.Add(p);
-            for (var i = 0; i < ring.Length; i++)
-            {
-                var a = i + 1;
-                var b = i + 2 <= ring.Length ? i + 2 : 1;
-                mesh.Faces.AddFace(0, a, b);
-            }
-            mesh.Normals.ComputeNormals();
+            var a = i + 1;
+            var b = i + 2 <= ring.Length ? i + 2 : 1;
+            mesh.Faces.AddFace(0, a, b);
         }
+        mesh.Normals.ComputeNormals();
+        if (!mesh.IsValid) return null;
 
         var n = Vector3d.ZAxis;
         if (mesh.Faces.Count > 0)
@@ -182,8 +232,8 @@ public static class KinematicsPreview
             var f = mesh.Faces[0];
             var a = mesh.Vertices[f.A];
             var b = mesh.Vertices[f.B];
-            var c = mesh.Vertices[f.C];
-            n = Vector3d.CrossProduct(b - a, c - a);
+            var cv = mesh.Vertices[f.C];
+            n = Vector3d.CrossProduct(b - a, cv - a);
             if (!n.Unitize()) n = Vector3d.ZAxis;
             if (upward && n.Z < 0) n = -n;
         }
@@ -198,13 +248,11 @@ public static class KinematicsPreview
         slab.Append(top);
         slab.Append(bottom);
         var vCount = top.Vertices.Count;
-        // Side walls only for the outer ring (skip centroid fan vertex 0 when present).
-        var ringStart = top.Vertices.Count == ring.Length + 1 ? 1 : 0;
-        var ringCount = top.Vertices.Count - ringStart;
-        for (var i = 0; i < ringCount; i++)
+        // Side walls for outer ring only (skip centroid vertex 0).
+        for (var i = 0; i < ring.Length; i++)
         {
-            var i0 = ringStart + i;
-            var i1 = ringStart + (i + 1) % ringCount;
+            var i0 = 1 + i;
+            var i1 = 1 + (i + 1) % ring.Length;
             slab.Faces.AddFace(i0, i1, vCount + i1, vCount + i0);
         }
         slab.Normals.ComputeNormals();
@@ -230,7 +278,9 @@ public static class KinematicsPreview
         if (TryFk(robot, chain) is not { } serialFk)
             return FrameConversion.ToPlane(baseF.Frame);
         var tool = toolFrame ?? robot.Preset.ToolFrame;
-        return FrameConversion.ToPlane(serialFk.ComputeTcp(state, baseF, tool).Tcp);
+        var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
+        var tipState = TipJointState(state, tipN);
+        return FrameConversion.ToPlane(serialFk.ComputeTcp(tipState, baseF, tool).Tcp);
     }
 
     public static Point3d ToPoint(Frame frame) => new(frame.X, frame.Y, frame.Z);
@@ -243,7 +293,9 @@ public static class KinematicsPreview
 
         var baseF = baseFrame ?? robot.Preset.BaseFrame;
         var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var origins = fk.ComputeLinkOrigins(state.Positions, baseF.Frame);
+        var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
+        var tipQ = TipJointPositions(state.Positions, tipN);
+        var origins = fk.ComputeLinkOrigins(tipQ, baseF.Frame);
         var lines = new List<Line>();
         var prev = ToPoint(baseF.Frame);
         foreach (var origin in origins)
@@ -505,7 +557,13 @@ public static class KinematicsPreview
             Frame? dynamicBase = null)
         {
             var baseM = dynamicBase is { } db ? Transforms.FromFrame(db) : _baseMatrix;
-            var linkMats = _fk?.ComputeLinkTransforms(state.Positions) ?? Array.Empty<double[]>();
+            // TreeFK owns placement when present; serial FK only for fallback / tool hull.
+            // AllDrivers Plan q is longer than the tip chain — never feed full q into serial FK.
+            var tipCount = _fk?.LinkRadiiMeters.Length ?? state.AxisCount;
+            var tipQ = TipJointPositions(state.Positions, tipCount);
+            var linkMats = _treeFk is null && _fk is not null
+                ? _fk.ComputeLinkTransforms(tipQ)
+                : Array.Empty<double[]>();
             var meshCount = _links.Count + (_toolMesh is null ? 0 : 1);
             if (!duplicate)
             {
@@ -564,7 +622,7 @@ public static class KinematicsPreview
             {
                 // Fallback only when no URDF gripper links exist (planning hull viewport).
                 var toolM = ToolCollisionPlacement.WorldMatrix(
-                    _fk, state.Positions, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
+                    _fk, tipQ, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
                 var toolXform = ToRhinoTransform(toolM);
 
                 if (duplicate)
@@ -656,7 +714,8 @@ public static class KinematicsPreview
                 }
             }
 
-            if (ai < 0)
+            // Named Plan q (tip + side branches): never index-fallback — that steals elbow into knuckle/DKP slots.
+            if (ai < 0 && armJointNames is null)
                 ai = di < armQ.Count ? di : -1;
 
             if (ai >= 0 && ai < armQ.Count)
@@ -700,7 +759,10 @@ public static class KinematicsPreview
 
         var baseF = baseFrame ?? robot.Preset.BaseFrame;
         var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var serialPts = states.Select(s => ToPoint(serialFk.ComputeTcp(s, baseF, tool).Tcp)).ToList();
+        var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
+        var serialPts = states
+            .Select(s => ToPoint(serialFk.ComputeTcp(TipJointState(s, tipN), baseF, tool).Tcp))
+            .ToList();
         return serialPts.Count < 2 ? new Polyline() : new Polyline(serialPts);
     }
 
@@ -723,7 +785,11 @@ public static class KinematicsPreview
         var validator = new TrajectoryValidator();
         var opts = validation ?? new TrajectoryValidationOptions();
 
-        Point3d TcpAt(JointState s) => ToPoint(fk.ComputeTcp(s, baseF, tool).Tcp);
+        Point3d TcpAt(JointState s)
+        {
+            var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
+            return ToPoint(fk.ComputeTcp(TipJointState(s, tipN), baseF, tool).Tcp);
+        }
 
         for (var i = 1; i < trajectory.Points.Count; i++)
         {
@@ -790,8 +856,9 @@ public static class KinematicsPreview
             case CollisionShape.Sphere:
                 return Mesh.CreateFromSphere(new Sphere(ToPoint(obj.Pose), obj.ExtentX), 16, 12);
             case CollisionShape.Box:
+                // Motus/URDF XYZ ≡ Rhino XYZ (not serial tool-approach remap).
                 var box = new Box(
-                    FrameConversion.ToPlane(obj.Pose),
+                    FrameConversion.ToPlanePlate(obj.Pose),
                     new Interval(-obj.ExtentX, obj.ExtentX),
                     new Interval(-obj.ExtentY, obj.ExtentY),
                     new Interval(-obj.ExtentZ, obj.ExtentZ));
@@ -821,7 +888,8 @@ public static class KinematicsPreview
         var radius = capsule.ExtentX;
         var halfLength = capsule.ExtentY;
         if (radius <= 0 || halfLength <= 0) return null;
-        var plane = FrameConversion.ToPlane(capsule.Pose);
+        // Motus Capsule is local +Z (URDF cylinder); ToPlanePlate keeps Motus Z → Rhino Z.
+        var plane = FrameConversion.ToPlanePlate(capsule.Pose);
         var axis = plane.ZAxis;
         if (!axis.Unitize()) return null;
 

@@ -20,7 +20,13 @@ internal static class HomePoseLookup
     if (Units.IsStewart(robot.Preset))
       return MidStrokeOrZeros(robot);
     if (IsUr10e(robot, sourcePath))
-      return new JointState((double[])Ur10eReadyRadians.Clone());
+    {
+      var n = robot.Preset.AxisCount;
+      var q = new double[n];
+      for (var i = 0; i < Math.Min(6, n); i++)
+        q[i] = Ur10eReadyRadians[i];
+      return new JointState(q);
+    }
     return new JointState(new double[robot.Preset.AxisCount]);
   }
 
@@ -40,14 +46,15 @@ internal static class HomePoseLookup
   internal static bool IsUr10e(RobotModel robot, string? sourcePath = null)
   {
     if (Units.IsStewart(robot.Preset)) return false;
-    if (robot.Preset.AxisCount != 6) return false;
+    // AllDrivers UR+DKP is AxisCount 8 (tip×6 + side branches) — still UR ready for tip slots.
+    if (robot.Preset.AxisCount < 6) return false;
 
     var name = robot.Preset.ModelName ?? robot.DisplayName ?? "";
     if (name.Contains("ur10e", StringComparison.OrdinalIgnoreCase)) return true;
     if (sourcePath?.Contains("ur10e", StringComparison.OrdinalIgnoreCase) == true) return true;
 
     var names = robot.JointNames;
-    if (names is null || names.Count != 6) return false;
+    if (names is null || names.Count < 6) return false;
     return names.Any(j =>
       j.Contains("shoulder_pan", StringComparison.OrdinalIgnoreCase) ||
       j.Contains("shoulder_lift", StringComparison.OrdinalIgnoreCase));

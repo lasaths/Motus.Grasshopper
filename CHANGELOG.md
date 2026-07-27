@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.2 — UR+DKP AllDrivers ceilings
+
+Aligned with **Motus.NET 0.13.2**.
+
+### Added / fixed
+
+- Example `06_dkp_group` (UR beside 2-DOF DKP); Motus Robot `AllDrivers` Plan DOF = tip + side branches
+- Planning collision via TreeFK so DKP geometry participates in RRT (not tip-chain only)
+- Plane/LIN on AllDrivers: tip-chain IK; side branches held at start and re-embedded
+- URDF box/cylinder preview uses `ToPlanePlate` (Motus XYZ ≡ Rhino XYZ)
+
+### Motus.NET pin
+
+`MotusNetVersion` = **0.13.2** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)).
+
 ## 0.13.0 — N-leg Walk (ADR 0005)
 
 Aligned with **Motus.NET 0.13.1**.

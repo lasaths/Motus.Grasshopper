@@ -77,6 +77,9 @@ internal static class UrdfVisualPreviewLoader
             ComposeFixedForwardChain(robotRoot, chainLinkNames[^1], tipLink),
             urdfDirectory, materials, build);
 
+        // Side branches under base (e.g. DKP beside arm): TreeFK by LinkName.
+        AppendOffTipBranchVisuals(robotRoot, linksByName, baseLink, tipLink, chainLinkNames, urdfDirectory, materials, build);
+
         return build.Geometries.Count > 0
             ? new RobotPreviewVisuals(new RobotCollisionModel(build.Geometries), build.Colors.ToArray())
             : null;
@@ -607,6 +610,79 @@ internal static class UrdfVisualPreviewLoader
             }
 
             AppendTipDescendantVisuals(robotRoot, linksByName, child, attachLinkIndex, childToWorld, urdfDirectory, materials, build);
+        }
+    }
+
+    /// <summary>
+    /// Load actuated/fixed side-branch visuals under <paramref name="baseLink"/> that are not on the
+    /// tip path or tip-descendant tree (already loaded). TreeFK places them via LinkName.
+    /// </summary>
+    private static void AppendOffTipBranchVisuals(
+        XElement robotRoot,
+        Dictionary<string, XElement> linksByName,
+        string baseLink,
+        string tipLink,
+        IReadOnlyList<string> tipChainLinkNames,
+        string urdfDirectory,
+        IReadOnlyDictionary<string, Color> materials,
+        VisualBuild build)
+    {
+        var already = new HashSet<string>(tipChainLinkNames, StringComparer.OrdinalIgnoreCase) { tipLink };
+        foreach (var geom in build.Geometries)
+        {
+            if (!string.IsNullOrWhiteSpace(geom.LinkName))
+                already.Add(geom.LinkName);
+        }
+
+        var childrenOf = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var childSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var joint in robotRoot.Elements("joint"))
+        {
+            if (!IsTipVisualJoint(joint.Attribute("type")?.Value))
+                continue;
+            var parent = joint.Element("parent")?.Attribute("link")?.Value ?? "";
+            var child = joint.Element("child")?.Attribute("link")?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(parent) || string.IsNullOrWhiteSpace(child))
+                continue;
+            childSet.Add(child);
+            if (!childrenOf.TryGetValue(parent, out var list))
+            {
+                list = [];
+                childrenOf[parent] = list;
+            }
+            list.Add(child);
+        }
+
+        // Walk every URDF root (e.g. world) so DKP siblings load even when BaseLink=base_link.
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { baseLink };
+        foreach (var parent in childrenOf.Keys)
+        {
+            if (!childSet.Contains(parent))
+                roots.Add(parent);
+        }
+
+        var queue = new Queue<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots)
+        {
+            if (visited.Add(root))
+                queue.Enqueue(root);
+        }
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            if (!childrenOf.TryGetValue(parent, out var kids))
+                continue;
+            foreach (var child in kids)
+            {
+                if (!visited.Add(child))
+                    continue;
+                queue.Enqueue(child);
+                if (already.Contains(child))
+                    continue;
+                AppendLinkVisuals(linksByName, child, TreeLinkIndex, urdfDirectory, materials, build);
+                already.Add(child);
+            }
         }
     }
 

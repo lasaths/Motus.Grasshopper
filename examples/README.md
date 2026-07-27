@@ -31,8 +31,8 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `03_urdf_tool_frames.ghx` | Motus Robot URDF + Base + Robotiq Tool (Load Mesh) + Start + Preview ShowStart |
 | `04_motion_program.ghx` | PTP + LIN + CIRC + SET → Motus Program → Preview / Export |
 | `05_serial_reach.ghx` | Motus Serial Chain → Motus Reach Samples (preview only, no Plan) |
-| `06_turntable_group.ghx` | Turntable+arm URDF: coupled Plan vs decoupled Plan (SRDF `arm` group) |
-| `07_urdf_gripper_tool.ghx` | URDF gripper as Motus Tool `Description` (actuated graft) |
+| `06_dkp_group.ghx` | UR10e beside 2-DOF DKP: AllDrivers coupled Plan vs arm Group (locks DKP) |
+| `07_urdf_gripper_tool.ghx` | Author Boxes→ULink→Tool Rd (Cap+Bd)→PTP Ramp; scrub fingers pinch |
 | `08_stewart_tcp_path.ghx` | Motus Stewart → Plan TCP path (leg lengths in meters) |
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 
@@ -93,7 +93,7 @@ Drag Number Slider `N` (4–12) on **09** to change leg count.
 ## SRDF / URDF assets
 
 - `examples/srdf/table_base.srdf` — **02** allowed pairs + groups
-- `examples/urdf/turntable_arm.urdf` + `examples/srdf/turntable_arm.srdf` — **06**
+- `resources/robots/ur10e_robotiq/ur10e_with_dkp.xacro` — **06** (UR prefab + simple DKP)
 - `examples/ur10e/` — run `node scripts/fetch-ur10e-assets.mjs` for meshes
 
 ## Editing

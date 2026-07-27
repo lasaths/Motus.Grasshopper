@@ -636,6 +636,59 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     Ok("ToolParameterBinding + TreeFK mimic moves finger tip from width");
 }
 
+// Example 07 logic: authored gripper Attach + Bd=j_left Binding + TreeDriverHome seed → finger moves
+{
+    var gripDesc = RobotDescription.Assemble(
+        "demo_gripper",
+        new[] { new UrdfLink("palm"), new UrdfLink("L"), new UrdfLink("R") },
+        new[]
+        {
+            new UrdfJoint("j_left", "revolute", "palm", "L", 0, 0.035, 0, 0, 0, 1, 0, 0.8),
+            new UrdfJoint("j_right", "revolute", "palm", "R", 0, -0.035, 0, 0, 0, 1, 0, 0.8,
+                mimicJoint: "j_left", mimicMultiplier: -1),
+        },
+        tipLink: "palm");
+    var armPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e_minimal.urdf"));
+    var armTree = UrdfRobotLoader.LoadTree(armPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0" });
+    var merged = armTree.Attach("tool0", gripDesc.ToKinematicTree(), "palm", Frame.Identity);
+    if (merged.DriverCount <= armTree.DriverCount)
+        Fail("Attach should add gripper driver(s)");
+    var toolHome = new double[merged.DriverCount]; // open seed (example 07 TreeDriverHome)
+    var qOpen = (double[])toolHome.Clone();
+    var qClosed = (double[])toolHome.Clone();
+    var names = new string[merged.DriverCount];
+    for (var i = 0; i < merged.DriverCount; i++)
+        names[i] = merged.Joints[merged.DriverJointIndices[i]].Name;
+    var bindings = new[]
+    {
+        new ToolDriverBinding(
+            Parameter: "width",
+            DriverJoint: "j_left",
+            OpenValue: ToolParameterBinding.Robotiq2F85OpenWidthMeters,
+            ClosedDriverValue: ToolParameterBinding.Robotiq2F85ClosedDriverRadians),
+    };
+    ToolParameterBinding.ApplyInto(
+        ToolCapabilities.Robotiq2F85,
+        new EndEffectorState(new Dictionary<string, double> { ["width"] = 0 }),
+        names,
+        qClosed,
+        bindings);
+    var fill = new double[merged.DriverCount];
+    var fillErr = Motus.GH.Rhino.KinematicsPreview.TryFillTreeDriverQ(
+        merged, new double[armTree.DriverCount], null, toolHome, fill);
+    if (fillErr is not null) Fail($"TreeDriverHome seed should fill drivers: {fillErr}");
+    var tipL = merged.IndexOfLink("L");
+    var gripFk = new TreeForwardKinematics(merged);
+    var mats = new double[merged.Links.Count][];
+    for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+    gripFk.ComputeLinkTransformsInto(qOpen, mats);
+    var yOpen = mats[tipL][7];
+    gripFk.ComputeLinkTransformsInto(qClosed, mats);
+    if (Math.Abs(mats[tipL][7] - yOpen) < 1e-3)
+        Fail("Example 07 Binding Bd=j_left should move finger L on close");
+    Ok("Example 07 authored gripper Attach + Binding closes finger");
+}
+
 // Motion program collision path (LIN segment validation)
 var linOnlyStart = new JointState(new[] { 0.0, -0.5, 1.0, -1.0, 0.0, 0.0 });
 var linOnlyPose = motionFk.ComputeTcp(linOnlyStart, urPreset.BaseFrame, urPreset.ToolFrame);
