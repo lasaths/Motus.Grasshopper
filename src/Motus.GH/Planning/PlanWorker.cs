@@ -38,6 +38,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public RobotCollisionModel? PreviewGeometry { get; private set; }
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
+    public MobilityModel.HolonomicSE2? MobilityGoal { get; private set; }
     public ToolDefinition? ToolSnapshot { get; private set; }
     public JointState? TreeDriverHome { get; private set; }
 
@@ -79,6 +80,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         PreviewGeometry = snap.PreviewGeometry;
         PreviewMeshColors = snap.PreviewMeshColors;
         BaseFrameOverride = snap.BaseFrameOverride;
+        MobilityGoal = snap.MobilityGoal;
         ToolSnapshot = snap.ToolSnapshot;
         TreeDriverHome = snap.TreeDriverHome;
         _inputsReady = true;
@@ -252,6 +254,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
             PreviewGeometry = PreviewGeometry ?? robot.CollisionModel,
             PreviewMeshColors = PreviewMeshColors,
             BaseFrameOverride = BaseFrameOverride,
+            MobilityGoal = MobilityGoal,
             ToolSnapshot = ToolSnapshot,
             ToolCapabilitiesSnapshot = ToolSnapshot?.Capabilities,
             DiagnosticsSnapshot = diagnostics,

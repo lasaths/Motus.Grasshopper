@@ -23,9 +23,9 @@ All components live under the **Motus** tab. The palette stays small: pick a rob
 
 `Motus Robot` loads any serial-chain URDF via `UrdfRobotLoader`. Optional `Base` overrides the robot base frame; optional `Tool` overrides the end-effector. Previews at home when the path resolves (UR10e heuristic or zeros).
 
-**Motus Stewart** builds a Stewart/Gough platform (`Family=stewart`) via Motus.NET classic hex geometry or a versioned JSON description (`schemaVersion=1`). Wire TCP plane goals into **Motus Plan** — IK yields six **leg lengths in meters**. Do **not** hand Stewart `Q` to UR MoveJ. See [ADR 0003](adr/0003-parallel-kinematics-stewart.md). Collision/RRT for Stewart is not implemented yet (stroke/ΔL path checks only). TCP planes use plate mapping (`FrameConversion.FromPlanePlate`) — Rhino Z is platform normal, not serial tool-approach.
+**Motus Stewart** builds a Stewart/Gough platform (`Family=stewart`) via Motus.NET classic hex geometry or a versioned JSON description (`schemaVersion=1`). Wire TCP plane goals into **Motus Plan** — IK yields six **leg lengths in meters**. Do **not** hand Stewart `Q` to UR MoveJ. See [ADR 0003](adr/0003-parallel-kinematics-stewart.md). Stewart TCP-LIN now passes the wired collision scene/checker into Motus.NET; collided LIN paths report collision, and when goal IK succeeds Plan can fall back to RRT in leg-length space (not a straight TCP platform path). TCP planes use plate mapping (`FrameConversion.FromPlanePlate`) — Rhino Z is platform normal, not serial tool-approach.
 
-**Motus Walking Hex** is a **separate** walking / mobile hexapod (6× coxa/femur/tibia), **not** `Family=stewart`. Preset uses **`Family=legged`**: joint `Q` is **radians**. Wire **Path** (curve) or **Planes** (≥2 origins, m) for a foot-target duty-cycle gait `Trajectory` (18-DOF + SE2 `BasePath`) → **Motus Preview** / Scrub — **not** Motus Plan. Optional **Terrain** (`Tn`: Mesh/Brep/Surface) plants feet via downward ray height; omit = flat Z=0. Without Path, Plan / Joint State use the **tip path of one leg** only (same contract as Joint Table); the other five legs are preview-only via `TreeDriverHome`. Core math lives in Motus.NET (`LeggedLayout` / `LeggedGait` / `LegIk3R`); GH is thin Curve/Planes/Terrain wiring + hex preview chrome. `Step` (m) sets gait cadence along the path. See [ADR 0004](adr/0004-legged-mobile-preview.md). Example: `09_walking_hexapod.ghx`.
+**Motus Walking Hex** is a **separate** walking / mobile hexapod (6× coxa/femur/tibia), **not** `Family=stewart`. Preset uses **`Family=legged`**: joint `Q` is **radians**. Wire **Path** (curve) or **Planes** (≥2 origins, m) for a foot-target duty-cycle gait `Trajectory` (18-DOF + SE2 `BasePath`) → **Motus Preview**, **Motus Export**, or **Motus Waypoints** (with family warnings) — **not** Motus Plan for the whole mechanism. WalkHex calls Motus.NET `LeggedGait.ValidateForPlan` as the gait plan gate: hard SSM / validation failures surface as component errors; provenance and soft warnings remain remarks. Optional **Terrain** (`Tn`: Mesh/Brep/Surface) plants feet via downward ray height; omit = flat Z=0. Without Path, Plan / Joint State use the **tip path of one leg** only (same contract as Joint Table); the other five legs are preview-only via `TreeDriverHome`. Core math lives in Motus.NET (`LeggedLayout` / `LeggedGait` / `LegIk3R`); GH is thin Curve/Planes/Terrain wiring + hex preview chrome. `Step` (m) sets gait cadence along the path. See [ADR 0004](adr/0004-legged-mobile-preview.md) and [motus-net/METHODS.md](motus-net/METHODS.md). Example: `09_walking_hexapod.ghx`.
 
 `Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates (legacy static tool — jaw-width squash allowed). Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
 
@@ -67,6 +67,8 @@ wire a driven gripper's actuated fingers through this Urdf authoring family; whe
 URDF/xacro load (**Motus Robot**), wiring the mechanism straight into **Motus Tool**'s `Description`
 pin is simpler and grafts onto the loaded tree directly (see above).
 
+`Motus Joint Table` `BaseSE2` stores a `HolonomicSE2` mobile-base goal and also uses the same pose as the preview/base-frame override. Joint goals with `BaseSE2` route through Motus.NET sampling with `PlanningOptions.Mobility`; without `BaseSE2`, Joint Table remains a fixed-base tip-path planner.
+
 `Motus Joint State` expects joint values in **URDF chain order** when the robot has `JointNames` metadata (bundled UR presets and URDF loads).
 
 `Motus TCP Pose` runs forward kinematics for a joint state and outputs the TCP as a **Plane** in the robot base frame. Wire it before **Motus Plan** or **Motus Move** (LIN/CIRC) when you have joint targets but need a Cartesian goal.
@@ -88,7 +90,7 @@ pin is simpler and grafts onto the loaded tree directly (see above).
 | Component | Notes |
 |-----------|-------|
 | Motus Plan (nick **Quick**) | Quick single/multi-goal planner. Plane = TCP LIN; joint = joint-linear or RRT with collision. Click **Plan**, or **Auto Plan** from the right-click menu. |
-| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [AGENTS.md](../AGENTS.md). |
+| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. `Step` is a config-space step: radians for serial/legged joints, meters for `Family=stewart` leg lengths. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [AGENTS.md](../AGENTS.md). |
 | Motus Move | One PTP/LIN/CIRC/SET/WAIT program line. Type (± ToolMode) are Arup-style on-component dropdowns; pins morph by type. |
 | Motus Program | Plan a Motus Move list via `IndustrialMotionPlanner` (click **Plan**; wire order = program order). |
 | Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
@@ -111,9 +113,9 @@ pin is simpler and grafts onto the loaded tree directly (see above).
 - `Group` applies `PlanningContext.ForGroup(...)` so non-group joints stay locked.
 - `Attach` applies `PlanningContext.Attach(...)` so grasped geometry participates in collision checks.
 - The planner is inferred from the inputs:
-  - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). If LIN fails on collision with a wired scene → IK goal + RRT (uses Motus RRT Settings when present). Other LIN failures still fall back to joint-linear when goal IK succeeds.
-  - `Goal` is joints + `Collision` wired → sampling planner via **Motus RRT Settings** → `Plan.RrtSettings` (default RRT-Connect).
-  - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (registry `ShortName`, e.g. `RrtConnect`; unavailable planners hidden), `GoalBias` (0–1), `Step` (rad). Ignored for plane goals and free-space joint goals.
+  - `Goal` is a plane → workspace check, goal IK, then Cartesian LIN (TCP straight line, IK per step, retimed duration in seconds). If LIN fails on collision with a wired scene → IK goal + RRT (uses Motus RRT Settings when present). Stewart plane goals pass collision options into Motus.NET and may RRT in leg-length meters after a collided LIN.
+  - `Goal` is joints + `Collision` wired, or Joint Table has `BaseSE2` mobility → sampling planner via **Motus RRT Settings** → `Plan.RrtSettings` (default RRT-Connect).
+  - Optional **Motus RRT Settings** → `RrtSettings`: `MaxIter` (default 4000), `TimeLimit` (s, 0 = none), `Planner` (registry `ShortName`, e.g. `RrtConnect`; unavailable planners hidden), `GoalBias` (0–1), `Step` (radians for serial/legged; meters for `Family=stewart`). Ignored for fixed-base free-space joint-linear plans.
   - `Goal` is joints, no collision → joint-linear plan.
 - Plane goal **Status** errors distinguish: outside reach, goal IK failed, or LIN path failed at intermediate poses.
 - Plane goals run a **workspace + IK reachability check on every solve** (no Plan click). Unreachable targets set Status/errors immediately and clear any cached trajectory.
@@ -213,7 +215,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 | Component | Output |
 |-----------|--------|
 | Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` (default GH plane fans on `P` hidden; path viz on Motus Preview) |
-| Motus Export | `Json` and `Csv` strings |
+| Motus Export | `Json` and `Csv` strings; warns for `Family=stewart` meters and `Family=legged` non-UR MoveJ handoff |
 | Motus Export URDF | `RobotDescription` (Assemble/Attach); Folder; optional Name — click **Write** → Motus.NET `UrdfWriter` |
 
 **Motus Waypoints** reshapes a planned trajectory for live controllers (e.g. UR Write). It does not connect to or command robots.
@@ -225,7 +227,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 
 Dense Motus paths executed as discrete MoveJ segments are stop-and-go; use Decimate to thin. Prefer `Q` → joint moves for planned path fidelity. Use `P` → linear TCP moves only for Cartesian-intent (LIN) paths — FK planes from joint-space / RRT trajectories are not a safe MoveL path (TCP re-interpolation can diverge). Warns when `AxisCount ≠ 6`. Controller handoff notes: [AGENTS.md](../AGENTS.md).
 
-JSON export includes `jointNames` when the robot model provides them. Point count is the length of `Times`; duration is the last `Times` value (native Grasshopper list ops).
+JSON export includes `jointNames` when the robot model provides them. Point count is the length of `Times`; duration is the last `Times` value (native Grasshopper list ops). `Retime` stays a boolean; optional `Retimer` selects `TotgLite` (default), `Totg`, `SegmentTrapezoid`, or `Bottleneck` when Motus.NET supports it. The algorithms and references are documented in [motus-net/METHODS.md](motus-net/METHODS.md) and [citation-audit.md](citation-audit.md).
 
 **Motus Export URDF** is a thin wrapper over Motus.NET `UrdfWriter.Write`: wire a
 `RobotDescription` from **Motus Urdf Assemble** / **Attach**, set Folder (+ optional Name), click
@@ -235,3 +237,7 @@ re-report the last path — no disk IO until Write.
 ## Units
 
 Joint inputs: **radians** by default. Right-click the **J** input on **Motus Joint State** and toggle **Degrees** for degree input (persisted in the `.gh`/`.ghx`). Planes and preview geometry use **meters**.
+
+## Algorithms & citations
+
+Planner/retimer/family methods and DOIs: [motus-net/METHODS.md](motus-net/METHODS.md), [citation-audit.md](citation-audit.md). Manual Rhino checks: [regression-matrix.md](regression-matrix.md).

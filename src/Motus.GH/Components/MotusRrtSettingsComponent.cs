@@ -42,7 +42,7 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
         p.AddNumberParameter("TimeLimit", "Lim", "Wall-clock cap in seconds (0 = off; planning stops at MaxIter)", GH_ParamAccess.item, 30);
         p.AddTextParameter("Planner", "P", "Sampling planner from registry", GH_ParamAccess.item, "RrtConnect");
         p.AddNumberParameter("GoalBias", "Gb", "Goal bias 0–1", GH_ParamAccess.item, 0.08);
-        p.AddNumberParameter("Step", "St", "Tree step size (rad)", GH_ParamAccess.item, 0.12);
+        p.AddNumberParameter("Step", "St", "Config step (radians for serial/legged; meters for Family=stewart)", GH_ParamAccess.item, 0.12);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>

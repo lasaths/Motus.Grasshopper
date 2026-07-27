@@ -40,8 +40,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Home", "Q", "Optional home q along tip path (Plan/Joint State order)", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
-        // ponytail: SE2 pose only — not mobile RRT
-        p.AddNumberParameter("BaseSE2", "SE2", "Optional base pose X, Y, Yaw(rad) — frame override only, not mobile planning", GH_ParamAccess.list);
+        p.AddNumberParameter("BaseSE2", "SE2", "Optional holonomic base goal X, Y, Yaw(rad) — also used as preview base frame", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -147,7 +146,11 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             };
 
             if (baseSe2.Count >= 3)
-                goo.BaseFrameOverride = new MobilityModel.HolonomicSE2(baseSe2[0], baseSe2[1], baseSe2[2]).BaseFrame;
+            {
+                var mobility = new MobilityModel.HolonomicSE2(baseSe2[0], baseSe2[1], baseSe2[2]);
+                goo.MobilityGoal = mobility;
+                goo.BaseFrameOverride = mobility.BaseFrame;
+            }
             else if (basePl.IsValid)
                 goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);
 

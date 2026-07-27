@@ -56,6 +56,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
+    public MobilityModel.HolonomicSE2? MobilityGoal { get; set; }
     public ToolDefinition? ToolSnapshot { get; set; }
     public ToolCapabilities? ToolCapabilitiesSnapshot { get; set; }
     public IReadOnlyList<PlanningMessage>? DiagnosticsSnapshot { get; set; }
@@ -75,7 +76,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
         // Tree required so Robotiq tip-descendant meshes pose via TreeFK (not stuck at base).
         return new RobotContext(
             model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame,
-            preview, PreviewMeshColors, Tree, Stewart, TreeDriverHome);
+            preview, PreviewMeshColors, Tree, Stewart, TreeDriverHome, MobilityGoal);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)

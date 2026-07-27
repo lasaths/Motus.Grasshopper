@@ -15,6 +15,7 @@ internal static class LeggedGaitRhino
 {
     public sealed record Result(
         Trajectory Trajectory,
+        NetLeggedGait.Result GaitResult,
         IReadOnlyList<Frame> BasePath,
         Curve PathCurve,
         IReadOnlyList<Plane> PathPlanes,
@@ -57,6 +58,7 @@ internal static class LeggedGaitRhino
 
         result = new Result(
             net.Trajectory,
+            net,
             net.BasePath,
             curve,
             planes,

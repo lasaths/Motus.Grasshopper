@@ -148,7 +148,7 @@ const MOTUS = {
       { name: 'Collision', nick: 'C', desc: 'Collision scene; joint goals use RRT; plane goals validate LIN against scene', optional: true, typeId: PTYPE.colScene },
       { name: 'Group', nick: 'Gr', desc: 'Optional planning group (locks non-group joints)', optional: true, typeId: PTYPE.generic },
       { name: 'Attach', nick: 'A', desc: 'Attached bodies for collision checks', optional: true, access: 1, typeId: PTYPE.generic },
-      { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision only)', optional: true, typeId: PTYPE.generic },
+      { name: 'RrtSettings', nick: 'Rrt', desc: 'Optional RRT tuning from Motus RRT Settings (joint goals + collision or mobility)', optional: true, typeId: PTYPE.generic },
     ],
     outputs: [
       { name: 'Trajectory', nick: 'Tr', desc: 'Planned trajectories → Motus Preview / Motus Waypoints (one per goal)', access: 1, typeId: PTYPE.trajectory },
@@ -168,11 +168,12 @@ const MOTUS = {
       { name: 'State', nick: 'Js', desc: 'Joint state at the current frame', typeId: PTYPE.jointState },
       { name: 'Time', nick: 'Tm', desc: 'Elapsed trajectory time at current frame (seconds)', typeId: PTYPE.number },
     ] },
-  export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 84,
+  export: { guid: '0a443b6f-605b-48e3-843c-cd0a709f8379', name: 'Motus Export', nick: 'Export', w: 74, h: 104,
     inputs: [
       { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory (list concatenates sequential goals)', optional: false, access: 1 },
-      { name: 'Retime', nick: 'R', desc: 'Apply bottleneck path retiming before export', optional: true, bool: true },
+      { name: 'Retime', nick: 'R', desc: 'Apply trajectory retiming before export', optional: true, bool: true },
       { name: 'Validate', nick: 'V', desc: 'Validate limits/velocity after retiming', optional: true, bool: false },
+      { name: 'Retimer', nick: 'Rt', desc: 'Retimer algorithm when Retime=true: TotgLite (default), Totg, SegmentTrapezoid, or Bottleneck', optional: true, text: 'TotgLite' },
     ],
     outputs: [
       { name: 'Json', nick: 'J', desc: 'Trajectory JSON' },
@@ -195,7 +196,7 @@ const MOTUS = {
       { name: 'TimeLimit', nick: 'Lim', desc: 'Wall-clock cap in seconds (0 = off)', optional: false, number: 30 },
       { name: 'Planner', nick: 'P', desc: 'Sampling planner from registry', optional: false, text: 'RrtConnect' },
       { name: 'GoalBias', nick: 'Gb', desc: 'Goal bias 0–1', optional: false, number: 0.08 },
-      { name: 'Step', nick: 'St', desc: 'Tree step size (rad)', optional: false, number: 0.12 },
+      { name: 'Step', nick: 'St', desc: 'Config step (radians for serial/legged; meters for Family=stewart)', optional: false, number: 0.12 },
     ],
     outputs: [{ name: 'Settings', nick: 'Rrt', desc: 'Sampling planner settings for Motus Plan' }] },
   colSphere: { guid: 'c1a2b3c4-d5e6-4789-a012-3456789abcde', name: 'Motus Collision Sphere', nick: 'ColSph', w: 74, h: 64,
@@ -330,7 +331,7 @@ const MOTUS = {
       { name: 'Tip', nick: 'Tip', desc: 'Tip link for Plan/serial chain (default: last Child)', optional: true, text: '' },
       { name: 'Base', nick: 'B', desc: 'Optional base frame', optional: true, plane: true },
       { name: 'Home', nick: 'Q', desc: 'Optional home q along tip path', optional: true, list: true, access: 1 },
-      { name: 'BaseSE2', nick: 'SE2', desc: 'Optional base pose X, Y, Yaw(rad) — frame only, not mobile planning', optional: true, list: true, access: 1 },
+      { name: 'BaseSE2', nick: 'SE2', desc: 'Optional holonomic base goal X, Y, Yaw(rad) — also used as preview base frame', optional: true, list: true, access: 1 },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model (same as Motus Robot)' }],
   },
@@ -349,7 +350,7 @@ const MOTUS = {
   },
   walkHex: {
     guid: 'b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', name: 'Motus Walking Hex', nick: 'WalkHex', w: 80, h: 320,
-    desc: 'Walking hexapod 6×coxa/femur/tibia — NOT Stewart',
+    desc: 'Walking hexapod 6×coxa/femur/tibia — gait Tr for Preview/Export/Waypoints; ValidateForPlan gate; NOT Stewart',
     inputs: [
       { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.06 },
       { name: 'Coxa', nick: 'Cx', desc: 'Coxa length (m)', optional: true, number: 0.035 },
@@ -537,16 +538,19 @@ function paramInput(def, index, px, py, compW, sources, persistent) {
                           </items>
                         </chunk>`);
   }
+  const itemLines = [
+    access,
+    item('Description', 'gh_string', '10', esc(def.desc ?? def.name)),
+    item('InstanceGuid', 'gh_guid', '9', def._guid),
+    item('Name', 'gh_string', '10', def.name),
+    item('NickName', 'gh_string', '10', def.nick ?? def.name),
+    optional,
+    srcItems,
+    item('SourceCount', 'gh_int32', '3', String(count)),
+  ].filter(Boolean).join('\n');
   return `<chunk name="param_input" index="${index}">
                       <items count="${6 + count + (access ? 1 : 0)}">
-                        ${access}
-                        ${item('Description', 'gh_string', '10', esc(def.desc ?? def.name))}
-                        ${item('InstanceGuid', 'gh_guid', '9', def._guid)}
-                        ${item('Name', 'gh_string', '10', def.name)}
-                        ${item('NickName', 'gh_string', '10', def.nick ?? def.name)}
-                        ${optional}
-                        ${srcItems}
-                        ${item('SourceCount', 'gh_int32', '3', String(count))}
+${itemLines}
                       </items>
                       <chunks count="${chunks.length}">
                         ${chunks.join('\n                        ')}

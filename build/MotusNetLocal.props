@@ -5,9 +5,13 @@
     ProjectReferences that are outside Motus.Grasshopper.slnx.
   -->
   <PropertyGroup>
-    <MotusNetSiblingRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Motus.NET\'))</MotusNetSiblingRoot>
+    <!-- Sibling ../../Motus.NET (CI/desktop) or in-repo Motus.NET/ (cloud agent). -->
+    <MotusNetSiblingCandidateA>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Motus.NET\'))</MotusNetSiblingCandidateA>
+    <MotusNetSiblingCandidateB>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Motus.NET\'))</MotusNetSiblingCandidateB>
+    <MotusNetSiblingRoot Condition="Exists('$(MotusNetSiblingCandidateA)src\Motus.Core\Motus.Core.csproj')">$(MotusNetSiblingCandidateA)</MotusNetSiblingRoot>
+    <MotusNetSiblingRoot Condition="'$(MotusNetSiblingRoot)' == ''">$(MotusNetSiblingCandidateB)</MotusNetSiblingRoot>
     <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == ''">false</UseMotusNetProjectReference>
-    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.9.1-local</MotusNetVersion>
+    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.12.0-local</MotusNetVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">

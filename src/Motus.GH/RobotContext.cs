@@ -17,6 +17,7 @@ public readonly struct RobotContext
     public KinematicTree? Tree { get; }
     public StewartPlatform? Stewart { get; }
     public JointState? TreeDriverHome { get; }
+    public MobilityModel.HolonomicSE2? MobilityGoal { get; }
 
     public RobotContext(
         RobotModel model,
@@ -28,7 +29,8 @@ public readonly struct RobotContext
         Color?[]? previewMeshColors = null,
         KinematicTree? tree = null,
         StewartPlatform? stewart = null,
-        JointState? treeDriverHome = null)
+        JointState? treeDriverHome = null,
+        MobilityModel.HolonomicSE2? mobilityGoal = null)
     {
         Model = model;
         EffectiveModel = effectiveModel;
@@ -40,6 +42,7 @@ public readonly struct RobotContext
         Tree = tree;
         Stewart = stewart;
         TreeDriverHome = treeDriverHome;
+        MobilityGoal = mobilityGoal;
     }
 
     public bool IsStewart =>
@@ -60,6 +63,7 @@ public readonly struct RobotContext
             goo.PreviewMeshColors,
             goo.Tree,
             goo.Stewart,
-            goo.TreeDriverHome);
+            goo.TreeDriverHome,
+            goo.MobilityGoal);
     }
 }

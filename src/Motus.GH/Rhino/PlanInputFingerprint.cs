@@ -23,7 +23,8 @@ public static class PlanInputFingerprint
         double rrtMaxPlanTimeSeconds = 0,
         double rrtGoalBias = 0.08,
         double rrtStepRadians = 0.12,
-        long? treeFingerprint = null)
+        long? treeFingerprint = null,
+        MobilityModel.HolonomicSE2? mobilityGoal = null)
     {
         var sb = new StringBuilder(512);
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
@@ -34,6 +35,14 @@ public static class PlanInputFingerprint
             .Append(rrtGoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
             .Append(rrtStepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         AppendFrame(sb, "base", baseFrameOverride);
+        if (mobilityGoal is not null)
+        {
+            sb.Append("mobility:se2:")
+                .Append(mobilityGoal.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(mobilityGoal.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(mobilityGoal.Z.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(mobilityGoal.YawRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        }
         if (treeFingerprint is { } tfp)
             sb.Append("tree:").Append(tfp).Append('|');
         if (toolOverride is not null)
