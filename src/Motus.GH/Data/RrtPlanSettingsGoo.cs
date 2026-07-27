@@ -19,7 +19,7 @@ public sealed class RrtPlanSettingsGoo : GH_Goo<RrtPlanSettings>
 
     public override string TypeName => "RRT Settings";
 
-    public override string TypeDescription => "Motus RRT planner tuning for joint goals with collision";
+    public override string TypeDescription => "Motus RRT planner tuning for joint goals with collision or mobility";
 
     public override IGH_Goo Duplicate() => new RrtPlanSettingsGoo(m_value);
 
@@ -43,6 +43,6 @@ public sealed class RrtPlanSettingsGoo : GH_Goo<RrtPlanSettings>
         var time = m_value.MaxPlanTimeSeconds > 0
             ? $", {m_value.MaxPlanTimeSeconds.ToString("F1", CultureInfo.InvariantCulture)}s limit"
             : string.Empty;
-        return $"{m_value.PlannerLabel} · {m_value.MaxIterations} iter · step {m_value.StepRadians:F2} rad{time}";
+        return $"{m_value.PlannerLabel} · {m_value.MaxIterations} iter · step {m_value.StepRadians:F2} coord{time}";
     }
 }

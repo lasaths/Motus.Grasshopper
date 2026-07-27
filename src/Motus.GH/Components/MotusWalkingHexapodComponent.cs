@@ -41,7 +41,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         : base(
             "Motus Walking Hex",
             "WalkHex",
-            "Walking hexapod (6× coxa/femur/tibia, Family=legged). Wire Path → foot-target IK gait Trajectory → Preview (no Motus Plan). Tip-path Plan = one leg only.",
+            "Walking hexapod (6× coxa/femur/tibia, Family=legged). Path builds gait Tr for Preview/Export/Waypoints; Motus.NET ValidateForPlan is the gait plan gate. Tip-path Plan = one leg only.",
             "polygon")
     {
     }
@@ -262,7 +262,23 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     return;
                 }
 
-                trajGoo = new TrajectoryGoo(gait!.Trajectory)
+                var validation = LeggedGait.ValidateForPlan(gait!.GaitResult);
+                if (!validation.Success)
+                {
+                    ClearPreview();
+                    _previewColors = [];
+                    _previewContactCircles = [];
+                    AddRuntimeMessage(
+                        GH_RuntimeMessageLevel.Error,
+                        validation.Errors.Count > 0
+                            ? string.Join("; ", validation.Errors)
+                            : "LeggedGait.ValidateForPlan failed.");
+                    return;
+                }
+                foreach (var warning in validation.Warnings)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, warning);
+
+                trajGoo = new TrajectoryGoo(gait.Trajectory)
                 {
                     Tree = tree,
                     PreviewGeometry = goo.PreviewGeometry,

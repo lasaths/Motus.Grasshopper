@@ -649,9 +649,11 @@ public sealed class MotusExportComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
-        p.AddBooleanParameter("Retime", "R", "Apply bottleneck path retiming before export", GH_ParamAccess.item, true);
+        p.AddBooleanParameter("Retime", "R", "Apply trajectory retiming before export", GH_ParamAccess.item, true);
         p[p.ParamCount - 1].Optional = true;
         p.AddBooleanParameter("Validate", "V", "Validate limits/velocity after retiming", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Retimer", "Rt", "Retimer algorithm when Retime=true: TotgLite (default), Totg, SegmentTrapezoid, or Bottleneck", GH_ParamAccess.item, "TotgLite");
         p[p.ParamCount - 1].Optional = true;
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -668,13 +670,24 @@ public sealed class MotusExportComponent : MotusComponentBase
         var ctx = trajGoo.Context();
         var retime = true;
         var validate = false;
+        var retimerText = "TotgLite";
         da.GetData(1, ref retime);
         da.GetData(2, ref validate);
+        da.GetData(3, ref retimerText);
+        if (!TryParseRetimer(retimerText, out var retimerAlgorithm))
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Unknown Retimer '{retimerText}'. Use TotgLite, Totg, SegmentTrapezoid, or Bottleneck.");
+            return;
+        }
+
+        AddExportFamilyWarnings(t, ctx);
 
         var result = TrajectoryExport.Export(t, new TrajectoryExportOptions
         {
             Retime = retime,
             Validate = validate,
+            Retimer = retime ? new TrajectoryRetimerOptions { Algorithm = retimerAlgorithm } : null,
             SessionToolFrame = ctx.Tool,
             ToolCapabilities = trajGoo.ToolCapabilitiesSnapshot,
             Diagnostics = trajGoo.DiagnosticsSnapshot,
@@ -689,5 +702,42 @@ public sealed class MotusExportComponent : MotusComponentBase
                 : string.Join("; ", result.Validation.Errors));
         }
     }
+
+    private void AddExportFamilyWarnings(Trajectory trajectory, RobotContext ctx)
+    {
+        var axisCount = trajectory.Robot.Preset.AxisCount;
+        var stewart = Units.IsStewart(trajectory.Robot.Preset) || ctx.Stewart is not null;
+        var legged = Units.IsLegged(trajectory.Robot.Preset);
+        var treeDrivers = ctx.Tree?.DriverCount ?? 0;
+        var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
+        if (stewart)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "Family=stewart export: joint coordinates are leg lengths in meters — do not wire CSV/JSON Q values to UR MoveJ (radians).");
+        }
+        else if (legged)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                tipPathOnly && treeDrivers > axisCount
+                    ? $"Family=legged tip-path export: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
+                    : "Family=legged export: Q values are joint angles in radians — not Stewart meters and not a UR MoveJ handoff for the whole mechanism.");
+        }
+    }
+
+    private static bool TryParseRetimer(string text, out RetimerAlgorithm algorithm)
+    {
+        text = string.IsNullOrWhiteSpace(text) ? "TotgLite" : text.Trim();
+        if (Enum.TryParse(text, ignoreCase: true, out algorithm))
+            return true;
+        if (string.Equals(text.Replace("-", "", StringComparison.Ordinal), "TotgLite", StringComparison.OrdinalIgnoreCase))
+        {
+            algorithm = RetimerAlgorithm.TotgLite;
+            return true;
+        }
+        return false;
+    }
+
     public override Guid ComponentGuid => new Guid("0a443b6f-605b-48e3-843c-cd0a709f8379");
 }

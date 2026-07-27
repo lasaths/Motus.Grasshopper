@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.11.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For local Motus.NET work: sibling `../Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)). CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.12.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|
@@ -49,6 +49,8 @@ Pinned **0.11.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.pr
 | `Motus.Native` / `Motus.OMPL.Native` | Optional OMPL/FCL P/Invoke |
 
 Managed (no full native): JointLinear, Cartesian LIN, IndustrialMotion, managed RRT-Connect, C# collision. Stub/NuGet builds often show **only `RrtConnect`** in Motus RRT Settings — expected. Extra sampling planners need Motus.NET native full build. Check Plan `Warnings` → `MotusCapabilities.Describe()`.
+
+Algorithm references and DOI traceability live in Motus.NET [`docs/METHODS.md`](Motus.NET/docs/METHODS.md) (Stewart, legged gait/SSM, mobility, retiming, sampling planners).
 
 ## Safety / Plan gate
 

@@ -1,6 +1,6 @@
 # Motus.Grasshopper
 
-Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NET): plan robot motion, preview FK, export trajectories.
+Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NET): thin UI wiring for robot motion planning, FK preview, and trajectory export. Kinematics, planners, collision, retiming, and method provenance live in Motus.NET.
 
 Planning and preview only — no live robot control. Licensed under [MIT](LICENSE).
 
@@ -9,9 +9,9 @@ Planning and preview only — no live robot control. Licensed under [MIT](LICENS
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — built against RhinoCommon/Grasshopper `8.19.25132.1001` for SR compatibility
 - .NET 8 SDK
 
-Pins **Motus.NET 0.7.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). If `../Motus.NET` is a sibling checkout, the build switches to project references automatically (`build/MotusNetLocal.props`).
+Pins **Motus.NET 0.12.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). Until 0.12.0 is published, build with local project references: `dotnet build src/Motus.GH/Motus.GH.csproj -p:UseMotusNetProjectReference=true` (or `./build.ps1 -UseLocal`) using a sibling or in-repo `Motus.NET` checkout resolved by `build/MotusNetLocal.props`.
 
-What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [AGENTS.md](AGENTS.md).
+What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [AGENTS.md](AGENTS.md). Algorithm references live in Motus.NET `docs/METHODS.md`.
 
 ## Install from source
 
@@ -45,7 +45,7 @@ Verify: `./scripts/verify-install.ps1` (Windows).
 | `RhinoCommonPackageVersion` | NuGet floor for RhinoCommon/Grasshopper (default `8.19.25132.1001`) |
 | `Rhino8Dir` | Windows Rhino 8 install (launch / path hints) |
 | `Rhino8App` | macOS Rhino 8 `.app` path |
-| `MotusNetVersion` | Override NuGet pin (default `0.9.1`). Until that package is on nuget.org, use `./build.ps1 -UseLocal` (CI checkouts sibling Motus.NET the same way). |
+| `MotusNetVersion` | Override NuGet pin (default `0.12.0`). Until that package is on nuget.org, use `./build.ps1 -UseLocal` / `-p:UseMotusNetProjectReference=true` (CI checkouts sibling Motus.NET the same way). |
 
 ## First plan (3 components)
 
@@ -67,7 +67,7 @@ Robot ──► Plan [Plan] ──► Preview [Play]
 
 1. **ColSphere** / **ColBox** / **ColMesh** → **ColScene**
 2. Wire `ColScene` → **Plan** `Collision` (right-click Plan → **Show Collision** if the pin is hidden)
-   - **Plane goal** → TCP LIN + collision validate (no obstacle avoidance)
+   - **Plane goal** → TCP LIN + collision validate; on collision failure, Plan may fall back to joint/leg-length RRT when an IK goal is available
    - **Joint goal** → sampling planner (RRT-Connect by default); tune with **Motus RRT Settings**
 
 Prefer **ColMesh → ColScene → Plan** over wiring raw Mesh/Brep into Plan. Dense meshes (&gt;20k tris) warn at ColMesh — decimate or use primitives for speed.

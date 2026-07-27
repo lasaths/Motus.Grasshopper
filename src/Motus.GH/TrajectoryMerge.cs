@@ -118,6 +118,7 @@ internal static class TrajectoryMerge
             PreviewGeometry = first.PreviewGeometry,
             PreviewMeshColors = first.PreviewMeshColors,
             BaseFrameOverride = first.BaseFrameOverride,
+            MobilityGoal = first.MobilityGoal,
             ToolSnapshot = first.ToolSnapshot,
             ToolCapabilitiesSnapshot = first.ToolCapabilitiesSnapshot,
             DiagnosticsSnapshot = first.DiagnosticsSnapshot,

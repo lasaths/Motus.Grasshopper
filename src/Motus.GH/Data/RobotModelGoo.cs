@@ -17,6 +17,8 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
+    /// <summary>Optional mobile-base goal for sampling planners; BaseFrameOverride remains the static preview frame.</summary>
+    public MobilityModel.HolonomicSE2? MobilityGoal { get; set; }
     public ToolDefinition? Tool { get; set; }
     public string? UrdfSourcePath { get; set; }
     /// <summary>Optional home for on-component preview (Serial Chain Q).</summary>

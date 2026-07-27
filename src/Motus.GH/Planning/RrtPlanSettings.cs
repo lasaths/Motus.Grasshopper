@@ -91,7 +91,7 @@ public readonly record struct RrtPlanSettings(
         {
             if (stepRadians <= 0)
             {
-                error = "RrtStep must be positive (radians).";
+                error = "RrtStep must be positive (radians for serial/legged; meters for Family=stewart).";
                 return false;
             }
 

@@ -7,6 +7,7 @@ using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 
 namespace Motus.GH.Planning;
 
@@ -30,6 +31,7 @@ internal sealed class PlanInputSnapshot
     public RobotCollisionModel? PreviewGeometry { get; init; }
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
+    public MobilityModel.HolonomicSE2? MobilityGoal { get; init; }
     public ToolDefinition? ToolSnapshot { get; init; }
     public JointState? TreeDriverHome { get; init; }
 
@@ -91,7 +93,8 @@ internal sealed class PlanInputSnapshot
             collisionParse.Scene);
 
         var rrtSettings = GhExtract.ResolveRrtSettings(da, rrtIdx, owner);
-        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(goals, planningContext);
+        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(goals, planningContext)
+            || (context.MobilityGoal is not null && goals.Any(g => g.joints is not null));
         var fingerprintRrt = needsSampling ? rrtSettings : RrtPlanSettings.Defaults;
         var fingerprint = PlanInputFingerprint.Compute(
             context.Model,
@@ -106,7 +109,8 @@ internal sealed class PlanInputSnapshot
             fingerprintRrt.MaxPlanTimeSeconds,
             fingerprintRrt.GoalBias,
             fingerprintRrt.StepRadians,
-            robotGoo.Tree?.Fingerprint);
+            robotGoo.Tree?.Fingerprint,
+            robotGoo.MobilityGoal);
 
         snapshot = new PlanInputSnapshot
         {
@@ -126,6 +130,7 @@ internal sealed class PlanInputSnapshot
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,
+            MobilityGoal = robotGoo.MobilityGoal,
             ToolSnapshot = robotGoo.Tool,
             TreeDriverHome = robotGoo.TreeDriverHome
         };

@@ -98,15 +98,16 @@ internal static class PlanExecutor
             }
             else
             {
+                var useSampling = needsCollision || request.Context.MobilityGoal is not null;
                 result = goal.plane is { } plane
                     ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress, sharedChecker)
-                    : needsCollision
+                    : useSampling
                         ? PlanRrt(request, currentStart, goal.joints!, cancellationToken, goalProgress, sharedChecker)
                         : new JointLinearPlanner().Plan(new PlanningRequest(
                             session,
                             currentStart,
                             goal.joints!,
-                            request.PlanningContext.ToPlanningOptions(new PlanningOptions { MaxJointStepRadians = MaxJointStep })));
+                            BuildPlanningOptions(request, MaxJointStep, checker: null)));
             }
             if (timings is not null)
                 timings.PlannerMs += plannerSw.ElapsedMilliseconds;
@@ -178,7 +179,7 @@ internal static class PlanExecutor
         if (ctx.IsStewart || Units.IsStewart(session.Preset))
         {
             var stewartGoal = new CartesianPose(FrameConversion.FromPlanePlate(plane));
-            return PlanStewartLin(request, start, stewartGoal, cancellationToken, goalProgress);
+            return PlanStewartLin(request, start, stewartGoal, cancellationToken, goalProgress, sharedChecker);
         }
 
         var goal = new CartesianPose(FrameConversion.FromPlane(plane));
@@ -296,7 +297,8 @@ internal static class PlanExecutor
         JointState start,
         CartesianPose goal,
         CancellationToken cancellationToken,
-        Action<double>? goalProgress)
+        Action<double>? goalProgress,
+        ICollisionChecker? sharedChecker)
     {
         var ctx = request.Context;
         if (ctx.Stewart is null)
@@ -323,20 +325,50 @@ internal static class PlanExecutor
         }
 
         goalProgress?.Invoke(0.4);
+        var hasCollision = PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
+            || request.PlanningContext.Attached.Count > 0;
+        var checker = sharedChecker ?? (hasCollision ? new StewartCollisionChecker(ctx.Stewart) : null);
+        var opts = BuildPlanningOptions(
+            request,
+            request.RrtSettings.StepRadians > 0 ? request.RrtSettings.StepRadians : MaxJointStep,
+            checker);
         var planner = new StewartCartesianPathPlanner(ctx.Stewart);
-        var result = planner.PlanToResult(startPose, goal, start, request.LinStepMeters);
+        var result = planner.PlanToResult(
+            startPose,
+            goal,
+            start,
+            request.LinStepMeters,
+            planningOptions: opts);
         if (!result.Success)
+        {
+            if (hasCollision && IsCollisionFailure(result))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return PlanningResult.Failed(["Planning cancelled."]);
+
+                var goalIk = new StewartInverseKinematics(ctx.Stewart).TrySolveDetailed(goal);
+                if (goalIk.Success && goalIk.JointState is not null)
+                {
+                    goalProgress?.Invoke(0.55);
+                    var rrt = PlanRrt(request, start, goalIk.JointState, cancellationToken, goalProgress, checker);
+                    if (rrt.Success && rrt.Trajectory is not null)
+                    {
+                        var rrtWarnings = rrt.Warnings.ToList();
+                        rrtWarnings.Add("Stewart TCP-LIN collided; used RRT in leg-length space instead (not a straight TCP platform path).");
+                        AddStewartMoveJWarning(rrtWarnings);
+                        return PlanningResult.Succeeded(rrt.Trajectory, rrtWarnings);
+                    }
+
+                    return rrt;
+                }
+            }
+
             return result;
+        }
 
         goalProgress?.Invoke(1.0);
         var warnings = result.Warnings.ToList();
-        warnings.Add("Stewart TCP-LIN: JointState = leg lengths (meters). Not UR MoveJ radians.");
-        if (PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
-            || request.PlanningContext.Attached.Count > 0
-            || request.CollisionInputWired)
-        {
-            warnings.Add("Stewart collision/RRT is not implemented yet — path is stroke/ΔL checked only.");
-        }
+        AddStewartMoveJWarning(warnings);
         return PlanningResult.Succeeded(result.Trajectory!, warnings);
     }
 
@@ -351,29 +383,57 @@ internal static class PlanExecutor
         var ctx = request.Context;
         var planningContext = request.PlanningContext;
         var session = ctx.EffectiveModel;
-        var checker = sharedChecker ?? GhExtract.TryCollisionChecker(
-            session,
-            ctx.Chain,
-            planningContext.Scene,
-            planningContext.Attached);
-        if (checker is null)
+        var hasCollision = PlanningCollision.SceneHasObstacles(planningContext.Scene)
+            || planningContext.Attached.Count > 0;
+        var planningRobot = ctx.MobilityGoal is not null ? ctx.Model : session;
+        var checker = sharedChecker
+            ?? (ctx.Stewart is not null && hasCollision
+                ? new StewartCollisionChecker(ctx.Stewart)
+                : GhExtract.TryCollisionChecker(
+                    planningRobot,
+                    ctx.Chain,
+                    planningContext.Scene,
+                    planningContext.Attached));
+        if (hasCollision && checker is null)
             return PlanningResult.Failed(new[] { "No collision checker available for this robot model." });
 
         var opts = request.RrtSettings.ToOptions(cancellationToken, goalProgress);
 
         var req = new PlanningRequest(
-            session,
+            planningRobot,
             start,
             goal,
-            planningContext.ToPlanningOptions(new PlanningOptions
-            {
-                CollisionScene = planningContext.Scene,
-                CollisionChecker = checker
-            }));
+            BuildPlanningOptions(request, request.RrtSettings.StepRadians, checker));
 
-        var result = SamplingPlanner.Create(checker, opts).Plan(req);
+        var planner = checker is not null
+            ? SamplingPlanner.Create(checker, opts)
+            : new SamplingPlanner(planningRobot.Preset, ctx.Chain, opts);
+        var result = planner.Plan(req);
         if (result.Success)
             goalProgress?.Invoke(1.0);
         return result;
+    }
+
+    private static PlanningOptions BuildPlanningOptions(
+        PlanRequest request,
+        double maxStep,
+        ICollisionChecker? checker) =>
+        request.PlanningContext.ToPlanningOptions(new PlanningOptions
+        {
+            MaxJointStepRadians = maxStep,
+            CollisionScene = request.PlanningContext.Scene,
+            CollisionChecker = checker,
+            Mobility = request.Context.MobilityGoal
+        });
+
+    private static bool IsCollisionFailure(PlanningResult result) =>
+        result.Errors.Any(e => e.Contains("collision", StringComparison.OrdinalIgnoreCase)) ||
+        result.Messages.Any(m => m.Code.Contains("collision", StringComparison.OrdinalIgnoreCase));
+
+    private static void AddStewartMoveJWarning(List<string> warnings)
+    {
+        const string warning = "Stewart TCP-LIN: JointState = leg lengths (meters). Not UR MoveJ radians.";
+        if (!warnings.Any(w => string.Equals(w, warning, StringComparison.Ordinal)))
+            warnings.Add(warning);
     }
 }
