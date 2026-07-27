@@ -27,17 +27,6 @@ jobs:
           path: Motus.NET
           ref: master
 
-      - name: Apply Motus.NET 0.12 patch series
-        shell: bash
-        run: |
-          patch_dir="$PWD/patches/motus-net-0.12.0"
-          git -C ../Motus.NET config user.name "github-actions"
-          git -C ../Motus.NET config user.email "github-actions@users.noreply.github.com"
-          for p in "$patch_dir"/*.patch; do
-            echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
-          done
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -59,17 +48,6 @@ jobs:
           path: Motus.NET
           ref: master
 
-      - name: Apply Motus.NET 0.12 patch series
-        shell: bash
-        run: |
-          patch_dir="$PWD/patches/motus-net-0.12.0"
-          git -C ../Motus.NET config user.name "github-actions"
-          git -C ../Motus.NET config user.email "github-actions@users.noreply.github.com"
-          for p in "$patch_dir"/*.patch; do
-            echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
-          done
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -90,17 +68,6 @@ jobs:
           repository: lasaths/Motus.NET
           path: Motus.NET
           ref: master
-
-      - name: Apply Motus.NET 0.12 patch series
-        shell: bash
-        run: |
-          patch_dir="$PWD/patches/motus-net-0.12.0"
-          git -C ../Motus.NET config user.name "github-actions"
-          git -C ../Motus.NET config user.email "github-actions@users.noreply.github.com"
-          for p in "$patch_dir"/*.patch; do
-            echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
-          done
 
       - uses: actions/setup-dotnet@v4
         with:
