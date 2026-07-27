@@ -30,9 +30,10 @@ jobs:
       - name: Apply Motus.NET 0.12 patch series
         shell: bash
         run: |
-          for p in patches/motus-net-0.12.0/*.patch; do
+          patch_dir="$PWD/patches/motus-net-0.12.0"
+          for p in "$patch_dir"/*.patch; do
             echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
+            git -C ../Motus.NET apply --3way "$p"
           done
 
       - uses: actions/setup-dotnet@v4
@@ -59,9 +60,10 @@ jobs:
       - name: Apply Motus.NET 0.12 patch series
         shell: bash
         run: |
-          for p in patches/motus-net-0.12.0/*.patch; do
+          patch_dir="$PWD/patches/motus-net-0.12.0"
+          for p in "$patch_dir"/*.patch; do
             echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
+            git -C ../Motus.NET apply --3way "$p"
           done
 
       - uses: actions/setup-dotnet@v4
@@ -88,9 +90,10 @@ jobs:
       - name: Apply Motus.NET 0.12 patch series
         shell: bash
         run: |
-          for p in patches/motus-net-0.12.0/*.patch; do
+          patch_dir="$PWD/patches/motus-net-0.12.0"
+          for p in "$patch_dir"/*.patch; do
             echo "Applying $p"
-            git -C ../Motus.NET am --3way "$p"
+            git -C ../Motus.NET apply --3way "$p"
           done
 
       - uses: actions/setup-dotnet@v4
