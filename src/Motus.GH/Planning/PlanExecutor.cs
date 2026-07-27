@@ -317,18 +317,15 @@ internal static class PlanExecutor
             return PlanningResult.Failed(["Planning cancelled."]);
 
         goalProgress?.Invoke(0.2);
+        var mid = 0.5 * (ctx.Stewart.StrokeLimits[0].Min + ctx.Stewart.StrokeLimits[0].Max);
+        var midSeed = new CartesianPose(new Frame(0, 0, mid));
         var fk = new StewartForwardKinematics(ctx.Stewart);
-        var startFk = fk.TrySolve(start);
-        CartesianPose startPose;
-        if (startFk.Success && startFk.Pose is not null)
-        {
-            startPose = startFk.Pose;
-        }
-        else
-        {
-            // Fall back: re-IK mid-stroke home as start pose if FK diverges.
+        // Mid-stroke seed: HomeLengths residual≈0 (example 08). Unseeded avg-L guess + Motus.NET
+        // ≤0.13 FD condition gate false-singular'd at iteration 0.
+        var startFk = fk.TrySolve(start, midSeed);
+        if (!startFk.Success || startFk.Pose is null)
             return PlanningResult.Failed([$"Stewart start FK failed: {startFk}"]);
-        }
+        var startPose = startFk.Pose;
 
         goalProgress?.Invoke(0.4);
         var hasCollision = PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)

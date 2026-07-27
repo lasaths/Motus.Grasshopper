@@ -37,5 +37,6 @@ ADR 0002 keeps `KinematicTree` / `RobotDescription` as **open trees** (no closed
 
 - ADR 0002 tree ownership unchanged for serial/branched tools; planners may use Stewart APIs when `Family=stewart`.
 - Motus.Grasshopper Plan/Preview/Waypoints dispatch on `Family`.
+- GH may author base/platform anchors as Rhino point lists on Motus Stewart; Motus.NET still owns `StewartPlatform` validation and solvers.
 - Export JSON/CSV must label Stewart joints as meters, not radians.
 - Package bump required before NuGet-consuming GH builds; develop with `./build.ps1 -UseLocal`.

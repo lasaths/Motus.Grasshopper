@@ -336,15 +336,18 @@ const MOTUS = {
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model (same as Motus Robot)' }],
   },
   stewart: {
-    guid: 'a9e1c3f0-7b2d-4e8a-9c1f-6d4b2a0e8f73', name: 'Motus Stewart', nick: 'Stewart', w: 74, h: 124,
+    guid: 'a9e1c3f0-7b2d-4e8a-9c1f-6d4b2a0e8f73', name: 'Motus Stewart', nick: 'Stewart', w: 80, h: 160,
     desc: 'Stewart/Gough hexapod (Family=stewart; Q = leg lengths in meters)',
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Optional Stewart JSON (schemaVersion=1)', optional: true, text: '' },
-      { name: 'BaseRadius', nick: 'Br', desc: 'Classic base anchor radius (m)', optional: true, number: 0.5 },
-      { name: 'PlatformRadius', nick: 'Pr', desc: 'Classic platform anchor radius (m)', optional: true, number: 0.3 },
+      { name: 'Base', nick: 'Base', desc: 'Optional 6 base anchor points (m)', optional: true, access: 1 },
+      { name: 'Plat', nick: 'Plat', desc: 'Optional 6 platform anchor points (m)', optional: true, access: 1 },
+      { name: 'BaseRadius', nick: 'Br', desc: 'Classic base radius (m) when Base/Plat unwired', optional: true, number: 0.5 },
+      { name: 'PlatformRadius', nick: 'Pr', desc: 'Classic platform radius (m) when Base/Plat unwired', optional: true, number: 0.3 },
       { name: 'MinStroke', nick: 'Lmin', desc: 'Min leg length (m)', optional: true, number: 0.35 },
       { name: 'MaxStroke', nick: 'Lmax', desc: 'Max leg length (m)', optional: true, number: 0.90 },
       { name: 'Name', nick: 'N', desc: 'Model name', optional: true, text: 'stewart_classic' },
+      { name: 'PairSep', nick: 'Sep', desc: 'Classic pair angular separation (rad)', optional: true, number: 0.15 },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Stewart robot (Family=stewart)' }],
   },
@@ -861,10 +864,14 @@ function motusComponent(key, x, y, wireMap, options = {}) {
 }
 
 /**
- * Native GH Number Slider (integer). Wire outRef(node, 'Number') into Motus Body N.
+ * Native GH Number Slider. Wire outRef(node, 'Number').
  * Interval: 0=Float, 1=Integer, 2=Odd, 3=Even (GH_NumberSlider.Write).
+ * Default integer (Body N). Pass digits>0 / interval:0 for floats (Stewart Br/Pr/…).
  */
-function nativeNumberSlider(x, y, { value = 6, min = 4, max = 12, nick = 'N', w = NATIVE.numberSlider.w } = {}) {
+function nativeNumberSlider(x, y, {
+  value = 6, min = 4, max = 12, nick = 'N', w = NATIVE.numberSlider.w,
+  digits = 0, interval = 1,
+} = {}) {
   const spec = NATIVE.numberSlider;
   const instance = id();
   const h = spec.h;
@@ -888,9 +895,9 @@ function nativeNumberSlider(x, y, { value = 6, min = 4, max = 12, nick = 'N', w 
                     ${bounds(x, y, w, h)}
                     <chunk name="Slider">
                       <items count="7">
-                        ${item('Digits', 'gh_int32', '3', '0')}
+                        ${item('Digits', 'gh_int32', '3', String(digits))}
                         ${item('GripDisplay', 'gh_int32', '3', '1')}
-                        ${item('Interval', 'gh_int32', '3', '1')}
+                        ${item('Interval', 'gh_int32', '3', String(interval))}
                         ${item('Max', 'gh_double', '6', String(max))}
                         ${item('Min', 'gh_double', '6', String(min))}
                         ${item('SnapCount', 'gh_int32', '3', '0')}
@@ -2214,48 +2221,72 @@ function graph08() {
   const note = nativePanel(
     40,
     80,
-    'Motus Stewart (classic hex) → Plan with TCP planes → Preview. Q = leg lengths (m), not UR MoveJ.',
+    'Sliders → Stewart (classic Br/Pr or wire Base+Plat points) → Plan TCP planes → Preview. Q = leg lengths (m), not UR MoveJ. Drag Br/Pr/Lmin/Lmax like Body N on 09.',
     'Note',
-    420,
-    60,
+    560,
+    88,
   );
-  const stewart = motusComponent('stewart', 40, 200, {});
-  const startPt = nativeConstructPoint(280, 160, [0, 0, 0.625]);
-  const goalPt = nativeConstructPoint(280, 280, [0.01, 0, 0.625]);
-  const uz = nativeUnitZ(280, 100);
-  const startPl = nativePlane(400, 160, startPt.node.outputs[0], uz.node.outputs[0]);
-  const goalPl = nativePlane(400, 280, goalPt.node.outputs[0], uz.node.outputs[0]);
-  const plan = motusComponent('plan', 560, 200, {
-    Robot: [outRef(stewart.node, 'Robot')],
-    Goal: [outRef(goalPl.node, 'Plane')],
-    Start: [outRef(startPl.node, 'Plane')],
+  const floatOpts = { digits: 3, interval: 0, w: 180 };
+  const br = nativeNumberSlider(40, 180, { ...floatOpts, value: 0.5, min: 0.2, max: 0.8, nick: 'Br' });
+  const pr = nativeNumberSlider(40, 220, { ...floatOpts, value: 0.3, min: 0.1, max: 0.6, nick: 'Pr' });
+  const lmin = nativeNumberSlider(40, 260, { ...floatOpts, value: 0.35, min: 0.2, max: 0.6, nick: 'Lmin' });
+  const lmax = nativeNumberSlider(40, 300, { ...floatOpts, value: 0.90, min: 0.5, max: 1.2, nick: 'Lmax' });
+  const stewart = motusComponent('stewart', 280, 220, {
+    BaseRadius: [outRef(br.node, 'Number')],
+    PlatformRadius: [outRef(pr.node, 'Number')],
+    MinStroke: [outRef(lmin.node, 'Number')],
+    MaxStroke: [outRef(lmax.node, 'Number')],
   });
-  const { scrub, preview } = previewWithScrub(760, 200, outRef(plan.node, 'Trajectory'));
-  const waypoints = motusComponent('waypoints', 980, 200, {
+
+  const uz = nativeUnitZ(520, 140);
+  // Multi-waypoint TCP path at mid-stroke height (0.625 = default mid of Lmin/Lmax).
+  const pathPts = [
+    [0, 0, 0.625],
+    [0.01, 0, 0.625],
+    [0.01, 0.01, 0.625],
+    [0, 0.01, 0.625],
+  ];
+  const pathParts = [];
+  const planeRefs = [];
+  for (let i = 0; i < pathPts.length; i++) {
+    const [x, y, z] = pathPts[i];
+    const pt = nativeConstructPoint(520, 200 + i * 48, [x, y, z]);
+    const pl = nativePlane(640, 200 + i * 48, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    pathParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
+    planeRefs.push(outRef(pl.node, 'Plane'));
+  }
+  const goalsMerge = nativeMerge(760, 280, planeRefs.slice(1));
+  const plan = motusComponent('plan', 900, 240, {
+    Robot: [outRef(stewart.node, 'Robot')],
+    Start: [planeRefs[0]],
+    Goal: [outRef(goalsMerge.node, 'Result')],
+  });
+  const { scrub, preview } = previewWithScrub(1100, 220, outRef(plan.node, 'Trajectory'));
+  const waypoints = motusComponent('waypoints', 1100, 360, {
     Trajectory: [outRef(plan.node, 'Trajectory')],
   });
 
-  const gModel = nativeGroup('Stewart', [stewart], GROUP_COLOUR.model);
+  const gModel = nativeGroup('Stewart', [
+    br, pr, lmin, lmax, stewart,
+  ], GROUP_COLOUR.model);
   const gPlan = nativeGroup('Plan TCP', [
-    { xml: startPt.xml, node: startPt.node },
-    { xml: goalPt.xml, node: goalPt.node },
     { xml: uz.xml, node: uz.node },
-    { xml: startPl.xml, node: startPl.node },
-    { xml: goalPl.xml, node: goalPl.node },
-    plan, scrub, preview, waypoints,
+    ...pathParts,
+    goalsMerge, plan, waypoints,
   ], GROUP_COLOUR.plan);
+  const gPreview = nativeGroup('Preview', [scrub, preview], GROUP_COLOUR.preview);
 
   const objs = [
-    title, note, stewart,
-    { xml: startPt.xml }, { xml: goalPt.xml }, { xml: uz.xml },
-    { xml: startPl.xml }, { xml: goalPl.xml },
-    plan, scrub, preview, waypoints,
-    gModel, gPlan,
+    title, note,
+    br, pr, lmin, lmax, stewart,
+    { xml: uz.xml },
+    ...pathParts, goalsMerge, plan, scrub, preview, waypoints,
+    gModel, gPlan, gPreview,
   ];
   objs._meta = {
     fileName: '08_stewart_tcp_path.ghx',
     description:
-      'Motus Stewart classic hex → Plan Start/Goal TCP planes → Preview scrub + Waypoints (leg lengths in meters). Requires Motus.NET ≥ 0.9.0 (-UseLocal until NuGet publish).',
+      'Sliders Br/Pr/Lmin/Lmax → Motus Stewart → Plan multi-waypoint TCP planes → Preview + Waypoints (leg lengths in meters). Wire Base+Plat for custom anchors. Requires Motus.NET UseLocal until crossed-pair NuGet.',
   };
   return buildGraph(objs);
 }

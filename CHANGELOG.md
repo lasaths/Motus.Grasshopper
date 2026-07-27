@@ -2,7 +2,11 @@
 
 ## 0.13.0 — N-leg Walk (ADR 0005)
 
-Aligned with **Motus.NET 0.13.0**.
+Aligned with **Motus.NET 0.13.1**.
+
+### Changed
+
+- **Motus Stewart**: optional `Base`/`Plat` (6 points each) and `PairSep`; priority JSON → anchors → classic Br/Pr. Example `08_stewart_tcp_path` exposes Br/Pr/Lmin/Lmax sliders + multi-waypoint TCP path (09-style modular knobs).
 
 ### Breaking
 
@@ -32,4 +36,4 @@ See [ADR 0005](docs/adr/0005-general-legged-mechanism.md). Family=legged Waypoin
 
 ### Motus.NET pin
 
-`MotusNetVersion` = **0.13.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). CI still UseLocal against sibling Motus.NET; repo variable `MOTUS_NET_REF` (default `master`) selects the checkout ref.
+`MotusNetVersion` = **0.13.1** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). CI still UseLocal against sibling Motus.NET; repo variable `MOTUS_NET_REF` (default `master`) selects the checkout ref.

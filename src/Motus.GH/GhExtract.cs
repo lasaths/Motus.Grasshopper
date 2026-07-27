@@ -160,7 +160,9 @@ internal static class GhExtract
         out string? error)
     {
         var session = ctx.EffectiveModel;
-        start = HomePoseLookup.HomeOrZeros(session);
+        start = ctx.Stewart is not null
+            ? ctx.Stewart.HomeLengths()
+            : HomePoseLookup.HomeOrZeros(session);
         usedDefaultHome = true;
         error = null;
         if (index < 0)

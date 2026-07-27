@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.13.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.13.1** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|
@@ -97,7 +97,7 @@ Also check in Rhino:
 - Motus tab visible; Plan button vs Auto Plan; unreachable plane Status
 - Preview meshes + Scrub/Play handoff
 - Waypoints `Q` tree wires into UR Write MoveJ without GH transpose (serial only)
-- Motus Stewart → Plan TCP plane list → Preview scrub; Waypoints warns meters ≠ MoveJ
+- Motus Stewart → Plan TCP plane list → Preview scrub; Waypoints warns meters ≠ MoveJ; drag Br/Pr sliders on `08_stewart_tcp_path`
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
 - `06_turntable_group`: coupled Preview rotates table; decoupled (arm Group) keeps table fixed
