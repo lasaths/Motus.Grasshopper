@@ -259,13 +259,19 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
             ToolCapabilitiesSnapshot = ToolSnapshot?.Capabilities,
             DiagnosticsSnapshot = diagnostics,
             TreeDriverHome = TreeDriverHome,
-            ProvenanceSnapshot = new PlannerProvenance
-            {
-                PlannerId = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext)
-                    ? RrtSettings.PlannerLabel
-                    : "joint-linear/cartesian-lin",
-                RandomSeed = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext) ? 42 : null
-            }
+            ProvenanceSnapshot = BuildProvenance()
+        };
+    }
+
+    private PlannerProvenance BuildProvenance()
+    {
+        // Match PlanInputSnapshot / PlanExecutor: mobility joint goals also use sampling.
+        var needsSampling = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext)
+            || (MobilityGoal is not null && Goals.Any(g => g.joints is not null));
+        return new PlannerProvenance
+        {
+            PlannerId = needsSampling ? RrtSettings.PlannerLabel : "joint-linear/cartesian-lin",
+            RandomSeed = needsSampling ? 42 : null
         };
     }
 

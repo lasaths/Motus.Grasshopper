@@ -52,15 +52,21 @@ internal static class PlanExecutor
 
         var needsCollision = PlanningCollision.SceneHasObstacles(request.PlanningContext.Scene)
             || request.PlanningContext.Attached.Count > 0;
+        // Mobility SE2 plans against the arm Model, not EffectiveModel (group/session).
+        var planningRobot = request.Context.MobilityGoal is not null
+            ? request.Context.Model
+            : session;
         ICollisionChecker? sharedChecker = null;
         if (needsCollision)
         {
             var checkerSw = Stopwatch.StartNew();
-            sharedChecker = GhExtract.TryCollisionChecker(
-                session,
-                request.Context.Chain,
-                request.PlanningContext.Scene,
-                request.PlanningContext.Attached);
+            sharedChecker = request.Context.Stewart is not null
+                ? new StewartCollisionChecker(request.Context.Stewart)
+                : GhExtract.TryCollisionChecker(
+                    planningRobot,
+                    request.Context.Chain,
+                    request.PlanningContext.Scene,
+                    request.PlanningContext.Attached);
             if (timings is not null)
                 timings.CheckerBuildMs = checkerSw.ElapsedMilliseconds;
         }
