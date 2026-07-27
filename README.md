@@ -5,24 +5,27 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries (NuGet) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet 0.12.0](https://www.nuget.org/profiles/lasaths)) |
 
 **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
-Pins **Motus.NET 0.12.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). Local Motus.NET work: `./build.ps1 -UseLocal` (sibling checkout). Algorithm catalog: Motus.NET [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md).
+## Contents
 
-## What the Motus tab does
+- [First plan](#first-plan)
+- [What the Motus tab does](#what-the-motus-tab-does)
+- [Algorithms and references](#algorithms-and-references)
+- [Requirements](#requirements)
+- [Install from source](#install-from-source)
+- [Common workflows](#common-workflows)
+- [Examples](#examples)
+- [External plugins and safety](#external-plugins-and-safety)
+- [Further docs](#further-docs)
 
-Full pin/behavior reference: **[docs/grasshopper-components.md](docs/grasshopper-components.md)**.
+## First plan
 
-| Palette group | Components | Job |
-|---------------|------------|-----|
-| **Model** | UR10e Robotiq, Robot, Serial Chain, Stewart, WalkHex, Joint Table, Reach, Tool, Tool State, Load Mesh, Joint State, TCP Pose | Build / load a robot (`Family`: serial, `stewart`, or `legged`) |
-| **Urdf** | Link, Joint, Assemble, Explode, Attach, Export URDF | Author a mechanism in GH without a file on disk |
-| **Plan** | Plan (Quick), RRT Settings, Move, Program, Planning Group, Attach Body | Solve trajectories (LIN / joint-linear / RRT / motion program) |
-| **Collision** | ColSphere, ColBox, ColPlane, ColMesh, ColScene | Obstacles → wire `ColScene` into Plan `Collision` |
-| **Preview** | Preview, Scrub | Animate FK meshes / scrub time |
-| **Export** | Waypoints, Export | `Q` trees for controllers, or JSON/CSV PlanBundle |
+1. <img src="src/Motus.GH/Resources/icons/robot-duotone.png" width="20" alt="" /> **UR10e Robotiq** (or <img src="src/Motus.GH/Resources/icons/file-duotone.png" width="20" alt="" /> **Robot**)
+2. <img src="src/Motus.GH/Resources/icons/flow-arrow-duotone.png" width="20" alt="" /> **Plan** — wire `Goal`, click **Plan**
+3. <img src="src/Motus.GH/Resources/icons/eye-duotone.png" width="20" alt="" /> **Preview** — **Play**; optional <img src="src/Motus.GH/Resources/icons/path-duotone.png" width="20" alt="" /> Waypoints / <img src="src/Motus.GH/Resources/icons/export-duotone.png" width="20" alt="" /> Export
 
 ```
 Model ──► Plan [Plan] ──► Preview [Play]
@@ -30,7 +33,42 @@ Model ──► Plan [Plan] ──► Preview [Play]
          ColScene (opt)   Waypoints / Export
 ```
 
-**First plan:** Motus Robot (or UR10e) → Motus Plan (`Goal` = Plane or Joint State) → click **Plan** → Motus Preview **Play**. Optional: Motus Export / Motus Waypoints.
+## What the Motus tab does
+
+Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.md). Icons match Grasshopper Phosphor assets (tinted in-app by palette: Model emerald, Plan periwinkle, Collision peach, Preview lavender, Export lime).
+
+<details>
+<summary><strong>Model</strong> — robots, tools, joints (click to expand)</summary>
+
+| | Component | What it does |
+|:-:|-----------|--------------|
+| <img src="src/Motus.GH/Resources/icons/robot-duotone.png" width="24" alt="" /> | **UR10e Robotiq** | Bundled UR10e + Robotiq 2F-85 (zero-config) |
+| <img src="src/Motus.GH/Resources/icons/file-duotone.png" width="24" alt="" /> | **Robot** | Load `.urdf` / `.xacro`; optional Base / Tool |
+| <img src="src/Motus.GH/Resources/icons/path-duotone.png" width="24" alt="" /> | **Serial Chain** | Parametric serial / rail+arm from link lengths |
+| <img src="src/Motus.GH/Resources/icons/stack-duotone.png" width="24" alt="" /> | **Stewart** | Stewart/Gough hexapod (`Family=stewart`; `Q` = leg lengths in **m**) |
+| <img src="src/Motus.GH/Resources/icons/polygon-duotone.png" width="24" alt="" /> | **Walking Hex** | Legged hexapod gait (`Family=legged`; Path → `Tr`) |
+| <img src="src/Motus.GH/Resources/icons/tree-structure-duotone.png" width="24" alt="" /> | **Joint Table** | Branched tree; Plan = tip path; optional **SE2** mobility |
+| <img src="src/Motus.GH/Resources/icons/circles-three-plus-duotone.png" width="24" alt="" /> | **Reach Samples** | TCP reach overlay samples |
+| <img src="src/Motus.GH/Resources/icons/wrench-duotone.png" width="24" alt="" /> | **Tool** | TCP + optional geometry / mechanism Description |
+| <img src="src/Motus.GH/Resources/icons/sliders-horizontal-duotone.png" width="24" alt="" /> | **Tool State** | Gripper width / Open-Closed for programs |
+| <img src="src/Motus.GH/Resources/icons/download-simple-duotone.png" width="24" alt="" /> | **Load Mesh** | STL for Tool geometry |
+| <img src="src/Motus.GH/Resources/icons/gear-six-duotone.png" width="24" alt="" /> | **Joint State** | Joint vector (rad; toggle ° on `J`) |
+| <img src="src/Motus.GH/Resources/icons/crosshair-duotone.png" width="24" alt="" /> | **TCP Pose** | FK joints → TCP plane |
+
+**Urdf authoring** (same Model palette): Link / Joint / Assemble / Explode / Attach use `stack`, `gear-six`, `tree-structure`, `list-plus`, `paperclip` — build a mechanism without a file on disk; **Export URDF** writes it out.
+
+</details>
+
+<details>
+<summary><strong>Plan</strong> — Quick, RRT, Move, Program (click to expand)</summary>
+
+| | Component | What it does |
+|:-:|-----------|--------------|
+| <img src="src/Motus.GH/Resources/icons/flow-arrow-duotone.png" width="24" alt="" /> | **Plan** (Quick) | Multi-goal planner — Plane = TCP LIN; joints = joint-linear or RRT |
+| <img src="src/Motus.GH/Resources/icons/faders-duotone.png" width="24" alt="" /> | **RRT Settings** | MaxIter / Planner / Step → Plan `RrtSettings` |
+| <img src="src/Motus.GH/Resources/icons/line-segments-duotone.png" width="24" alt="" /> | **Move** | One PTP / LIN / CIRC / SET / WAIT line |
+| <img src="src/Motus.GH/Resources/icons/stack-duotone.png" width="24" alt="" /> | **Program** | Plan a Motus Move list (industrial motion) |
+| <img src="src/Motus.GH/Resources/icons/list-plus-duotone.png" width="24" alt="" /> | **Planning Group** | Lock non-group joints (SRDF / manual) |
 
 | Goal type | Planner |
 |-----------|---------|
@@ -38,12 +76,67 @@ Model ──► Plan [Plan] ──► Preview [Play]
 | Joint State, no Collision | Joint-linear |
 | Joint State + Collision (or SE2 mobility) | Sampling (RRT-Connect by default) |
 
-**Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ. Details: [AGENTS.md](AGENTS.md).
+</details>
+
+<details>
+<summary><strong>Collision</strong> — obstacles and attach (click to expand)</summary>
+
+| | Component | What it does |
+|:-:|-----------|--------------|
+| <img src="src/Motus.GH/Resources/icons/sphere-duotone.png" width="24" alt="" /> | **ColSphere** | Sphere obstacle (m) |
+| <img src="src/Motus.GH/Resources/icons/bounding-box-duotone.png" width="24" alt="" /> | **ColBox** | Box obstacle (half extents, m) |
+| <img src="src/Motus.GH/Resources/icons/intersect-square-duotone.png" width="24" alt="" /> | **ColPlane** | Floor / wall half-space |
+| <img src="src/Motus.GH/Resources/icons/polygon-duotone.png" width="24" alt="" /> | **ColMesh** | Mesh / Brep obstacle |
+| <img src="src/Motus.GH/Resources/icons/circles-three-plus-duotone.png" width="24" alt="" /> | **ColScene** | Merge obstacles (+ optional SRDF) → Plan `Collision` |
+| <img src="src/Motus.GH/Resources/icons/paperclip-duotone.png" width="24" alt="" /> | **Attach Body** | Grasped volume in TCP frame → Plan `Attach` |
+
+</details>
+
+<details>
+<summary><strong>Preview &amp; Export</strong> — animate and hand off (click to expand)</summary>
+
+| | Component | What it does |
+|:-:|-----------|--------------|
+| <img src="src/Motus.GH/Resources/icons/eye-duotone.png" width="24" alt="" /> | **Preview** | FK animation — **Play** / Scrub |
+| <img src="src/Motus.GH/Resources/icons/path-duotone.png" width="24" alt="" /> | **Waypoints** | `Q` joint trees for controllers (MoveJ); `P` planes; `Tm` times |
+| <img src="src/Motus.GH/Resources/icons/export-duotone.png" width="24" alt="" /> | **Export** | JSON / CSV PlanBundle |
+
+**Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ.
+
+</details>
+
+## Algorithms and references
+
+Solvers live in Motus.NET; Grasshopper only selects and wires them. Full catalog: Motus.NET [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md) · [`REFERENCES.bib`](https://github.com/lasaths/Motus.NET/blob/master/docs/REFERENCES.bib) · snapshot [docs/motus-net/METHODS.md](docs/motus-net/METHODS.md).
+
+<details>
+<summary><strong>Method catalog</strong> — area, behavior, citations (click to expand)</summary>
+
+| Area | What Motus does | References |
+|------|-----------------|------------|
+| URDF / xacro | In-process xacro subset → kinematic tree (`LoadTreeXacro`) | Motus.NET `docs/urdf-import.md` |
+| Joint LIN | Free-space joint interpolation + optional collision | Deterministic managed |
+| Cartesian LIN | TCP-linear path, IK per sample | Deterministic managed |
+| PoE FK / numerical IK | Modern Robotics screws + body Jacobian for URDF serial | Lynch & Park, *Modern Robotics* |
+| TOTG retime | Managed TOPP-RA-style retiming (`RetimerAlgorithm.Totg`) | Pham & Pham 2018, DOI [10.1109/TRO.2018.2819195](https://doi.org/10.1109/TRO.2018.2819195) |
+| Path constraints | MoveIt-shaped position/orientation checks | Sucan et al. 2012, DOI [10.1109/MRA.2012.2205651](https://doi.org/10.1109/MRA.2012.2205651) |
+| RRT-Connect | Default sampling planner (managed; native OMPL optional) | Kuffner & LaValle, ICRA 2000; [OMPL](https://ompl.kavrakilab.org/) |
+| PRM* | Managed roadmap sampling | Karaman & Frazzoli 2011, DOI [10.1177/0278364911406761](https://doi.org/10.1177/0278364911406761) |
+| CHOMP-lite | Post-process smoother | Zucker et al. 2013, DOI [10.1177/0278364913488805](https://doi.org/10.1177/0278364913488805) |
+| Stewart / Gough | Leg-length IK/FK, stroke-space collision/RRT (`Family=stewart`, **meters**) | Merlet; Dasgupta & Mruthyunjaya (see METHODS) |
+| Group / tree planning | `PlanningGroup` / `GroupMap` over named drivers | ADR [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) |
+| Holonomic SE(2) | Base x/y/yaw appended to sampling (`Joint Table` SE2) | LaValle, *Planning Algorithms* (2006) |
+| Legged gait | Duty-cycle gait + SSM gate (`WalkHex`; `Family=legged`, **radians**) | Lynch & Park; Song & Waldron; McGhee & Frank (see METHODS) |
+
+Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expected. Extra planners need Motus.NET native full build; check Plan `Warnings` → `MotusCapabilities.Describe()`.
+
+</details>
 
 ## Requirements
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
+- Motus.NET **0.12.0** NuGet (default). Local Motus.NET: `./build.ps1 -UseLocal`
 
 ## Install from source
 
@@ -86,6 +179,23 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 
 Nine generated definitions in [`examples/`](examples/README.md) (**never hand-edit `.ghx`** — edit `scripts/generate-examples.mjs`, then regenerate):
 
+<details>
+<summary><strong>Example index</strong> (01–09)</summary>
+
+| File | Demo |
+|------|------|
+| `01_quick_plan.ghx` | Multi-goal Plan → Preview / Export / Waypoints |
+| `02_collision_srdf.ghx` | ColScene + SRDF + Attach + RRT |
+| `03_urdf_tool_frames.ghx` | URDF + Tool frames |
+| `04_motion_program.ghx` | PTP/LIN/CIRC/SET Program |
+| `05_serial_reach.ghx` | Serial Chain + Reach Samples |
+| `06_turntable_group.ghx` | Coupled vs Group-locked Plan |
+| `07_urdf_gripper_tool.ghx` | Actuated gripper as Tool Description |
+| `08_stewart_tcp_path.ghx` | Stewart TCP Plan (meters) |
+| `09_walking_hexapod.ghx` | WalkHex gait + optional terrain |
+
+</details>
+
 ```bash
 node scripts/generate-examples.mjs
 node scripts/validate-ghx.mjs
@@ -93,15 +203,17 @@ node scripts/validate-ghx.mjs
 
 Before Rhino-touching releases: `./scripts/verify-qa.ps1 -Configuration Release -Install` ([AGENTS.md](AGENTS.md) checklist).
 
-## Docs map
+## External plugins and safety
+
+Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ for planned paths; `P` → MoveL only for Cartesian-intent LIN. Motus does not connect to or command robots.
+
+## Further docs
 
 | Doc | Contents |
 |-----|----------|
 | [docs/grasshopper-components.md](docs/grasshopper-components.md) | Every component, pins, planner rules |
-| [examples/README.md](examples/README.md) | Example index + coverage matrix |
+| [docs/motus-net/METHODS.md](docs/motus-net/METHODS.md) | Full methods table (API + units + DOI) |
+| [docs/citation-audit.md](docs/citation-audit.md) | Citation coverage audit |
+| [examples/README.md](examples/README.md) | Example coverage matrix |
 | [AGENTS.md](AGENTS.md) | Maintainer / CI / handoff contracts |
 | [docs/adr/](docs/adr/) | URDF-only, tree-in-NET, Stewart, legged |
-
-## External plugins & safety
-
-Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ for planned paths; `P` → MoveL only for Cartesian-intent LIN. Motus does not connect to or command robots.
