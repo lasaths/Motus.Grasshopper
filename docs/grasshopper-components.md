@@ -1,6 +1,31 @@
 # Grasshopper Components
 
-All components live under the **Motus** tab. The palette stays small: pick a robot, give a target, plan, preview, export.
+All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring** — solvers, units, and provenance live in [Motus.NET](https://github.com/lasaths/Motus.NET).
+
+## At a glance
+
+| You want… | Use |
+|-----------|-----|
+| Bundled UR10e + Robotiq | **Motus UR10e Robotiq** |
+| Load a URDF / xacro | **Motus Robot** |
+| Parametric serial arm / rail | **Motus Serial Chain** |
+| Stewart platform (leg lengths in **m**) | **Motus Stewart** → Plan TCP planes |
+| Walking hexapod gait (radians) | **Motus Walking Hex** (Path/Planes → `Tr`; not Plan for whole robot) |
+| Branched tree / tip-path Plan | **Motus Joint Table** (optional **SE2** mobility) |
+| Plan one or more goals | **Motus Plan** (nick **Quick**) |
+| Obstacles | **Col\*** → **ColScene** → Plan `Collision` |
+| Animate | **Motus Preview** (+ optional **Scrub**) |
+| Controller handoff | **Motus Waypoints** `Q` (joint MoveJ). JSON/CSV → **Motus Export** |
+| PTP/LIN/CIRC program | **Motus Move** → **Motus Program** |
+| Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
+
+```
+Model ──► Plan ──► Preview
+   │         │         │
+ Tool    ColScene   Waypoints / Export
+```
+
+**Units:** joints default **radians** (toggle ° on Joint State `J`); geometry **meters**. Stewart plan `Q` = meters; serial/legged = radians. See [AGENTS.md](../AGENTS.md) for Family handoff.
 
 ## Model
 

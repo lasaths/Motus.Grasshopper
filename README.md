@@ -1,27 +1,59 @@
 # Motus.Grasshopper
 
-Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NET): thin UI wiring for robot motion planning, FK preview, and trajectory export. Kinematics, planners, collision, retiming, and method provenance live in Motus.NET.
+Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NET): **thin UI** for robot motion planning, FK preview, and trajectory export.
 
-Planning and preview only — no live robot control. Licensed under [MIT](LICENSE).
+| This repo | Motus.NET |
+|-----------|-----------|
+| Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries (NuGet) |
+
+**Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
+
+Pins **Motus.NET 0.12.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). Local Motus.NET work: `./build.ps1 -UseLocal` (sibling checkout). Algorithm catalog: Motus.NET [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md).
+
+## What the Motus tab does
+
+Full pin/behavior reference: **[docs/grasshopper-components.md](docs/grasshopper-components.md)**.
+
+| Palette group | Components | Job |
+|---------------|------------|-----|
+| **Model** | UR10e Robotiq, Robot, Serial Chain, Stewart, WalkHex, Joint Table, Reach, Tool, Tool State, Load Mesh, Joint State, TCP Pose | Build / load a robot (`Family`: serial, `stewart`, or `legged`) |
+| **Urdf** | Link, Joint, Assemble, Explode, Attach, Export URDF | Author a mechanism in GH without a file on disk |
+| **Plan** | Plan (Quick), RRT Settings, Move, Program, Planning Group, Attach Body | Solve trajectories (LIN / joint-linear / RRT / motion program) |
+| **Collision** | ColSphere, ColBox, ColPlane, ColMesh, ColScene | Obstacles → wire `ColScene` into Plan `Collision` |
+| **Preview** | Preview, Scrub | Animate FK meshes / scrub time |
+| **Export** | Waypoints, Export | `Q` trees for controllers, or JSON/CSV PlanBundle |
+
+```
+Model ──► Plan [Plan] ──► Preview [Play]
+              │                │
+         ColScene (opt)   Waypoints / Export
+```
+
+**First plan:** Motus Robot (or UR10e) → Motus Plan (`Goal` = Plane or Joint State) → click **Plan** → Motus Preview **Play**. Optional: Motus Export / Motus Waypoints.
+
+| Goal type | Planner |
+|-----------|---------|
+| Plane | TCP-linear LIN (may fall back to RRT if collision blocks LIN) |
+| Joint State, no Collision | Joint-linear |
+| Joint State + Collision (or SE2 mobility) | Sampling (RRT-Connect by default) |
+
+**Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ. Details: [AGENTS.md](AGENTS.md).
 
 ## Requirements
 
-- Rhino 8.19+ + Grasshopper (Windows or macOS) — built against RhinoCommon/Grasshopper `8.19.25132.1001` for SR compatibility
+- Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-
-Pins **Motus.NET 0.12.0** from [nuget.org](https://www.nuget.org/profiles/lasaths) (`build/MotusNetPackages.props`). Until 0.12.0 is published, build with local project references: `dotnet build src/Motus.GH/Motus.GH.csproj -p:UseMotusNetProjectReference=true` (or `./build.ps1 -UseLocal`) using a sibling or in-repo `Motus.NET` checkout resolved by `build/MotusNetLocal.props`.
-
-What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Settings may list only `RrtConnect`): [AGENTS.md](AGENTS.md). Algorithm references live in Motus.NET `docs/METHODS.md`.
 
 ## Install from source
 
 **Windows**
 
 ```powershell
-./build.ps1                      # Release
-./build.ps1 -Configuration Debug
+./build.ps1                      # Release (NuGet Motus.NET 0.12.0)
+./build.ps1 -UseLocal            # sibling Motus.NET project refs
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
-./build.ps1 -Yak                 # dist/motus-*-rh8_*-any.yak (Win+Mac TFMs; needs Rhino 8 yak)
+./build.ps1 -Yak                 # dist/motus-*-rh8_*-any.yak
 ./build.ps1 -Install             # %APPDATA%\Grasshopper\Libraries\Motus
 ```
 
@@ -29,84 +61,47 @@ What Motus.NET includes (packages, managed planners vs native OMPL, why RRT Sett
 
 ```bash
 ./build.sh              # Release → src/Motus.GH/bin/Release/net8.0/
-INSTALL=1 ./build.sh    # ~/Library/Application Support/.../Grasshopper/Libraries/Motus
+INSTALL=1 ./build.sh
 ```
 
-The plugin multi-targets `net8.0-windows` and `net8.0` ([McNeel guidance](https://developer.rhino3d.com/guides/rhinocommon/moving-to-dotnet-core/)). Copy into Libraries/Motus:
-
-- `Motus.GH.gha`
-- `Motus.Core.dll`, `Motus.Geometry.dll`, `Motus.Presets.dll`, `Motus.OMPL.NET.dll`
-- `resources/robots/`
-
-Verify: `./scripts/verify-install.ps1` (Windows).
+Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Verify: `./scripts/verify-install.ps1` (Windows).
 
 | Variable | Purpose |
 |----------|---------|
-| `RhinoCommonPackageVersion` | NuGet floor for RhinoCommon/Grasshopper (default `8.19.25132.1001`) |
-| `Rhino8Dir` | Windows Rhino 8 install (launch / path hints) |
-| `Rhino8App` | macOS Rhino 8 `.app` path |
-| `MotusNetVersion` | Override NuGet pin (default `0.12.0`). Until that package is on nuget.org, use `./build.ps1 -UseLocal` / `-p:UseMotusNetProjectReference=true` (CI checkouts sibling Motus.NET the same way). |
-
-## First plan (3 components)
-
-1. **Motus Robot** — pick a preset (e.g. UR10e)
-2. **Motus Plan** (nick **Quick**) — wire a Rhino **Plane** or **Motus Joint State** to `Goal` (and optionally `Start`), click **Plan** (`Start` defaults to home). Optional: right-click → **Auto Plan**. Plane goals are TCP LIN only.
-3. **Motus Preview** — **Play** to animate; **Motus Export** for JSON/CSV
-
-Component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md). Agent / maintainer notes: [AGENTS.md](AGENTS.md).
-
-```
-Robot ──► Plan [Plan] ──► Preview [Play]
-              ▲
-         Plane / Joints
-```
+| `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
+| `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
+| `MotusNetVersion` | Override NuGet pin (default `0.12.0`) |
 
 ## Common workflows
 
-### Collision-aware planning
+**Collision-aware:** ColSphere/Box/Mesh → **ColScene** → Plan `Collision` (right-click Plan → **Show Collision** if hidden). Prefer ColMesh over raw Mesh into Plan. Example: `examples/02_collision_srdf.ghx`.
 
-1. **ColSphere** / **ColBox** / **ColMesh** → **ColScene**
-2. Wire `ColScene` → **Plan** `Collision` (right-click Plan → **Show Collision** if the pin is hidden)
-   - **Plane goal** → TCP LIN + collision validate; on collision failure, Plan may fall back to joint/leg-length RRT when an IK goal is available
-   - **Joint goal** → sampling planner (RRT-Connect by default); tune with **Motus RRT Settings**
+**Motion programs:** Motus Move (PTP/LIN/CIRC/SET/WAIT) → Motus Program → Preview/Export. `SET`/`WAIT`/tool-state are **export hints**, not hardware IO. Example: `04_motion_program.ghx`.
 
-Prefer **ColMesh → ColScene → Plan** over wiring raw Mesh/Brep into Plan. Dense meshes (&gt;20k tris) warn at ColMesh — decimate or use primitives for speed.
+**Tools / attach / groups:** Motus Tool on Robot; Attach Body + Planning Group on Plan; SRDF on ColScene. Examples: `03_urdf_tool_frames.ghx`, `02_collision_srdf.ghx`.
 
-Example: `examples/02_collision_srdf.ghx`.
-
-### Motion programs
-
-**Motus Move** (on-component Type dropdown: PTP / LIN / CIRC / SET / WAIT) → **Motus Program** → Preview / Export. Unlike Plan plane goals, Program does not fall back to joint-space when LIN fails. `SET` / `WAIT` / tool-state values are export hints for downstream controllers. See `examples/04_motion_program.ghx`.
-
-### Tools, attach, groups
-
-- **Motus Tool** on Robot for TCP / collision geometry — see `examples/03_urdf_tool_frames.ghx`
-- **Attach Body** + **Planning Group** on Plan (enable pins via right-click); SRDF path on **ColScene** for allowed pairs and groups — see `examples/02_collision_srdf.ghx`
-
-### Cartesian vs joint goals
-
-| Type | Motion |
-|------|--------|
-| Plane goal | TCP-linear LIN |
-| Joint State goal | Joint-space (RRT when Collision is wired) |
-| Plane start | IK to joints (same multi-seed path as plane goals), then plan |
-| Joint State start | Used as-is |
+**Parallel / walking:** Motus Stewart → Plan TCP planes (`08_stewart_tcp_path.ghx`). Motus WalkHex → gait Trajectory (`09_walking_hexapod.ghx`) — not full-mechanism Motus Plan.
 
 ## Examples
 
-Four lean definitions in [`examples/`](examples/README.md) cover planning, collision, SRDF/attach, URDF, tools, and motion programs.
+Nine generated definitions in [`examples/`](examples/README.md) (**never hand-edit `.ghx`** — edit `scripts/generate-examples.mjs`, then regenerate):
 
 ```bash
 node scripts/generate-examples.mjs
 node scripts/validate-ghx.mjs
 ```
 
-Before release: `./scripts/verify-qa.ps1 -Configuration Release -Install` (manual Rhino checks listed in [AGENTS.md](AGENTS.md)).
+Before Rhino-touching releases: `./scripts/verify-qa.ps1 -Configuration Release -Install` ([AGENTS.md](AGENTS.md) checklist).
 
-## External plugins
+## Docs map
 
-Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ for planned paths; use `P` → MoveL only for Cartesian-intent. Safety IO, retries, and controller transport stay in the control plugin — not Motus. Details: [AGENTS.md](AGENTS.md).
+| Doc | Contents |
+|-----|----------|
+| [docs/grasshopper-components.md](docs/grasshopper-components.md) | Every component, pins, planner rules |
+| [examples/README.md](examples/README.md) | Example index + coverage matrix |
+| [AGENTS.md](AGENTS.md) | Maintainer / CI / handoff contracts |
+| [docs/adr/](docs/adr/) | URDF-only, tree-in-NET, Stewart, legged |
 
-## Safety
+## External plugins & safety
 
-Preview and planning only — Motus does not connect to or command robots. See [AGENTS.md](AGENTS.md).
+Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ for planned paths; `P` → MoveL only for Cartesian-intent LIN. Motus does not connect to or command robots.
