@@ -8,6 +8,7 @@ on:
 
 # Motus.NET lives as a sibling of Motus.Grasshopper (see build/MotusNetLocal.props).
 # Checkout both so CI can UseLocal until/unless the MotusNetVersion NuGet package is on nuget.org.
+# Optional repo variable MOTUS_NET_REF (default master) builds GH against a Motus.NET branch before master merge.
 defaults:
   run:
     working-directory: Motus.Grasshopper
@@ -25,7 +26,7 @@ jobs:
         with:
           repository: lasaths/Motus.NET
           path: Motus.NET
-          ref: master
+          ref: ${{ vars.MOTUS_NET_REF || 'master' }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -46,7 +47,7 @@ jobs:
         with:
           repository: lasaths/Motus.NET
           path: Motus.NET
-          ref: master
+          ref: ${{ vars.MOTUS_NET_REF || 'master' }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -67,7 +68,7 @@ jobs:
         with:
           repository: lasaths/Motus.NET
           path: Motus.NET
-          ref: master
+          ref: ${{ vars.MOTUS_NET_REF || 'master' }}
 
       - uses: actions/setup-dotnet@v4
         with:

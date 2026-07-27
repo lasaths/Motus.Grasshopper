@@ -13,7 +13,8 @@ using System.Drawing;
 namespace Motus.GH.Components;
 
 /// <summary>
-/// Foot-target gait for a walking hex (Family=legged). Optional Motus Hex size; Path/Planes + Terrain → Tr.
+/// Foot-target gait for an N-leg walker (Family=legged). Mech required; optional Pose; Path/Planes + Terrain → Tr.
+/// GUID kept from Motus Walk Hex (0.8).
 /// </summary>
 public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 {
@@ -21,28 +22,23 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     public static readonly Guid Id = new("236f9a53-c07b-4663-bf27-950e20fb59ab");
 
-    public static readonly string[] LegNames =
-    [
-        "right-middle", "right-front", "left-front",
-        "left-middle", "left-back", "right-back",
-    ];
-
     private List<Color> _previewColors = [];
     private List<Circle> _previewContactCircles = [];
     private readonly Dictionary<Color, DisplayMaterial> _matCache = new();
 
     public MotusWalkingHexapodComponent()
         : base(
-            "Motus Walk Hex",
-            "WalkHex",
-            "Walk a hex along Path/Planes (optional Terrain). Optional Hx from Motus Hex; omit = compact defaults. Family=legged — not Stewart.",
+            "Motus Walk",
+            "Walk",
+            "Walk Mech along Path/Planes (optional Terrain + Pose). Family=legged — not Stewart / not UR MoveJ.",
             "polygon")
     {
     }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddParameter(new Param_MotusHex(), "Hex", "Hx", "Optional size & stance from Motus Hex (omit = compact defaults)", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusMechanism(), "Mechanism", "Mech", "From Motus Mechanism (Body+Leg)", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusBodyPose(), "Pose", "Pose", "Optional body-pose policy (omit = Auto)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddCurveParameter("Path", "P", "Walk path (Curve or Planes list, m)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
@@ -60,8 +56,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Gait robot (18-DOF) or tip-path robot when no Path", GH_ParamAccess.item);
-        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Full 18-DOF stance", GH_ParamAccess.item);
+        p.AddGenericParameter("Robot", "Rb", "Gait robot (full drivers) or tip-path robot when no Path", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Full-driver stance", GH_ParamAccess.item);
         p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Gait trajectory when Path/Planes wired", GH_ParamAccess.item);
         p.AddCurveParameter("PathCurve", "Pc", "Resolved walk path curve (m)", GH_ParamAccess.item);
         p.AddPlaneParameter("PathPlanes", "Pp", "Body planes sampled along path", GH_ParamAccess.list);
@@ -71,63 +67,65 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        HexLayoutGoo? hexGoo = null;
+        LeggedMechanismGoo? mechGoo = null;
+        BodyPoseSolverGoo? poseGoo = null;
         Curve? pathCurve = null;
         var pathPlanes = new List<Plane>();
         var speed = 0.06;
         var stepLen = 0.04;
         var lift = 0.02;
         var terrainGoos = new List<IGH_GeometricGoo>();
-        da.GetData(0, ref hexGoo);
-        da.GetData(1, ref pathCurve);
-        da.GetDataList(2, pathPlanes);
-        da.GetData(3, ref speed);
-        da.GetData(4, ref stepLen);
-        da.GetData(5, ref lift);
-        da.GetDataList(6, terrainGoos);
+        da.GetData(0, ref mechGoo);
+        da.GetData(1, ref poseGoo);
+        da.GetData(2, ref pathCurve);
+        da.GetDataList(3, pathPlanes);
+        da.GetData(4, ref speed);
+        da.GetData(5, ref stepLen);
+        da.GetData(6, ref lift);
+        da.GetDataList(7, terrainGoos);
 
-        var layout = hexGoo?.Value ?? LeggedLayout.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
-        var hs = hexGoo?.HipStance ?? 7.5 * Math.PI / 180.0;
-        var fs = hexGoo?.FemurStance ?? 30.0 * Math.PI / 180.0;
-        var ts = hexGoo?.TibiaStance ?? -30.0 * Math.PI / 180.0;
-        var qIn = hexGoo?.DriverQ is { Count: >= 18 } dq ? dq.ToList() : new List<double>();
+        if (mechGoo?.Value is null)
+        {
+            ClearPreview();
+            _previewColors = [];
+            _previewContactCircles = [];
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Mech required — wire Motus Mechanism (Body + Leg).");
+            return;
+        }
+
+        var mechanism = mechGoo.Value;
+        var hs = mechGoo.HipStance;
+        var fs = mechGoo.FemurStance;
+        var ts = mechGoo.TibiaStance;
 
         var terrainGeom = new List<object>(terrainGoos.Count);
         TerrainHeightRhino.CollectFromGoos(terrainGoos, terrainGeom);
 
         var hasPath = (pathCurve is not null && pathCurve.IsValid) || pathPlanes.Count >= 2;
+        var hasTerrainGeom = terrainGeom.Count > 0;
 
         if (!double.IsFinite(speed) || !double.IsFinite(stepLen) || !double.IsFinite(lift)
-            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts)
-            || !double.IsFinite(layout.BodyR) || !double.IsFinite(layout.Coxa)
-            || !double.IsFinite(layout.Femur) || !double.IsFinite(layout.Tibia)
-            || !double.IsFinite(layout.BodyZ))
+            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts))
         {
             ClearPreview();
             _previewColors = [];
             _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Speed / Step / Lift / Hex size must be finite.");
-            return;
-        }
-
-        if (layout.BodyR <= 0 || layout.Coxa <= 0 || layout.Femur <= 0 || layout.Tibia <= 0)
-        {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Hex BodyR / Coxa / Femur / Tibia must be > 0 (m).");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Speed / Step / Lift / stance must be finite.");
             return;
         }
 
         try
         {
-            var q = WalkingHexShared.BuildStanceQ(layout, hs, fs, ts, qIn);
-            var desc = WalkingHexShared.BuildDescription(layout);
-            var tree = desc.ToKinematicTree();
-            var tipLink = layout.TipLinkName;
-            var tip = tree.ExtractSerialTip("body", tipLink);
+            var q = WalkingHexShared.BuildStanceQ(mechanism, hs, fs, ts, null);
+            var tree = mechanism.Assemble();
+            var tipLink = mechanism.TipLinkName;
+            var tip = tree.ExtractSerialTip(mechanism.BodyLinkName, tipLink);
             var driverNames = WalkingHexShared.DriverNames(tree);
             var allLimits = WalkingHexShared.LimitsAllDrivers(tree);
+            // Preview visuals: namespaced URDF matching Assemble (3R sticks).
+            RobotDescription? desc = null;
+            try { desc = WalkingHexShared.BuildDescription(mechanism); }
+            catch { /* numerical-only legs may lack Lengths3R visuals */ }
 
             RobotPreset preset;
             SerialJointChain? chain;
@@ -135,17 +133,18 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             JointState? treeDriverHome;
             if (hasPath)
             {
+                preset = mechanism.ToPreset(limits: allLimits);
                 preset = new RobotPreset
                 {
-                    Manufacturer = RobotManufacturer.Unknown,
-                    ModelName = "walking_hexapod_gait",
+                    Manufacturer = preset.Manufacturer,
+                    ModelName = mechanism.ModelName + "_gait",
                     Family = Units.LeggedFamily,
                     AxisCount = tree.DriverCount,
                     JointLimits = allLimits,
                     BaseFrame = BaseFrame.Identity,
                     ToolFrame = ToolFrame.Identity,
-                    Notes = "Walking hex gait (18-DOF, Family=legged). Trajectory → Preview — not UR MoveJ.",
-                    SourceNote = "Motus Walk Hex",
+                    Notes = $"Legged gait ({tree.DriverCount}-DOF, Family=legged). Trajectory → Preview — not UR MoveJ.",
+                    SourceNote = "Motus Walk",
                 };
                 chain = null;
                 previewHome = new JointState(q);
@@ -157,7 +156,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 preset = new RobotPreset
                 {
                     Manufacturer = RobotManufacturer.Unknown,
-                    ModelName = "walking_hexapod",
+                    ModelName = mechanism.ModelName,
                     Family = Units.LeggedFamily,
                     AxisCount = tip.Chain.Joints.Length,
                     JointLimits = tipLimits,
@@ -165,13 +164,22 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     ToolFrame = tip.TipToolOffset is { } off
                         ? new ToolFrame(off, "foot")
                         : ToolFrame.Identity,
-                    Notes = "Walking hex tip-path (one leg). Wire Path for gait, or use Motus Hex → Plan.",
-                    SourceNote = "Motus Walk Hex",
+                    Notes = "Legged tip-path (one leg). Wire Path for gait, or Mechanism → Walk without Path.",
+                    SourceNote = "Motus Walk",
                 };
                 chain = tip.Chain;
                 var tipHome = new double[preset.AxisCount];
-                for (var i = 0; i < tipHome.Length && i < 3; i++)
-                    tipHome[i] = q[i];
+                var tipOff = 0;
+                for (var i = 0; i < mechanism.LegCount; i++)
+                {
+                    if (string.Equals(mechanism.Legs[i].Name, mechanism.TipLegName, StringComparison.Ordinal))
+                    {
+                        tipOff = mechanism.DriverOffsets[i];
+                        break;
+                    }
+                }
+                for (var i = 0; i < tipHome.Length && tipOff + i < q.Length; i++)
+                    tipHome[i] = q[tipOff + i];
                 previewHome = new JointState(tipHome);
                 treeDriverHome = new JointState(q);
             }
@@ -183,13 +191,14 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 Tree = tree,
                 PreviewHome = previewHome,
                 TreeDriverHome = treeDriverHome,
-                PreviewGeometry = MechanismPreviewGeometry.Build(desc),
+                PreviewGeometry = desc is not null ? MechanismPreviewGeometry.Build(desc) : null,
             };
 
             TrajectoryGoo? trajGoo = null;
             Curve? pathCurveOut = null;
             List<Plane> pathPlanesOut = [];
             LeggedGait.TerrainHeight? terrain = null;
+            IBodyPoseSolver? bodyPose = poseGoo?.Value;
             if (hasPath)
             {
                 terrain = TerrainHeightRhino.TryCreate(terrainGeom, out var terrainWarn);
@@ -209,7 +218,6 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                         AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                             $"Terrain miss at path start ({probeX:F3},{probeY:F3}) — enlarge Ground or move path.");
 
-                    // Swing must clear local height delta or feet clip / IK struggles mid-swing.
                     double zMin = double.PositiveInfinity, zMax = double.NegativeInfinity;
                     void Acc(double x, double y)
                     {
@@ -245,8 +253,13 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     }
                 }
 
+                // Auto pose: TerrainSupport when Tn wired, else PathFollow (clearance = BodyZ).
+                bodyPose ??= hasTerrainGeom || terrain is not null
+                    ? new TerrainSupportBodyPose(clearanceMeters: 0)
+                    : new PathFollowBodyPose(clearanceMeters: mechanism.NominalBodyClearance);
+
                 if (!LeggedGaitRhino.TryBuild(
-                        layout, pathCurve, pathPlanes, speed, stepLen, lift,
+                        mechanism, bodyPose, pathCurve, pathPlanes, speed, stepLen, lift,
                         hs, fs, ts, model,
                         out var gait, out var gaitErr, terrain))
                 {
@@ -297,7 +310,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             {
                 AddRuntimeMessage(
                     GH_RuntimeMessageLevel.Remark,
-                    "Wire Path or Planes (≥2) for gait Tr → Preview. Or Motus Hex → Plan for tip-path only.");
+                    "Wire Path or Planes (≥2) for gait Tr → Preview. Or use tip-path Rb → Plan.");
             }
 
             var previewQ = q;
@@ -312,7 +325,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 previewTerrain = trajGoo.TerrainSampler;
             }
 
-            var preview = WalkingHexPreview.Build(layout, previewQ, previewBase, previewTerrain);
+            var preview = WalkingHexPreview.Build(mechanism, previewQ, previewBase, previewTerrain);
             _previewMeshes = preview.Meshes.ToList();
             _previewWires = preview.Wires.ToList();
             _previewColors = preview.Colors.ToList();

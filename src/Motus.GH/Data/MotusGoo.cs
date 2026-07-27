@@ -48,20 +48,68 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
     public override string ToString() => $"Joints[{Value?.AxisCount}]";
 }
 
-/// <summary>Compact hex size + stance for Motus Hex → WalkHex (Family=legged).</summary>
-public sealed class HexLayoutGoo : MotusGooBase<LeggedLayout>
+/// <summary>One leg recipe (lengths / chain + IK) for Motus Mechanism.</summary>
+public sealed class LegDefinitionGoo : MotusGooBase<LegDefinition>
+{
+    public LegDefinitionGoo() { }
+    public LegDefinitionGoo(LegDefinition leg) : base(leg) { }
+
+    public override string ToString() => Value is null
+        ? "Leg"
+        : Value.Lengths3R is { Count: 3 } L
+            ? $"Leg '{Value.Name}' 3R [{L[0]:F3},{L[1]:F3},{L[2]:F3}] m"
+            : $"Leg '{Value.Name}' {Value.DriverDof}DOF";
+}
+
+/// <summary>Body hip frames (+ optional Radial metadata) for Motus Mechanism.</summary>
+public sealed class LeggedBodyGoo : MotusGooBase<List<Frame>>
+{
+    public double BodyZ { get; }
+    public int? N { get; }
+    public double? BodyR { get; }
+
+    public IReadOnlyList<Frame> HipFrames => Value ?? [];
+
+    public LeggedBodyGoo() : base([])
+    {
+        BodyZ = 0;
+    }
+
+    public LeggedBodyGoo(IReadOnlyList<Frame> hips, double bodyZ, int? n = null, double? bodyR = null)
+        : base(hips as List<Frame> ?? hips.ToList())
+    {
+        BodyZ = bodyZ;
+        N = n;
+        BodyR = bodyR;
+    }
+
+    public override string ToString() =>
+        $"Body N={HipFrames.Count} Bz={BodyZ:F3}" +
+        (BodyR is { } r ? $" Br={r:F3}" : "");
+}
+
+/// <summary>Assembled N-leg walker + stance angles for Motus Walk.</summary>
+public sealed class LeggedMechanismGoo : MotusGooBase<LeggedMechanism>
 {
     public double HipStance { get; set; } = 7.5 * Math.PI / 180.0;
     public double FemurStance { get; set; } = 30.0 * Math.PI / 180.0;
     public double TibiaStance { get; set; } = -30.0 * Math.PI / 180.0;
-    public IReadOnlyList<double>? DriverQ { get; set; }
 
-    public HexLayoutGoo() { }
-    public HexLayoutGoo(LeggedLayout layout) : base(layout) { }
+    public LeggedMechanismGoo() { }
+    public LeggedMechanismGoo(LeggedMechanism mechanism) : base(mechanism) { }
 
     public override string ToString() => Value is null
-        ? "Hex"
-        : $"Hex Br={Value.BodyR:F3} Cx={Value.Coxa:F3} Fm={Value.Femur:F3} Tb={Value.Tibia:F3} Bz={Value.BodyZ:F3}";
+        ? "Mech"
+        : $"Mech N={Value.LegCount} drivers={Value.DriverCount} tip={Value.TipLegName}";
+}
+
+/// <summary>Pluggable body-pose policy (<see cref="IBodyPoseSolver"/>).</summary>
+public sealed class BodyPoseSolverGoo : MotusGooBase<IBodyPoseSolver>
+{
+    public BodyPoseSolverGoo() { }
+    public BodyPoseSolverGoo(IBodyPoseSolver solver) : base(solver) { }
+
+    public override string ToString() => Value?.MethodId ?? "Pose";
 }
 
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>

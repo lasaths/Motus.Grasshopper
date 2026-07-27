@@ -3,7 +3,6 @@ using Motus.Geometry;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
 using NetLeggedGait = Motus.Geometry.LeggedGait;
-using NetLeggedLayout = Motus.Geometry.LeggedLayout;
 
 namespace Motus.GH.Planning;
 
@@ -24,7 +23,8 @@ internal static class LeggedGaitRhino
         string MethodProvenance);
 
     public static bool TryBuild(
-        NetLeggedLayout layout,
+        LeggedMechanism mechanism,
+        IBodyPoseSolver? bodyPose,
         Curve? pathCurve,
         IReadOnlyList<Plane>? pathPlanes,
         double speed,
@@ -44,12 +44,11 @@ internal static class LeggedGaitRhino
 
         var poly = SamplePolyline(curve);
         if (!NetLeggedGait.TryBuild(
-                layout, poly, speed, stepLength, stepHeight,
+                mechanism, bodyPose, poly, speed, stepLength, stepHeight,
                 hipStance, femurStance, tibiaStance, model,
                 out var net, out error, terrain))
             return false;
 
-        // Path outputs sit on the projected body path (terrain support plane), not the Z=0 input.
         var pathPts = new List<Point3d>(net!.BasePath.Count);
         var planes = new List<Plane>();
         for (var i = 0; i < net.BasePath.Count; i++)
@@ -76,8 +75,9 @@ internal static class LeggedGaitRhino
         return true;
     }
 
-    internal static double[] BuildStanceQ(NetLeggedLayout layout, double hip, double femur, double tibia) =>
-        NetLeggedGait.BuildStanceQ(layout, hip, femur, tibia);
+    internal static double[] BuildStanceQ(
+        LeggedMechanism mechanism, double hip, double femur, double tibia) =>
+        NetLeggedGait.BuildStanceQ(mechanism, hip, femur, tibia);
 
     private static List<Vec3> SamplePolyline(Curve curve)
     {

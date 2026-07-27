@@ -10,7 +10,7 @@ public sealed class MotusGhPlugin : GH_AssemblyInfo
     /// <summary>Stable GHA library id — must match MOTUS_LIB in scripts/generate-examples.mjs / validate-ghx.mjs.</summary>
     public override Guid Id => new("dc547e55-81a8-c313-e25d-e1468ddecddb");
     public override string Name => "Motus";
-    public override string Version => "0.7.2";
+    public override string Version => "0.13.0";
     public override string AuthorName => "Motus";
     public override GH_LibraryLicense License => GH_LibraryLicense.opensource;
     public override string Description => "Motion planning for robotics (visualization only, no robot control).";

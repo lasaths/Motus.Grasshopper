@@ -25,7 +25,12 @@ WalkHex needs a foot-target duty gait for TreeFK preview along a planar path. Ki
 
 ## Consequences
 
-- Hex is one factory (`LeggedLayout.HexMithi`); other N layouts reuse the same Motus.NET stack.
+- Hex was one factory (`LeggedLayout.HexMithi`); other N layouts reuse the same Motus.NET stack.
 - Status/Remarks carry `LeggedMethodRefs.DescribeStack()` and min McGhee–Frank SSM.
-- Docs distinguish Stewart (`Family=stewart`, meters) from walking hex (`Family=legged`, radians).
+- Docs distinguish Stewart (`Family=stewart`, meters) from walking (`Family=legged`, radians).
 - Build Motus.Grasshopper with `-UseLocal` until Motus.NET with these types is published.
+
+## Superseded GH surface (see ADR 0005)
+
+- Motus Hex / WalkHex chrome removed from Grasshopper; walkers are Body + Leg + Mechanism → Walk.
+- N×3R methods (`LegIk3R`, duty gait, SSM) remain; mechanism assembly, `GaitSchedule`, and pluggable body/leg solvers are ADR 0005.

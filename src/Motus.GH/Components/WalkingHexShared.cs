@@ -6,63 +6,93 @@ using System.Drawing;
 
 namespace Motus.GH.Components;
 
-/// <summary>Shared Motus Hex / WalkHex build helpers (meters, radians).</summary>
+/// <summary>Shared Motus Body/Leg/Mechanism → Walk build helpers (meters, radians).</summary>
 internal static class WalkingHexShared
 {
     internal static double[] BuildStanceQ(
-        LeggedLayout layout, double hip, double femur, double tibia, List<double> overrideQ)
+        LeggedMechanism mechanism, double hip, double femur, double tibia, IReadOnlyList<double>? overrideQ)
     {
-        if (overrideQ.Count >= layout.DriverCount)
+        if (overrideQ is { Count: > 0 } oq && oq.Count >= mechanism.DriverCount)
         {
-            var q = new double[layout.DriverCount];
-            for (var i = 0; i < q.Length; i++) q[i] = overrideQ[i];
+            var q = new double[mechanism.DriverCount];
+            for (var i = 0; i < q.Length; i++) q[i] = oq[i];
             return q;
         }
 
-        return LeggedGaitRhino.BuildStanceQ(layout, hip, femur, tibia);
+        return LeggedGaitRhino.BuildStanceQ(mechanism, hip, femur, tibia);
     }
 
-    internal static RobotDescription BuildDescription(LeggedLayout layout)
+    /// <summary>
+    /// Preview URDF visuals matching <see cref="LeggedMechanism.Assemble"/> namespaced link names.
+    /// </summary>
+    internal static RobotDescription BuildDescription(LeggedMechanism mechanism)
     {
+        var hips = mechanism.Legs.Select(l => l.HipInBody ?? Frame.Identity).ToList();
+        var bodyR = EstimateBodyR(hips);
+        var bodyZ = mechanism.NominalBodyClearance;
         var links = new List<UrdfLink>
         {
             new("body",
-                [HexPlateGeometry(layout.BodyR, thickness: 0.02, new Frame(0, 0, layout.BodyZ))],
+                [NGonPlateGeometry(hips, thickness: 0.02, bodyZ)],
                 r: 1, g: 0.4, b: 0.7, a: 0.85),
         };
         var joints = new List<UrdfJoint>();
 
-        for (var leg = 0; leg < layout.LegCount; leg++)
+        for (var leg = 0; leg < mechanism.LegCount; leg++)
         {
-            var name = layout.LegNames[leg];
-            var yaw = layout.HipYawsRad[leg];
-            var hx = layout.BodyR * Math.Cos(yaw);
-            var hy = layout.BodyR * Math.Sin(yaw);
-            var coxa = layout.Coxa;
-            var femur = layout.Femur;
-            var tibia = layout.Tibia;
-            var bodyZ = layout.BodyZ;
-            var coxaLink = $"{name}_coxa";
-            var femurLink = $"{name}_femur";
-            var tibiaLink = $"{name}_tibia";
+            var def = mechanism.Legs[leg];
+            var prefix = def.Name + "/";
+            var hip = hips[leg];
+            var mount = prefix + "mount";
+            links.Add(new UrdfLink(mount, [], r: 1, g: 0.55, b: 0.15, a: 1));
 
-            links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.012)], r: 1, g: 0.55, b: 0.15, a: 1));
+            // Fixed graft mount at hip (matches Assemble Attach).
+            joints.Add(new UrdfJoint(
+                prefix + "attach", "fixed", "body", mount,
+                hip.X, hip.Y, hip.Z, 0, 0, 1, 0, 0));
 
-            joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink,
-                hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_femur", "revolute", coxaLink, femurLink,
-                coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_tibia", "revolute", femurLink, tibiaLink,
-                femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+            if (def.Lengths3R is { Count: 3 } L)
+            {
+                var coxa = L[0];
+                var femur = L[1];
+                var tibia = L[2];
+                var coxaLink = prefix + "coxa";
+                var femurLink = prefix + "femur";
+                var tibiaLink = prefix + "tibia";
+                links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
+                links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
+                links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.012)], r: 1, g: 0.55, b: 0.15, a: 1));
+                joints.Add(new UrdfJoint(prefix + "hip", "revolute", mount, coxaLink,
+                    0, 0, 0, 0, 0, 1, -Math.PI, Math.PI));
+                joints.Add(new UrdfJoint(prefix + "femur", "revolute", coxaLink, femurLink,
+                    coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+                joints.Add(new UrdfJoint(prefix + "tibia", "revolute", femurLink, tibiaLink,
+                    femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+            }
+            else if (def.Chain is { } chain)
+            {
+                // Visual stick only — TreeFK poses via Assemble tree, not this URDF for numerical legs.
+                _ = chain;
+                _ = bodyR;
+            }
         }
 
-        if (!RobotDescription.TryAssemble("walking_hexapod", links, joints, tipLink: layout.TipLinkName,
+        if (!RobotDescription.TryAssemble(mechanism.ModelName, links, joints, tipLink: mechanism.TipLinkName,
                 out var desc, out var diag, homeQ: null) || desc is null)
             throw new InvalidOperationException(string.Join("; ", diag.Errors));
 
         return desc;
+    }
+
+    private static double EstimateBodyR(IReadOnlyList<Frame> hips)
+    {
+        var r = 0.06;
+        foreach (var h in hips)
+        {
+            var d = Math.Sqrt(h.X * h.X + h.Y * h.Y);
+            if (d > r) r = d;
+        }
+        return r;
     }
 
     /// <summary>
@@ -79,39 +109,34 @@ internal static class WalkingHexShared
         ];
         int[] indices =
         [
-            0, 1, 2, 0, 2, 3, // -Z
-            4, 6, 5, 4, 7, 6, // +Z
-            0, 4, 5, 0, 5, 1, // -Y
-            2, 6, 7, 2, 7, 3, // +Y
-            0, 3, 7, 0, 7, 4, // -X (hip)
-            1, 5, 6, 1, 6, 2, // +X (knee)
+            0, 1, 2, 0, 2, 3,
+            4, 6, 5, 4, 7, 6,
+            0, 4, 5, 0, 5, 1,
+            2, 6, 7, 2, 7, 3,
+            0, 3, 7, 0, 7, 4,
+            1, 5, 6, 1, 6, 2,
         ];
         return UrdfGeometry.Mesh(verts, indices);
     }
 
-    /// <summary>Flat hex plate; vertices at hip angles so legs attach at corners.</summary>
-    private static UrdfGeometry HexPlateGeometry(double radius, double thickness, Frame origin)
+    /// <summary>Flat N-gon plate through hip XY at body Z.</summary>
+    private static UrdfGeometry NGonPlateGeometry(IReadOnlyList<Frame> hips, double thickness, double bodyZ)
     {
-        var n = 6;
-        var verts = new List<double[]>(n * 2);
+        var n = hips.Count;
+        var verts = new List<double[]>(Math.Max(n, 3) * 2);
         var hz = thickness * 0.5;
         for (var i = 0; i < n; i++)
         {
-            var a = i * (Math.PI / 3.0); // match HexMithi hip yaws
-            var x = radius * Math.Cos(a);
-            var y = radius * Math.Sin(a);
-            verts.Add([x, y, hz]);
-            verts.Add([x, y, -hz]);
+            verts.Add([hips[i].X, hips[i].Y, hz]);
+            verts.Add([hips[i].X, hips[i].Y, -hz]);
         }
 
         var indices = new List<int>();
-        // Top / bottom fans
         for (var i = 1; i < n - 1; i++)
         {
             indices.Add(0); indices.Add(i * 2); indices.Add((i + 1) * 2);
             indices.Add(1); indices.Add((i + 1) * 2 + 1); indices.Add(i * 2 + 1);
         }
-        // Side walls
         for (var i = 0; i < n; i++)
         {
             var j = (i + 1) % n;
@@ -121,7 +146,7 @@ internal static class WalkingHexShared
             indices.Add(t0); indices.Add(b1); indices.Add(b0);
         }
 
-        return UrdfGeometry.Mesh(verts, indices, origin: origin);
+        return UrdfGeometry.Mesh(verts, indices, origin: new Frame(0, 0, bodyZ));
     }
 
     internal static List<JointLimit> LimitsAllDrivers(KinematicTree tree)
@@ -163,7 +188,7 @@ internal static class WalkingHexShared
 }
 
 
-/// <summary>Walking-hex viewport meshes: hex body plate at hip radius, orange legs, ground-contact rings.</summary>
+/// <summary>Legged viewport meshes: N-gon body from hip frames, orange 3R sticks, ground-contact rings.</summary>
 internal static class WalkingHexPreview
 {
     public readonly record struct Result(
@@ -174,7 +199,7 @@ internal static class WalkingHexPreview
         Curve? SupportPolygon);
 
     public static Result Build(
-        LeggedLayout layout, double[] q, Frame? baseFrame = null,
+        LeggedMechanism mechanism, double[] q, Frame? baseFrame = null,
         LeggedGait.TerrainHeight? terrain = null)
     {
         var meshes = new List<Mesh>();
@@ -188,21 +213,14 @@ internal static class WalkingHexPreview
         var jointColor = Color.FromArgb(230, 255, 160, 70);
         var contactColor = Color.FromArgb(180, 80, 200, 120);
 
-        var bodyR = layout.BodyR;
-        var bodyZ = layout.BodyZ;
-        var coxa = layout.Coxa;
-        var femur = layout.Femur;
-        var tibia = layout.Tibia;
-        var n = layout.LegCount;
-
-        // Hex/N-gon plate at hip radius so legs attach at vertices (not an inset box).
+        var n = mechanism.LegCount;
         var bodyPts = new Point3d[n];
         for (var i = 0; i < n; i++)
         {
-            var a = layout.HipYawsRad[i];
-            bodyPts[i] = new Point3d(bodyR * Math.Cos(a), bodyR * Math.Sin(a), bodyZ);
+            var hip = mechanism.HipBody(i);
+            bodyPts[i] = new Point3d(hip.X, hip.Y, hip.Z);
         }
-        if (HexSlab(bodyPts, 0.02) is { } bodyMesh)
+        if (NGonSlab(bodyPts, 0.02) is { } bodyMesh)
         {
             meshes.Add(bodyMesh);
             colors.Add(bodyColor);
@@ -212,20 +230,28 @@ internal static class WalkingHexPreview
         const double jointR = 0.010;
         for (var leg = 0; leg < n; leg++)
         {
-            var yaw0 = layout.HipYawsRad[leg];
-            var hip = new Point3d(bodyR * Math.Cos(yaw0), bodyR * Math.Sin(yaw0), bodyZ);
-            var coxaA = q[leg * 3 + 0];
-            var femurA = q[leg * 3 + 1];
-            var tibiaA = q[leg * 3 + 2];
+            var def = mechanism.Legs[leg];
+            if (def.Lengths3R is not { Count: 3 } L)
+                continue;
+            var off = mechanism.DriverOffsets[leg];
+            if (off + 2 >= q.Length)
+                continue;
+
+            var hipV = mechanism.HipBody(leg);
+            var hip = new Point3d(hipV.X, hipV.Y, hipV.Z);
+            var coxa = L[0];
+            var femur = L[1];
+            var tibia = L[2];
+            var coxaA = q[off];
+            var femurA = q[off + 1];
+            var tibiaA = q[off + 2];
 
             var coxaDir = new Vector3d(Math.Cos(coxaA), Math.Sin(coxaA), 0);
             var knee = hip + coxaDir * coxa;
-
             var up = Vector3d.ZAxis;
             var femurDir = coxaDir * Math.Cos(femurA) - up * Math.Sin(femurA);
             femurDir.Unitize();
             var ankle = knee + femurDir * femur;
-
             var tibiaDir = coxaDir * Math.Cos(femurA + tibiaA) - up * Math.Sin(femurA + tibiaA);
             tibiaDir.Unitize();
             var foot = ankle + tibiaDir * tibia;
@@ -236,7 +262,6 @@ internal static class WalkingHexPreview
             AddSeg(meshes, colors, wires, ankle, foot, segR * 0.85, jointR * 0.85, legColor, jointColor);
         }
 
-        // World feet for plant test (body-local until base xform below).
         var worldFeet = new Point3d[feet.Count];
         for (var i = 0; i < feet.Count; i++)
             worldFeet[i] = feet[i];
@@ -297,7 +322,6 @@ internal static class WalkingHexPreview
 
     private static Transform BodyWorldXform(Frame baseFrame)
     {
-        // Full SE3 — yaw-only dropped terrain Z / stance pitch and buried the chassis in hills.
         var m = Motus.Geometry.Transforms.FromFrame(baseFrame);
         return new Transform
         {
@@ -332,7 +356,7 @@ internal static class WalkingHexPreview
         }
     }
 
-    private static Mesh? HexSlab(Point3d[] ring, double thickness)
+    private static Mesh? NGonSlab(Point3d[] ring, double thickness)
     {
         if (ring.Length < 3) return null;
         var c = Point3d.Origin;
@@ -358,4 +382,3 @@ internal static class WalkingHexPreview
         return slab.IsValid ? slab : null;
     }
 }
-

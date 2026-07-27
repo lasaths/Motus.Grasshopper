@@ -5,7 +5,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet 0.12.0](https://www.nuget.org/profiles/lasaths)) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet 0.13.0](https://www.nuget.org/profiles/lasaths)) |
 
 **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
@@ -126,7 +126,7 @@ Solvers live in Motus.NET; Grasshopper only selects and wires them. Full catalog
 | Stewart / Gough | Leg-length IK/FK, stroke-space collision/RRT (`Family=stewart`, **meters**) | Merlet; Dasgupta & Mruthyunjaya (see METHODS) |
 | Group / tree planning | `PlanningGroup` / `GroupMap` over named drivers | ADR [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) |
 | Holonomic SE(2) | Base x/y/yaw appended to sampling (`Joint Table` SE2) | LaValle, *Planning Algorithms* (2006) |
-| Legged gait | Duty-cycle gait + SSM gate (`WalkHex`; `Family=legged`, **radians**) | Lynch & Park; Song & Waldron; McGhee & Frank (see METHODS) |
+| Legged gait | Duty-cycle gait + SSM gate (`Walk`; `Family=legged`, **radians**) | Lynch & Park; Song & Waldron; McGhee & Frank (see METHODS) |
 
 Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expected. Extra planners need Motus.NET native full build; check Plan `Warnings` → `MotusCapabilities.Describe()`.
 
@@ -136,14 +136,14 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-- Motus.NET **0.12.0** NuGet (default). Local Motus.NET: `./build.ps1 -UseLocal`
+- Motus.NET **0.13.0** NuGet (default). Local Motus.NET: `./build.ps1 -UseLocal`
 
 ## Install from source
 
 **Windows**
 
 ```powershell
-./build.ps1                      # Release (NuGet Motus.NET 0.12.0)
+./build.ps1                      # Release (NuGet Motus.NET 0.13.0)
 ./build.ps1 -UseLocal            # sibling Motus.NET project refs
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
 ./build.ps1 -Yak                 # dist/motus-*-rh8_*-any.yak
@@ -163,7 +163,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 |----------|---------|
 | `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
 | `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
-| `MotusNetVersion` | Override NuGet pin (default `0.12.0`) |
+| `MotusNetVersion` | Override NuGet pin (default `0.13.0`) |
 
 ## Common workflows
 
@@ -173,7 +173,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 
 **Tools / attach / groups:** Motus Tool on Robot; Attach Body + Planning Group on Plan; SRDF on ColScene. Examples: `03_urdf_tool_frames.ghx`, `02_collision_srdf.ghx`.
 
-**Parallel / walking:** Motus Stewart → Plan TCP planes (`08_stewart_tcp_path.ghx`). Motus WalkHex → gait Trajectory (`09_walking_hexapod.ghx`) — not full-mechanism Motus Plan.
+**Parallel / walking:** Motus Stewart → Plan TCP planes (`08_stewart_tcp_path.ghx`). Motus Body+Leg+Mechanism → Walk gait (`09_walking_hexapod.ghx`, `10_funky_octopod.ghx`) — not full-mechanism Motus Plan.
 
 ## Examples
 
@@ -192,7 +192,8 @@ Nine generated definitions in [`examples/`](examples/README.md) (**never hand-ed
 | `06_turntable_group.ghx` | Coupled vs Group-locked Plan |
 | `07_urdf_gripper_tool.ghx` | Actuated gripper as Tool Description |
 | `08_stewart_tcp_path.ghx` | Stewart TCP Plan (meters) |
-| `09_walking_hexapod.ghx` | WalkHex gait + optional terrain |
+| `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk gait + optional terrain |
+| `10_funky_octopod.ghx` | Body N=8 → Walk (flat) |
 
 </details>
 

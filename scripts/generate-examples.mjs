@@ -350,7 +350,7 @@ const MOTUS = {
   },
   terrainPatch: {
     guid: '86e87c03-366b-4de3-9448-3b154cd28f24', name: 'Motus Terrain Patch', nick: 'Ground', w: 74, h: 84,
-    desc: 'Outdoor heightfield mesh (m) for WalkHex Terrain',
+    desc: 'Outdoor heightfield mesh (m) for Motus Walk Terrain',
     inputs: [
       { name: 'Origin', nick: 'O', desc: 'Patch center (m)', optional: true, point: [0.22, 0, 0] },
       { name: 'SizeX', nick: 'Sx', desc: 'Full width X (m)', optional: true, number: 1.0 },
@@ -359,32 +359,47 @@ const MOTUS = {
     ],
     outputs: [{ name: 'Mesh', nick: 'M', desc: 'Outdoor ground mesh', typeId: PTYPE.mesh }],
   },
-  hex: {
-    guid: 'c7a02fcb-2562-4540-9f44-5cc9e99293ec', name: 'Motus Hex', nick: 'Hex', w: 74, h: 180,
-    desc: 'Walking hex size & stance (Family=legged). Wire Hx → WalkHex; Rb → Plan tip-path.',
+  leg: {
+    guid: '9a49a661-ff4c-4b96-bb57-c977ee6f9da2', name: 'Motus Leg', nick: 'Leg', w: 64, h: 72,
+    desc: 'Leg lengths (m) → Leg goo for Motus Mechanism',
     inputs: [
-      { name: 'BodyR', nick: 'Br', desc: 'Body hex radius to hip (m)', optional: true, number: 0.06 },
-      { name: 'Coxa', nick: 'Cx', desc: 'Coxa length (m)', optional: true, number: 0.035 },
-      { name: 'Femur', nick: 'Fm', desc: 'Femur length (m)', optional: true, number: 0.08 },
-      { name: 'Tibia', nick: 'Tb', desc: 'Tibia length (m)', optional: true, number: 0.10 },
+      { name: 'Lengths', nick: 'L', desc: 'Link lengths (m)', optional: true, list: true, access: 1 },
+      { name: 'Name', nick: 'N', desc: 'Optional leg name', optional: true, text: 'leg' },
+      { name: 'Tip', nick: 'Tip', desc: 'Foot link name', optional: true, text: '' },
+    ],
+    outputs: [{ name: 'Leg', nick: 'Leg', desc: 'Leg recipe → Mechanism' }],
+  },
+  body: {
+    guid: '92f0d969-c8ef-47c5-9ec7-514bebbd8441', name: 'Motus Body', nick: 'Body', w: 64, h: 96,
+    desc: 'Radial or custom hip frames → Bdy for Mechanism',
+    inputs: [
+      { name: 'N', nick: 'N', desc: 'Radial hip count', optional: true },
+      { name: 'BodyR', nick: 'Br', desc: 'Body radius (m)', optional: true, number: 0.06 },
       { name: 'BodyZ', nick: 'Bz', desc: 'Body height (m)', optional: true, number: 0.07 },
+      { name: 'Planes', nick: 'Pl', desc: 'Optional custom hip planes', optional: true, typeId: PTYPE.plane, access: 1 },
+    ],
+    outputs: [{ name: 'Body', nick: 'Bdy', desc: 'Hip frames → Mechanism' }],
+  },
+  mechanism: {
+    guid: 'aa18b783-9a1c-44f8-bd2b-e508c3d372ac', name: 'Motus Mechanism', nick: 'Mech', w: 74, h: 140,
+    desc: 'Assemble Bdy+Leg → Mech for Motus Walk',
+    inputs: [
+      { name: 'Body', nick: 'Bdy', desc: 'From Motus Body' },
+      { name: 'Leg', nick: 'Leg', desc: 'One Leg or list', access: 1 },
+      { name: 'AllowDynamicGait', nick: 'Dyn', desc: 'Allow dynamic gait', optional: true, bool: false },
+      { name: 'Tip', nick: 'Tip', desc: 'Tip leg name', optional: true, text: '' },
       { name: 'HipStance', nick: 'Hs', desc: 'Coxa stance (rad)', optional: true, number: 0.1309 },
       { name: 'FemurStance', nick: 'Fs', desc: 'Femur stance (rad)', optional: true, number: 0.5236 },
       { name: 'TibiaStance', nick: 'Ts', desc: 'Tibia stance (rad)', optional: true, number: -0.5236 },
-      { name: 'Q', nick: 'Q', desc: 'Optional full driver q (18)', optional: true, list: true, access: 1 },
     ],
-    outputs: [
-      { name: 'Hex', nick: 'Hx', desc: 'Size & stance → WalkHex' },
-      { name: 'Robot', nick: 'Rb', desc: 'Robot (tip-path Plan)' },
-      { name: 'State', nick: 'Js', desc: '18-DOF stance', typeId: PTYPE.jointState },
-      { name: 'Meshes', nick: 'M', desc: 'Stance preview', access: 1 },
-    ],
+    outputs: [{ name: 'Mechanism', nick: 'Mech', desc: 'Assembled walker → Walk' }],
   },
-  walkHex: {
-    guid: '236f9a53-c07b-4663-bf27-950e20fb59ab', name: 'Motus Walk Hex', nick: 'WalkHex', w: 80, h: 160,
-    desc: 'Walk hex along Path/Planes + Terrain. Optional Hx from Motus Hex. NOT Stewart',
+  walk: {
+    guid: '236f9a53-c07b-4663-bf27-950e20fb59ab', name: 'Motus Walk', nick: 'Walk', w: 80, h: 180,
+    desc: 'Walk Mech along Path/Planes + Terrain. Family=legged. NOT Stewart',
     inputs: [
-      { name: 'Hex', nick: 'Hx', desc: 'Optional Motus Hex size/stance', optional: true },
+      { name: 'Mechanism', nick: 'Mech', desc: 'From Motus Mechanism' },
+      { name: 'Pose', nick: 'Pose', desc: 'Optional body-pose policy', optional: true },
       { name: 'Path', nick: 'P', desc: 'Walk path curve (m)', optional: true, typeId: PTYPE.curve },
       { name: 'Planes', nick: 'Pl', desc: 'Or path as plane origins (m)', optional: true, typeId: PTYPE.plane, access: 1 },
       { name: 'Speed', nick: 'Spd', desc: 'Walk speed (m/s)', optional: true, number: 0.06 },
@@ -393,8 +408,8 @@ const MOTUS = {
       { name: 'Terrain', nick: 'Tn', desc: 'Optional ground Mesh/Brep (m)', optional: true, access: 1 },
     ],
     outputs: [
-      { name: 'Robot', nick: 'Rb', desc: 'Robot (gait=18-DOF)' },
-      { name: 'State', nick: 'Js', desc: '18-DOF stance', typeId: PTYPE.jointState },
+      { name: 'Robot', nick: 'Rb', desc: 'Robot (gait=full drivers)' },
+      { name: 'State', nick: 'Js', desc: 'Full-driver stance', typeId: PTYPE.jointState },
       { name: 'Trajectory', nick: 'Tr', desc: 'Gait trajectory when Path/Planes wired', typeId: PTYPE.trajectory },
       { name: 'PathCurve', nick: 'Pc', desc: 'Resolved path curve', typeId: PTYPE.curve },
       { name: 'PathPlanes', nick: 'Pp', desc: 'Body planes along path', typeId: PTYPE.plane, access: 1 },
@@ -2200,7 +2215,7 @@ function graph09() {
   const note = nativePanel(
     40,
     80,
-    'Hex (size) → WalkHex Hx; Ground → Tn; Planes arc → gait Tr → Preview scrub. Green rings = planted feet. Customize size on Hex; omit Hx = compact defaults.',
+    'Body + Leg → Mechanism → Walk Mech; Ground → Tn; Planes arc → gait Tr → Preview scrub. Green rings = planted feet. Motus Hex removed in 0.13 — migrate Body+Leg+Mechanism.',
     'Note',
     560,
     88,
@@ -2210,7 +2225,12 @@ function graph09() {
   const ground = motusComponent('terrainPatch', 320, 180, {
     Origin: [outRef(groundOrigin.node, 'Point')],
   });
-  const hex = motusComponent('hex', 480, 180, {});
+  const body = motusComponent('body', 480, 160, {});
+  const leg = motusComponent('leg', 480, 300, {});
+  const mech = motusComponent('mechanism', 620, 200, {
+    Body: [outRef(body.node, 'Body')],
+    Leg: [outRef(leg.node, 'Leg')],
+  });
   const arcParts = [];
   const planeRefs = [];
   const ARC_N = 9;
@@ -2218,15 +2238,15 @@ function graph09() {
     const a = Math.PI - (i / (ARC_N - 1)) * Math.PI;
     const px = 0.22 + 0.18 * Math.cos(a);
     const py = 0.18 * Math.sin(a);
-    // XY path only — WalkHex samples terrain height under the body.
+    // XY path only — Walk samples terrain height under the body.
     const pt = nativeConstructPoint(40, 300 + i * 44, [px, py, 0]);
     const pl = nativePlane(140, 300 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
     arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
     planeRefs.push(outRef(pl.node, 'Plane'));
   }
   const planesMerge = nativeMerge(280, 460, planeRefs);
-  const walk = motusComponent('walkHex', 40, 720, {
-    Hex: [outRef(hex.node, 'Hex')],
+  const walk = motusComponent('walk', 40, 720, {
+    Mechanism: [outRef(mech.node, 'Mechanism')],
     Planes: [outRef(planesMerge.node, 'Result')],
     Terrain: [outRef(ground.node, 'Mesh')],
   }, { numbers: { Lift: 0.06 } });
@@ -2235,7 +2255,9 @@ function graph09() {
     { xml: uz.xml, node: uz.node },
     groundOrigin,
     ground,
-    hex,
+    body,
+    leg,
+    mech,
     ...arcParts,
     planesMerge,
     walk,
@@ -2244,18 +2266,65 @@ function graph09() {
 
   const objs = [
     title, note, { xml: uz.xml },
-    groundOrigin, ground, hex,
+    groundOrigin, ground, body, leg, mech,
     ...arcParts, planesMerge, walk, scrub, preview, gModel, gPreview,
   ];
   objs._meta = {
     fileName: '09_walking_hexapod.ghx',
     description:
-      'Walking hexapod: Motus Hex + outdoor Ground + arc → WalkHex gait → Preview + Scrub. Not Stewart.',
+      'Walking hexapod: Body+Leg+Mechanism + outdoor Ground + arc → Walk gait → Preview + Scrub. Not Stewart. (0.9: Motus Hex removed.)',
   };
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09];
+/** Octopod (N=8) — same Body+Leg+Mechanism→Walk graph as 09 with Body N=8. */
+function graph10() {
+  const title = nativeScribble(40, 40, '10 · Funky octopod', 28);
+  const note = nativePanel(
+    40,
+    80,
+    'Body N=8 + Leg → Mechanism → Walk. Same stack as 09 — no Hex special case. Auto crawl/wave from Motus.NET GaitSchedule.',
+    'Note',
+    560,
+    72,
+  );
+  const uz = nativeUnitZ(40, 180);
+  const body = motusComponent('body', 200, 180, {}, { numbers: { N: 8, BodyR: 0.08, BodyZ: 0.07 } });
+  const leg = motusComponent('leg', 200, 320, {});
+  const mech = motusComponent('mechanism', 360, 220, {
+    Body: [outRef(body.node, 'Body')],
+    Leg: [outRef(leg.node, 'Leg')],
+  });
+  const arcParts = [];
+  const planeRefs = [];
+  const ARC_N = 7;
+  for (let i = 0; i < ARC_N; i++) {
+    const a = Math.PI - (i / (ARC_N - 1)) * Math.PI;
+    const px = 0.25 + 0.16 * Math.cos(a);
+    const py = 0.16 * Math.sin(a);
+    const pt = nativeConstructPoint(40, 300 + i * 44, [px, py, 0]);
+    const pl = nativePlane(140, 300 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
+    planeRefs.push(outRef(pl.node, 'Plane'));
+  }
+  const planesMerge = nativeMerge(280, 420, planeRefs);
+  const walk = motusComponent('walk', 40, 680, {
+    Mechanism: [outRef(mech.node, 'Mechanism')],
+    Planes: [outRef(planesMerge.node, 'Result')],
+  });
+  const { scrub, preview } = previewWithScrub(520, 680, outRef(walk.node, 'Trajectory'));
+  const objs = [
+    title, note, { xml: uz.xml },
+    body, leg, mech, ...arcParts, planesMerge, walk, scrub, preview,
+  ];
+  objs._meta = {
+    fileName: '10_funky_octopod.ghx',
+    description: 'N=8 radial walker: Body+Leg+Mechanism → Walk (ADR 0005). Flat ground (no Tn).',
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10];
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',

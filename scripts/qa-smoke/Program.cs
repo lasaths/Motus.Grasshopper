@@ -864,46 +864,6 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
 
 // Legged (Family=legged): tip-path plan + TreeDriverHome fill + gait (HI-005/006)
 {
-    static double[] BuildHexStanceQ(double hip, double femur, double tibia)
-    {
-        var layout = LeggedLayout.HexMithi(0.12, 0.06, 0.17, 0.19, 0.12);
-        return Motus.Geometry.LeggedGait.BuildStanceQ(layout, hip, femur, tibia);
-    }
-
-    static RobotDescription BuildLeggedDescription(LeggedLayout layout, string assembleName)
-    {
-        var links = new List<UrdfLink>
-        {
-            new("body", [UrdfGeometry.Cylinder(layout.BodyR * 0.85, 0.03, new Frame(0, 0, layout.BodyZ))]),
-        };
-        var joints = new List<UrdfJoint>();
-        for (var leg = 0; leg < layout.LegCount; leg++)
-        {
-            var name = layout.LegNames[leg];
-            var yaw = layout.HipYawsRad[leg];
-            var hx = layout.BodyR * Math.Cos(yaw);
-            var hy = layout.BodyR * Math.Sin(yaw);
-            var coxa = layout.Coxa;
-            var femur = layout.Femur;
-            var tibia = layout.Tibia;
-            var bodyZ = layout.BodyZ;
-            var coxaLink = $"{name}_coxa";
-            var femurLink = $"{name}_femur";
-            var tibiaLink = $"{name}_tibia";
-            links.Add(new UrdfLink(coxaLink, [UrdfGeometry.Cylinder(0.012, coxa, new Frame(coxa * 0.5, 0, 0))]));
-            links.Add(new UrdfLink(femurLink, [UrdfGeometry.Cylinder(0.012, femur, new Frame(femur * 0.5, 0, 0))]));
-            links.Add(new UrdfLink(tibiaLink, [UrdfGeometry.Cylinder(0.010, tibia, new Frame(tibia * 0.5, 0, 0))]));
-            joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink, hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_femur", "revolute", coxaLink, femurLink, coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_tibia", "revolute", femurLink, tibiaLink, femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
-        }
-
-        if (!RobotDescription.TryAssemble(assembleName, links, joints, tipLink: layout.TipLinkName,
-                out var desc, out var diag, homeQ: null) || desc is null)
-            Fail($"Legged assemble ({assembleName}): {string.Join("; ", diag.Errors)}");
-        return desc;
-    }
-
     static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)
     {
         var byName = new Dictionary<string, KinematicJoint>(StringComparer.OrdinalIgnoreCase);
@@ -920,21 +880,22 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         return limits;
     }
 
-    var hexLayout = LeggedLayout.HexMithi(0.12, 0.06, 0.17, 0.19, 0.12);
-    var hexDesc = BuildLeggedDescription(hexLayout, "walking_hexapod");
-    var tree = hexDesc.ToKinematicTree();
-    var tipLink = hexLayout.TipLinkName;
-    var tip = tree.ExtractSerialTip("body", tipLink);
+    var hex = LeggedMechanism.HexMithi(0.12, 0.06, 0.17, 0.19, 0.12);
+    if (hex.ValidateAndCalibrate() is { } calErr)
+        Fail($"HexMithi calibrate: {calErr}");
+    var tree = hex.Assemble();
+    var tipLink = hex.TipLinkName;
+    var tip = tree.ExtractSerialTip(hex.BodyLinkName, tipLink);
     if (tip.Chain.Joints.Length != 3)
         Fail($"Walking hex tip path expected 3 axes, got {tip.Chain.Joints.Length}");
     var hs = 7.5 * Math.PI / 180.0;
     var fs = 30.0 * Math.PI / 180.0;
     var ts = -30.0 * Math.PI / 180.0;
-    var home18 = BuildHexStanceQ(hs, fs, ts);
+    var home18 = Motus.Geometry.LeggedGait.BuildStanceQ(hex, hs, fs, ts);
     if (home18.Length != 18)
         Fail($"Walking hex TreeDriverHome expected 18 drivers, got {home18.Length}");
     {
-        var hips = Enumerable.Range(0, 6).Select(leg => home18[leg * 3]).ToArray();
+        var hips = Enumerable.Range(0, 6).Select(leg => home18[hex.DriverOffsets[leg]]).ToArray();
         if (hips.Max() - hips.Min() < 1.0)
             Fail($"Walking hex stance hips should spread by mount yaw (spread={hips.Max() - hips.Min():F3} rad)");
         for (var leg = 1; leg < 6; leg++)
@@ -983,6 +944,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
     Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
 
+    var hexDesc = Motus.GH.Components.WalkingHexShared.BuildDescription(hex);
     var previewGeom = MechanismPreviewGeometry.Build(hexDesc);
     if (previewGeom is null)
         Fail("Walking hex preview geometry missing");
@@ -1022,7 +984,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     {
         var arc = new ArcCurve(new Arc(new Point3d(0.05, 0, 0), 0.45, Math.PI));
         if (!LeggedGaitRhino.TryBuild(
-                hexLayout, arc, null, 0.08, 0.06, 0.03,
+                hex, null, arc, null, 0.08, 0.06, 0.03,
                 7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
                 gaitModel, out var gait, out var gaitErr))
             Fail($"LeggedGaitRhino hex: {gaitErr}");
@@ -1037,9 +999,8 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         if (Math.Abs(midBase.Y) < 0.08)
             Fail("Mid-walk base frame should be displaced along arc (m)");
 
-        // Step must affect cadence: smaller Step → more cycles → mid-q differs.
         if (!LeggedGaitRhino.TryBuild(
-                hexLayout, arc, null, 0.08, 0.20, 0.03,
+                hex, null, arc, null, 0.08, 0.20, 0.03,
                 7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
                 gaitModel, out var gaitCoarse, out var gaitCoarseErr))
             Fail($"LeggedGaitRhino coarse Step: {gaitCoarseErr}");
@@ -1051,7 +1012,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         if (qDiff < 1e-3)
             Fail("Step pin should change mid-gait q (fine Step=0.06 vs coarse Step=0.20)");
 
-        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        const double coxa = 0.06, femur = 0.17, tibia = 0.19;
         var midIdx = gait.Trajectory.Points.Count / 2;
         var midQ = gait.Trajectory.Points[midIdx].JointState.Positions;
         var gaitMidFrame = gait.BasePath[midIdx];
@@ -1060,13 +1021,12 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         var stanceFeet = 0;
         for (var leg = 0; leg < 6; leg++)
         {
-            var hipBody = new Point3d(
-                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
-                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
-                bodyZ);
-            var q0 = midQ[leg * 3];
-            var q1 = midQ[leg * 3 + 1];
-            var q2 = midQ[leg * 3 + 2];
+            var hipBodyV = hex.HipBody(leg);
+            var hipBody = new Point3d(hipBodyV.X, hipBodyV.Y, hipBodyV.Z);
+            var off = hex.DriverOffsets[leg];
+            var q0 = midQ[off];
+            var q1 = midQ[off + 1];
+            var q2 = midQ[off + 2];
             var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
             var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
             var yaw = 2.0 * Math.Atan2(gaitMidFrame.Qz, gaitMidFrame.Qw);
@@ -1106,19 +1066,16 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         treeFk.ComputeLinkTransformsInto(midQ, mats);
         for (var leg = 0; leg < 6; leg++)
         {
-            var hipBody = new Point3d(
-                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
-                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
-                bodyZ);
-            var q0 = midQ[leg * 3];
-            var q1 = midQ[leg * 3 + 1];
-            var q2 = midQ[leg * 3 + 2];
-            var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
-            var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
-            var li = tree.IndexOfLink($"{hexLayout.LegNames[leg]}_tibia");
+            var hipBodyV = hex.HipBody(leg);
+            var off = hex.DriverOffsets[leg];
+            var q0 = midQ[off];
+            var q1 = midQ[off + 1];
+            var q2 = midQ[off + 2];
+            var footBodyV = LegIk3R.FootPosition(hipBodyV, coxa, femur, tibia, q0, q1, q2);
+            var li = tree.IndexOfLink(hex.Legs[leg].Name + "/tibia");
             var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
-            if (Math.Abs(footBody.Z - tipBody[2]) > 0.004)
-                Fail($"Leg {leg}: analytic FK Z={footBody.Z:F4} ≠ TreeFK Z={tipBody[2]:F4} (preview would float)");
+            if (Math.Abs(footBodyV.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK Z={footBodyV.Z:F4} ≠ TreeFK Z={tipBody[2]:F4} (preview would float)");
         }
 
         Ok("Walking hex gait builds 18-DOF trajectory + foot-target IK (stance Z≈0, knees clear)");
@@ -1134,47 +1091,41 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         var mats = new double[tree.Links.Count][];
         for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
         treeFk.ComputeLinkTransformsInto(home18, mats);
-        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        const double coxa = 0.06, femur = 0.17, tibia = 0.19;
         for (var leg = 0; leg < 6; leg++)
         {
-            var hipBody = new Point3d(
-                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
-                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
-                bodyZ);
-            var q0 = home18[leg * 3];
-            var q1 = home18[leg * 3 + 1];
-            var q2 = home18[leg * 3 + 2];
-            var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
-            var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
-            var li = tree.IndexOfLink($"{hexLayout.LegNames[leg]}_tibia");
+            var hipBodyV = hex.HipBody(leg);
+            var off = hex.DriverOffsets[leg];
+            var q0 = home18[off];
+            var q1 = home18[off + 1];
+            var q2 = home18[off + 2];
+            var footBodyV = LegIk3R.FootPosition(hipBodyV, coxa, femur, tibia, q0, q1, q2);
+            var li = tree.IndexOfLink(hex.Legs[leg].Name + "/tibia");
             var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
-            if (Math.Abs(footBody.X - tipBody[0]) > 0.004 || Math.Abs(footBody.Y - tipBody[1]) > 0.004 || Math.Abs(footBody.Z - tipBody[2]) > 0.004)
-                Fail($"Leg {leg}: analytic FK ({footBody.X:F4},{footBody.Y:F4},{footBody.Z:F4}) ≠ TreeFK tip ({tipBody[0]:F4},{tipBody[1]:F4},{tipBody[2]:F4})");
+            if (Math.Abs(footBodyV.X - tipBody[0]) > 0.004 || Math.Abs(footBodyV.Y - tipBody[1]) > 0.004 || Math.Abs(footBodyV.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK ({footBodyV.X:F4},{footBodyV.Y:F4},{footBodyV.Z:F4}) ≠ TreeFK tip ({tipBody[0]:F4},{tipBody[1]:F4},{tipBody[2]:F4})");
         }
-        Ok("Walking hex analytic FK matches TreeFK at stance (URDF +Y pitch)");
+        Ok("Walking hex analytic FK matches TreeFK at stance (Assemble +Y pitch)");
     }
     catch (DllNotFoundException ex)
     {
         Ok($"Walking hex TreeFK parity skipped (Rhino native DLL unavailable: {ex.Message})");
     }
 
-    // Quad layout proves LeggedLayout is not hex-hardcoded (assemble needs no Rhino curves).
+    // QuadSmoke proves LeggedMechanism is not hex-hardcoded.
     {
-        var quad = LeggedLayout.QuadSmoke(0.10, 0.06, 0.17, 0.19, 0.12);
+        var quad = LeggedMechanism.QuadSmoke(0.10, 0.06, 0.17, 0.19, 0.12);
         if (quad.Validate() is { } qErr)
-            Fail($"QuadSmoke layout invalid: {qErr}");
+            Fail($"QuadSmoke invalid: {qErr}");
         if (quad.LegCount != 4 || quad.DriverCount != 12)
             Fail($"QuadSmoke expected 4 legs / 12 DOF, got {quad.LegCount}/{quad.DriverCount}");
-        if (quad.SwingGroups.Count != 2 || quad.SwingGroups[0].Length + quad.SwingGroups[1].Length != 4)
-            Fail("QuadSmoke swing groups must bipartition 4 legs");
-        var quadDesc = BuildLeggedDescription(quad, "quad_smoke");
-        var quadTree = quadDesc.ToKinematicTree();
+        var quadTree = quad.Assemble();
         if (quadTree.DriverCount != 12)
             Fail($"Quad tree expected 12 drivers, got {quadTree.DriverCount}");
-        var tipQ = quadTree.ExtractSerialTip("body", quad.TipLinkName);
+        var tipQ = quadTree.ExtractSerialTip(quad.BodyLinkName, quad.TipLinkName);
         if (tipQ.Chain.Joints.Length != 3)
             Fail($"Quad tip path expected 3 axes, got {tipQ.Chain.Joints.Length}");
-        Ok("LeggedLayout QuadSmoke (N=4) validates + assembles 12-DOF tree");
+        Ok("LeggedMechanism QuadSmoke (N=4) validates + assembles 12-DOF tree");
 
         try
         {
@@ -1196,7 +1147,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
             }, jointNames: quadNames);
             var line = new LineCurve(new Point3d(0, 0, 0), new Point3d(0.4, 0, 0));
             if (!LeggedGaitRhino.TryBuild(
-                    quad, line, null, 0.08, 0.08, 0.025,
+                    quad, null, line, null, 0.08, 0.08, 0.025,
                     7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
                     quadModel, out var quadGait, out var quadErr))
                 Fail($"LeggedGaitRhino quad: {quadErr}");
@@ -1216,11 +1167,11 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
 // Example 09 logic (generate-examples graph09) — Motus.NET only; does not open .ghx / Rhino UI.
 {
     Console.WriteLine("\n== Example 09 walking hex logic ==");
-    var layout09 = LeggedLayout.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
+    var mech09 = LeggedMechanism.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
     var limits09 = new List<JointLimit>(18);
     for (var i = 0; i < 18; i++)
         limits09.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
-    var model09 = new RobotModel(layout09.ToPreset("hex_ex09", 18, limits09));
+    var model09 = new RobotModel(mech09.ToPreset("hex_ex09", limits09));
     var path09 = new List<Vec3>();
     const int arcN09 = 9;
     for (var i = 0; i < arcN09; i++)
@@ -1230,8 +1181,9 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     }
     const double groundZ09 = 0.02; // Center Box top in graph09
     Motus.Geometry.LeggedGait.TerrainHeight terrain09 = static (_, _) => groundZ09;
+    IBodyPoseSolver pose09 = new TerrainSupportBodyPose(clearanceMeters: 0);
     if (!Motus.Geometry.LeggedGait.TryBuild(
-            layout09, path09, 0.06, 0.04, 0.02,
+            mech09, pose09, path09, 0.06, 0.04, 0.02,
             7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
             model09, out var gait09, out var err09, terrain09))
         Fail($"Example 09 gait: {err09}");
@@ -1245,10 +1197,11 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     var planted09 = 0;
     for (var leg = 0; leg < 6; leg++)
     {
-        var hy = layout09.HipYawsRad[leg];
-        var hip = new Vec3(layout09.BodyR * Math.Cos(hy), layout09.BodyR * Math.Sin(hy), layout09.BodyZ);
-        var footBody = LegIk3R.FootPosition(hip, layout09.Coxa, layout09.Femur, layout09.Tibia,
-            q09[leg * 3], q09[leg * 3 + 1], q09[leg * 3 + 2]);
+        var hip = mech09.HipBody(leg);
+        var off = mech09.DriverOffsets[leg];
+        var L = mech09.Legs[leg].Lengths3R!;
+        var footBody = LegIk3R.FootPosition(hip, L[0], L[1], L[2],
+            q09[off], q09[off + 1], q09[off + 2]);
         if (footBody.Z > 0.012) continue;
         var fz = bf09.Z + footBody.Z;
         if (Math.Abs(fz - groundZ09) > 0.015)
@@ -1259,6 +1212,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         Fail($"Example 09 mid-gait expected ≥3 plants on box top, got {planted09}");
     Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
 }
+
 
 {
     Console.WriteLine("\n== Stewart platform IK / path ==");

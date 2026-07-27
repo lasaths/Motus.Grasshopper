@@ -4,7 +4,7 @@ using Rhino.Geometry;
 
 namespace Motus.GH.Components;
 
-/// <summary>Soft outdoor heightfield mesh for WalkHex <c>Tn</c> (meters, Z-up).</summary>
+/// <summary>Soft outdoor heightfield mesh for Motus Walk <c>Tn</c> (meters, Z-up).</summary>
 public sealed class MotusTerrainPatchComponent : MotusComponentBase
 {
     public static readonly Guid Id = new("86e87c03-366b-4de3-9448-3b154cd28f24");
@@ -13,7 +13,7 @@ public sealed class MotusTerrainPatchComponent : MotusComponentBase
         : base(
             "Motus Terrain Patch",
             "Ground",
-            "Outdoor-style heightfield mesh (m) for Motus Walking Hex Terrain — gentle hills, wire to Tn.",
+            "Outdoor-style heightfield mesh (m) for Motus Walk Terrain — gentle hills, wire to Tn.",
             "Model",
             "polygon")
     {
@@ -27,7 +27,7 @@ public sealed class MotusTerrainPatchComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("SizeY", "Sy", "Full depth Y (m)", GH_ParamAccess.item, 1.0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Amp", "A", "Hill amplitude (m) — keep below WalkHex Lift", GH_ParamAccess.item, 0.04);
+        p.AddNumberParameter("Amp", "A", "Hill amplitude (m) — keep below Walk Lift", GH_ParamAccess.item, 0.04);
         p[p.ParamCount - 1].Optional = true;
     }
 
