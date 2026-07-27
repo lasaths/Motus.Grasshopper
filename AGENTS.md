@@ -18,7 +18,7 @@ Strive for **NASA-grade engineering** on kinematics, planning, and handoff surfa
 - **Planning / preview / export only** — no RTDE, no live robot commands, no project reference to UR.RTDE.Grasshopper.
 - Execution (Session, Run, waits, ServoJ) lives in downstream control plugins.
 - User component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md).
-- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview (`Family=legged`, radians) in Motus.NET with DOI-cited methods (`LeggedMethodRefs`: analytic `LegIk3R` / Lynch&Park, duty gait / Song&Waldron, SSM / McGhee&Frank); GH is thin WalkHex wiring only.
+- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview (`Family=legged`, radians) in Motus.NET with DOI-cited methods (`LeggedMethodRefs`: analytic `LegIk3R` / Lynch&Park, duty gait / Song&Waldron, SSM / McGhee&Frank); GH is thin Motus Hex + WalkHex + Terrain Patch wiring only.
 
 ## Layout
 
@@ -101,5 +101,5 @@ Also check in Rhino:
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
 - `06_turntable_group`: coupled Preview rotates table; decoupled (arm Group) keeps table fixed
-- `09_walking_hexapod`: Terrain (`Tn`) Mesh/Brep plants feet; omit = flat Z=0
+- `09_walking_hexapod`: Motus Hex → WalkHex; Terrain Patch → `Tn`; omit `Tn` = flat Z=0
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Three.js stick viz via `Motus.NET/tools/legged-viewer`

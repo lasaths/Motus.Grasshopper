@@ -124,7 +124,8 @@ internal static class TrajectoryMerge
             DiagnosticsSnapshot = first.DiagnosticsSnapshot,
             ProvenanceSnapshot = first.ProvenanceSnapshot,
             TreeDriverHome = first.TreeDriverHome,
-            BasePath = first.BasePath
+            BasePath = first.BasePath,
+            TerrainSampler = first.TerrainSampler
         };
     }
 

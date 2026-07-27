@@ -67,7 +67,8 @@
 
   <PropertyGroup>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(Windows))">$([System.Environment]::GetFolderPath(SpecialFolder.ApplicationData))/Grasshopper/Libraries/Motus</GrasshopperLibraryDir>
-    <!-- Only auto-deploy on macOS when Rhino GH Libraries already exist (skip CI / bare machines). -->
+    <!-- Prefer GUID GH folder (custom Rhino.app installs); fall back to plain Grasshopper/Libraries. -->
+    <MacGrasshopperLibrariesRoot Condition="'$(MacGrasshopperLibrariesRoot)' == '' and $([MSBuild]::IsOSPlatform(OSX)) and Exists('$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper (b45a29b1-4343-4035-989e-044e8580d9cf)/Libraries')">$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper (b45a29b1-4343-4035-989e-044e8580d9cf)/Libraries</MacGrasshopperLibrariesRoot>
     <MacGrasshopperLibrariesRoot Condition="'$(MacGrasshopperLibrariesRoot)' == '' and $([MSBuild]::IsOSPlatform(OSX)) and Exists('$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries')">$(HOME)/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries</MacGrasshopperLibrariesRoot>
     <GrasshopperLibraryDir Condition="$([MSBuild]::IsOSPlatform(OSX)) and '$(MacGrasshopperLibrariesRoot)' != ''">$(MacGrasshopperLibrariesRoot)/Motus</GrasshopperLibraryDir>
     <MotusDeployTfm Condition="$([MSBuild]::IsOSPlatform(Windows))">net8.0-windows</MotusDeployTfm>

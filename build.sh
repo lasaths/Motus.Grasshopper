@@ -24,7 +24,13 @@ echo "  Motus.*.dll (from NuGet)"
 echo "  resources/robots/ (from Motus.Presets package)"
 
 if [[ "${INSTALL:-}" == "1" ]]; then
-  GH_LIB="$HOME/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins/Grasshopper/Libraries/Motus"
+  PLUGINS="$HOME/Library/Application Support/McNeel/Rhinoceros/8.0/Plug-ins"
+  # Prefer GUID GH folder (custom Rhino.app installs); fall back to plain Grasshopper/Libraries.
+  if [[ -d "$PLUGINS/Grasshopper (b45a29b1-4343-4035-989e-044e8580d9cf)/Libraries" ]]; then
+    GH_LIB="$PLUGINS/Grasshopper (b45a29b1-4343-4035-989e-044e8580d9cf)/Libraries/Motus"
+  else
+    GH_LIB="$PLUGINS/Grasshopper/Libraries/Motus"
+  fi
   mkdir -p "$GH_LIB/resources"
   cp -f "$OUT"/Motus.GH.gha "$GH_LIB/"
   cp -f "$OUT"/Motus.*.dll "$GH_LIB/" 2>/dev/null || true

@@ -10,7 +10,7 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | Load a URDF / xacro | **Motus Robot** |
 | Parametric serial arm / rail | **Motus Serial Chain** |
 | Stewart platform (leg lengths in **m**) | **Motus Stewart** → Plan TCP planes |
-| Walking hexapod gait (radians) | **Motus Walking Hex** (Path/Planes → `Tr`; not Plan for whole robot) |
+| Walking hexapod (radians) | **Motus Hex** (size) → **Motus Walk Hex** (Path/Planes/`Tn` → `Tr`); tip-path Plan from Hex `Rb` |
 | Branched tree / tip-path Plan | **Motus Joint Table** (optional **SE2** mobility) |
 | Plan one or more goals | **Motus Plan** (nick **Quick**) |
 | Obstacles | **Col\*** → **ColScene** → Plan `Collision` |
@@ -35,7 +35,9 @@ Model ──► Plan ──► Preview
 | Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
 | Motus Serial Chain | **Lengths** list (m); optional Base, Home `Q`, **Rail**, Types, TCP | Same Robot goo — parametric serial / rail+arm (concept sizing) |
 | Motus Stewart | Optional JSON Path; classic BaseRadius / PlatformRadius / MinStroke / MaxStroke / Name | Same Robot goo — Stewart/Gough hexapod (`Family=stewart`; `Q` = leg lengths in **meters**) |
-| Motus Walking Hex | BodyR, Coxa/Femur/Tibia, stance angles, BodyZ; optional Path/Planes, Speed, Step, Lift; optional full `Q` (18) | Robot (`Family=legged`; Plan tip-path = one leg), full 18-DOF `Js`, gait `Tr` when Path wired, preview Meshes, Support polygon — **not** Stewart |
+| Motus Hex | BodyR, Coxa/Femur/Tibia, BodyZ, stance, optional `Q` | `Hx` size goo → WalkHex; `Rb` tip-path Plan (one leg); stance Meshes |
+| Motus Walk Hex | Optional `Hx`, Path/Planes, Speed, Step, Lift, Terrain | Gait `Tr` (18-DOF), Robot, Meshes, Support — **not** Stewart |
+| Motus Terrain Patch | Origin, Size, Amp | Outdoor heightfield mesh → WalkHex `Tn` |
 | Motus Joint Table | Parent / Child / Type / Ox; optional Oy,Oz, Name, **Tip**, Base, Home, **SE2** (X,Y,yaw) | Same Robot goo — Plan uses **tip path** only; side branches are TreeFK preview only |
 | Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
 | Motus Tool | Name, TCP plane (flange frame); optional static Geometry, Cap, **Description** (`RobotDescription`), Binding driver joint | Tool definition |
@@ -50,7 +52,7 @@ Model ──► Plan ──► Preview
 
 **Motus Stewart** builds a Stewart/Gough platform (`Family=stewart`) via Motus.NET classic hex geometry or a versioned JSON description (`schemaVersion=1`). Wire TCP plane goals into **Motus Plan** — IK yields six **leg lengths in meters**. Do **not** hand Stewart `Q` to UR MoveJ. See [ADR 0003](adr/0003-parallel-kinematics-stewart.md). Stewart TCP-LIN now passes the wired collision scene/checker into Motus.NET; collided LIN paths report collision, and when goal IK succeeds Plan can fall back to RRT in leg-length space (not a straight TCP platform path). TCP planes use plate mapping (`FrameConversion.FromPlanePlate`) — Rhino Z is platform normal, not serial tool-approach.
 
-**Motus Walking Hex** is a **separate** walking / mobile hexapod (6× coxa/femur/tibia), **not** `Family=stewart`. Preset uses **`Family=legged`**: joint `Q` is **radians**. Wire **Path** (curve) or **Planes** (≥2 origins, m) for a foot-target duty-cycle gait `Trajectory` (18-DOF + SE2 `BasePath`) → **Motus Preview**, **Motus Export**, or **Motus Waypoints** (with family warnings) — **not** Motus Plan for the whole mechanism. WalkHex calls Motus.NET `LeggedGait.ValidateForPlan` as the gait plan gate: hard SSM / validation failures surface as component errors; provenance and soft warnings remain remarks. Optional **Terrain** (`Tn`: Mesh/Brep/Surface) plants feet via downward ray height; omit = flat Z=0. Without Path, Plan / Joint State use the **tip path of one leg** only (same contract as Joint Table); the other five legs are preview-only via `TreeDriverHome`. Core math lives in Motus.NET (`LeggedLayout` / `LeggedGait` / `LegIk3R`); GH is thin Curve/Planes/Terrain wiring + hex preview chrome. `Step` (m) sets gait cadence along the path. See [ADR 0004](adr/0004-legged-mobile-preview.md) and [motus-net/METHODS.md](motus-net/METHODS.md). Example: `09_walking_hexapod.ghx`.
+**Motus Hex** + **Motus Walk Hex** cover walking hexapods (`Family=legged`, joint `Q` in **radians**) — **not** Stewart. **Hex** sets size/stance (`Hx`, tip-path `Rb` for Motus Plan on one leg). **WalkHex** takes optional `Hx` (omit = compact defaults), **Path**/**Planes**, and optional **Terrain** (`Tn` / Motus Terrain Patch) → foot-target gait `Tr` → Preview / Export / Waypoints. WalkHex calls `LeggedGait.ValidateForPlan` as the gait gate. See [ADR 0004](adr/0004-legged-mobile-preview.md). Example: `09_walking_hexapod.ghx`.
 
 `Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates (legacy static tool — jaw-width squash allowed). Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
 

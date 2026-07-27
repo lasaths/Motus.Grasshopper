@@ -6,7 +6,6 @@ using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.Planning;
 using Motus.GH.Preview;
-using Motus.GH.Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
@@ -14,175 +13,121 @@ using System.Drawing;
 namespace Motus.GH.Components;
 
 /// <summary>
-/// Walking / mobile hexapod (6×3-DOF legs: coxa, femur, tibia) — NOT Stewart/Gough.
-/// Thin hex Rhino wrapper — algorithms + DOI provenance live in Motus.NET
-/// (<see cref="LeggedMethodRefs"/>, <see cref="LegIk3R"/>, <see cref="LeggedGait"/>, <see cref="StaticStability"/>).
-/// Plan uses one tip-path leg only (side legs preview-only), same contract as Motus Joint Table.
+/// Foot-target gait for a walking hex (Family=legged). Optional Motus Hex size; Path/Planes + Terrain → Tr.
 /// </summary>
 public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 {
-    /// <summary>Alias for <see cref="Units.LeggedFamily"/>.</summary>
     public const string LeggedFamily = Units.LeggedFamily;
 
-    private List<Color> _previewColors = [];
-    private List<Circle> _previewContactCircles = [];
-    private readonly Dictionary<Color, DisplayMaterial> _matCache = new();
+    public static readonly Guid Id = new("236f9a53-c07b-4663-bf27-950e20fb59ab");
 
-    public static readonly Guid Id = new("b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d");
-
-    /// <summary>Leg order (mithi-style labels).</summary>
     public static readonly string[] LegNames =
     [
         "right-middle", "right-front", "left-front",
         "left-middle", "left-back", "right-back",
     ];
 
+    private List<Color> _previewColors = [];
+    private List<Circle> _previewContactCircles = [];
+    private readonly Dictionary<Color, DisplayMaterial> _matCache = new();
+
     public MotusWalkingHexapodComponent()
         : base(
-            "Motus Walking Hex",
+            "Motus Walk Hex",
             "WalkHex",
-            "Walking hexapod (6× coxa/femur/tibia, Family=legged). Path builds gait Tr for Preview/Export/Waypoints; Motus.NET ValidateForPlan is the gait plan gate. Tip-path Plan = one leg only.",
+            "Walk a hex along Path/Planes (optional Terrain). Optional Hx from Motus Hex; omit = compact defaults. Family=legged — not Stewart.",
             "polygon")
     {
     }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        // Compact hex defaults (m): long 0.17/0.19 femur/tibia dwarfed the body in Preview.
-        p.AddNumberParameter("BodyR", "Br", "Body hex radius to hip (m)", GH_ParamAccess.item, 0.06);
+        p.AddParameter(new Param_MotusHex(), "Hex", "Hx", "Optional size & stance from Motus Hex (omit = compact defaults)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Coxa", "Cx", "Coxa length (m)", GH_ParamAccess.item, 0.035);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Femur", "Fm", "Femur length (m)", GH_ParamAccess.item, 0.08);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Tibia", "Tb", "Tibia length (m)", GH_ParamAccess.item, 0.10);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("HipStance", "Hs", "Coxa stance angle (rad, signed by leg side)", GH_ParamAccess.item, 7.5 * Math.PI / 180.0);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("FemurStance", "Fs", "Fallback femur angle (rad) if ground-plant IK fails", GH_ParamAccess.item, 30.0 * Math.PI / 180.0);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("TibiaStance", "Ts", "Fallback tibia angle (rad) if ground-plant IK fails", GH_ParamAccess.item, -30.0 * Math.PI / 180.0);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("BodyZ", "Bz", "Body height above ground (m)", GH_ParamAccess.item, 0.07);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddCurveParameter("Path", "P", "Walk path (Curve or Planes list, m) — gait Trajectory when wired", GH_ParamAccess.item);
+        p.AddCurveParameter("Path", "P", "Walk path (Curve or Planes list, m)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Planes", "Pl", "Optional path as plane list (origins, m)", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Speed", "Spd", "Walk speed along path (m/s)", GH_ParamAccess.item, 0.06);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Step", "St", "Nominal step length along path (m) — sets gait cadence", GH_ParamAccess.item, 0.04);
+        p.AddNumberParameter("Step", "St", "Nominal step length along path (m)", GH_ParamAccess.item, 0.04);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Lift", "Lf", "Swing foot lift (m)", GH_ParamAccess.item, 0.02);
+        p.AddNumberParameter("Lift", "Lf", "Swing foot lift (m) — keep ≥ terrain Amp for hills", GH_ParamAccess.item, 0.02);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGeometryParameter("Terrain", "Tn", "Optional ground Mesh/Brep/Surface (m) — feet plant via downward ray; omit = flat Z=0", GH_ParamAccess.list);
-        p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Q", "Q", "Optional full driver q (18): leg-major coxa,femur,tibia × 6", GH_ParamAccess.list);
+        p.AddGeometryParameter("Terrain", "Tn", "Optional ground Mesh/Brep/Surface/Extrusion/SubD/Box (m); omit = flat Z=0", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
-        p.AddGenericParameter("Robot", "Rb", "Robot (gait=18-DOF; Plan tip-path = right-middle 3-DOF only)", GH_ParamAccess.item);
-        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Full 18-DOF stance (TreeFK / documentation)", GH_ParamAccess.item);
-        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Gait trajectory when Path/Planes wired (18-DOF q + mobile base)", GH_ParamAccess.item);
+        p.AddGenericParameter("Robot", "Rb", "Gait robot (18-DOF) or tip-path robot when no Path", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusJointState(), "State", "Js", "Full 18-DOF stance", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Gait trajectory when Path/Planes wired", GH_ParamAccess.item);
         p.AddCurveParameter("PathCurve", "Pc", "Resolved walk path curve (m)", GH_ParamAccess.item);
         p.AddPlaneParameter("PathPlanes", "Pp", "Body planes sampled along path", GH_ParamAccess.list);
-        p.AddMeshParameter("Meshes", "M", "Preview meshes (body + legs + COG)", GH_ParamAccess.list);
+        p.AddMeshParameter("Meshes", "M", "Preview meshes", GH_ParamAccess.list);
         p.AddCurveParameter("Support", "Sp", "Support polygon (foot tips)", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        var br = 0.06;
-        var cx = 0.035;
-        var fm = 0.08;
-        var tb = 0.10;
-        var hs = 7.5 * Math.PI / 180.0;
-        var fs = 30.0 * Math.PI / 180.0;
-        var ts = -30.0 * Math.PI / 180.0;
-        var bz = 0.07;
+        HexLayoutGoo? hexGoo = null;
+        Curve? pathCurve = null;
+        var pathPlanes = new List<Plane>();
         var speed = 0.06;
         var stepLen = 0.04;
         var lift = 0.02;
-        var qIn = new List<double>();
-        Curve? pathCurve = null;
-        var pathPlanes = new List<Plane>();
         var terrainGoos = new List<IGH_GeometricGoo>();
-        da.GetData(0, ref br);
-        da.GetData(1, ref cx);
-        da.GetData(2, ref fm);
-        da.GetData(3, ref tb);
-        da.GetData(4, ref hs);
-        da.GetData(5, ref fs);
-        da.GetData(6, ref ts);
-        da.GetData(7, ref bz);
-        da.GetData(8, ref pathCurve);
-        da.GetDataList(9, pathPlanes);
-        da.GetData(10, ref speed);
-        da.GetData(11, ref stepLen);
-        da.GetData(12, ref lift);
-        da.GetDataList(13, terrainGoos);
-        da.GetDataList(14, qIn);
+        da.GetData(0, ref hexGoo);
+        da.GetData(1, ref pathCurve);
+        da.GetDataList(2, pathPlanes);
+        da.GetData(3, ref speed);
+        da.GetData(4, ref stepLen);
+        da.GetData(5, ref lift);
+        da.GetDataList(6, terrainGoos);
+
+        var layout = hexGoo?.Value ?? LeggedLayout.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
+        var hs = hexGoo?.HipStance ?? 7.5 * Math.PI / 180.0;
+        var fs = hexGoo?.FemurStance ?? 30.0 * Math.PI / 180.0;
+        var ts = hexGoo?.TibiaStance ?? -30.0 * Math.PI / 180.0;
+        var qIn = hexGoo?.DriverQ is { Count: >= 18 } dq ? dq.ToList() : new List<double>();
 
         var terrainGeom = new List<object>(terrainGoos.Count);
-        foreach (var goo in terrainGoos)
-        {
-            var sv = goo?.DuplicateGeometry()?.ScriptVariable();
-            if (sv is not null)
-                terrainGeom.Add(sv);
-        }
+        TerrainHeightRhino.CollectFromGoos(terrainGoos, terrainGeom);
 
         var hasPath = (pathCurve is not null && pathCurve.IsValid) || pathPlanes.Count >= 2;
 
-        if (!double.IsFinite(br) || !double.IsFinite(cx) || !double.IsFinite(fm) || !double.IsFinite(tb)
-            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts) || !double.IsFinite(bz)
-            || !double.IsFinite(speed) || !double.IsFinite(stepLen) || !double.IsFinite(lift))
+        if (!double.IsFinite(speed) || !double.IsFinite(stepLen) || !double.IsFinite(lift)
+            || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts)
+            || !double.IsFinite(layout.BodyR) || !double.IsFinite(layout.Coxa)
+            || !double.IsFinite(layout.Femur) || !double.IsFinite(layout.Tibia)
+            || !double.IsFinite(layout.BodyZ))
         {
             ClearPreview();
             _previewColors = [];
             _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "BodyR / Coxa / Femur / Tibia / stance / BodyZ / Speed / Step / Lift must be finite (no NaN/Inf).");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Speed / Step / Lift / Hex size must be finite.");
             return;
         }
 
-        if (qIn.Count is > 0 and < 18)
+        if (layout.BodyR <= 0 || layout.Coxa <= 0 || layout.Femur <= 0 || layout.Tibia <= 0)
         {
             ClearPreview();
             _previewColors = [];
             _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Q must be empty (stance defaults) or exactly 18 driver values — partial lists are rejected.");
-            return;
-        }
-
-        if (qIn.Any(v => !double.IsFinite(v)))
-        {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Q contains non-finite values (NaN/Inf).");
-            return;
-        }
-
-        if (br <= 0 || cx <= 0 || fm <= 0 || tb <= 0)
-        {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "BodyR / Coxa / Femur / Tibia must be > 0 (m).");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Hex BodyR / Coxa / Femur / Tibia must be > 0 (m).");
             return;
         }
 
         try
         {
-            var layout = LeggedLayout.HexMithi(br, cx, fm, tb, bz);
-            var q = BuildStanceQ(layout, hs, fs, ts, qIn);
-            var desc = BuildDescription(layout);
+            var q = WalkingHexShared.BuildStanceQ(layout, hs, fs, ts, qIn);
+            var desc = WalkingHexShared.BuildDescription(layout);
             var tree = desc.ToKinematicTree();
             var tipLink = layout.TipLinkName;
             var tip = tree.ExtractSerialTip("body", tipLink);
-            var driverNames = DriverNames(tree);
-            var allLimits = LimitsAllDrivers(tree);
+            var driverNames = WalkingHexShared.DriverNames(tree);
+            var allLimits = WalkingHexShared.LimitsAllDrivers(tree);
 
             RobotPreset preset;
             SerialJointChain? chain;
@@ -199,8 +144,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     JointLimits = allLimits,
                     BaseFrame = BaseFrame.Identity,
                     ToolFrame = ToolFrame.Identity,
-                    Notes = "Walking hex gait (18-DOF, Family=legged). Use Trajectory → Preview — not UR MoveJ / not Plan tip-path. Q = joint radians.",
-                    SourceNote = "Motus Walking Hex gait",
+                    Notes = "Walking hex gait (18-DOF, Family=legged). Trajectory → Preview — not UR MoveJ.",
+                    SourceNote = "Motus Walk Hex",
                 };
                 chain = null;
                 previewHome = new JointState(q);
@@ -208,7 +153,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             }
             else
             {
-                var tipLimits = LimitsAlongTip(tree, tip.JointNames);
+                var tipLimits = WalkingHexShared.LimitsAlongTip(tree, tip.JointNames);
                 preset = new RobotPreset
                 {
                     Manufacturer = RobotManufacturer.Unknown,
@@ -220,8 +165,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     ToolFrame = tip.TipToolOffset is { } off
                         ? new ToolFrame(off, "foot")
                         : ToolFrame.Identity,
-                    Notes = "Walking hexapod Family=legged (NOT Stewart). Plan/Joint State = tip path (one leg). Wire Path for gait Trajectory. Q = joint radians.",
-                    SourceNote = "Motus Walking Hex",
+                    Notes = "Walking hex tip-path (one leg). Wire Path for gait, or use Motus Hex → Plan.",
+                    SourceNote = "Motus Walk Hex",
                 };
                 chain = tip.Chain;
                 var tipHome = new double[preset.AxisCount];
@@ -244,11 +189,61 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             TrajectoryGoo? trajGoo = null;
             Curve? pathCurveOut = null;
             List<Plane> pathPlanesOut = [];
+            LeggedGait.TerrainHeight? terrain = null;
             if (hasPath)
             {
-                var terrain = TerrainHeightRhino.TryCreate(terrainGeom, out var terrainWarn);
+                terrain = TerrainHeightRhino.TryCreate(terrainGeom, out var terrainWarn);
                 if (terrainWarn is not null)
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, terrainWarn);
+                else if (terrain is not null)
+                {
+                    var probeX = pathPlanes.Count > 0 ? pathPlanes[0].OriginX
+                        : pathCurve!.PointAtStart.X;
+                    var probeY = pathPlanes.Count > 0 ? pathPlanes[0].OriginY
+                        : pathCurve!.PointAtStart.Y;
+                    var z0 = terrain(probeX, probeY);
+                    if (double.IsFinite(z0))
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                            $"Terrain active — path projected onto support plane (probe Z={z0:F3} m).");
+                    else
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                            $"Terrain miss at path start ({probeX:F3},{probeY:F3}) — enlarge Ground or move path.");
+
+                    // Swing must clear local height delta or feet clip / IK struggles mid-swing.
+                    double zMin = double.PositiveInfinity, zMax = double.NegativeInfinity;
+                    void Acc(double x, double y)
+                    {
+                        var z = terrain(x, y);
+                        if (!double.IsFinite(z)) return;
+                        if (z < zMin) zMin = z;
+                        if (z > zMax) zMax = z;
+                    }
+                    if (pathPlanes.Count >= 2)
+                    {
+                        foreach (var pl in pathPlanes)
+                            Acc(pl.OriginX, pl.OriginY);
+                    }
+                    else if (pathCurve is not null)
+                    {
+                        for (var i = 0; i <= 8; i++)
+                        {
+                            var t = pathCurve.Domain.ParameterAt(i / 8.0);
+                            var p = pathCurve.PointAt(t);
+                            Acc(p.X, p.Y);
+                        }
+                    }
+                    if (double.IsFinite(zMin) && double.IsFinite(zMax))
+                    {
+                        var span = zMax - zMin;
+                        var need = Math.Max(0.02, 0.55 * span);
+                        if (lift < need)
+                        {
+                            lift = need;
+                            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                                $"Lift raised to {lift:F3} m for terrain span {span:F3} m.");
+                        }
+                    }
+                }
 
                 if (!LeggedGaitRhino.TryBuild(
                         layout, pathCurve, pathPlanes, speed, stepLen, lift,
@@ -285,6 +280,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                     PreviewMeshColors = goo.PreviewMeshColors,
                     TreeDriverHome = new JointState(q),
                     BasePath = gait.BasePath,
+                    TerrainSampler = terrain ?? FlatTerrain,
                 };
                 pathCurveOut = gait.PathCurve;
                 pathPlanesOut = gait.PathPlanes.ToList();
@@ -301,32 +297,27 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             {
                 AddRuntimeMessage(
                     GH_RuntimeMessageLevel.Remark,
-                    "Wire Path (curve) or Planes (≥2) for foot-target IK gait Trajectory → Preview. No Motus Plan on this path — Plan moves one tip leg only.");
+                    "Wire Path or Planes (≥2) for gait Tr → Preview. Or Motus Hex → Plan for tip-path only.");
             }
 
             var previewQ = q;
             Frame? previewBase = null;
+            LeggedGait.TerrainHeight? previewTerrain = null;
             if (hasPath && trajGoo?.BasePath is { Count: > 0 } bp
                 && trajGoo.Value is { Points.Count: > 0 } traj)
             {
                 var mid = traj.Points.Count / 2;
                 previewQ = traj.Points[mid].JointState.Positions.ToArray();
                 previewBase = bp[Math.Min(mid, bp.Count - 1)];
+                previewTerrain = trajGoo.TerrainSampler;
             }
 
-            var preview = WalkingHexPreview.Build(layout, previewQ, previewBase);
+            var preview = WalkingHexPreview.Build(layout, previewQ, previewBase, previewTerrain);
             _previewMeshes = preview.Meshes.ToList();
             _previewWires = preview.Wires.ToList();
             _previewColors = preview.Colors.ToList();
             _previewContactCircles = preview.ContactCircles.ToList();
             ExpirePreview(true);
-
-            if (!hasPath && tree.DriverCount != tip.Chain.Joints.Length)
-            {
-                AddRuntimeMessage(
-                    GH_RuntimeMessageLevel.Remark,
-                    $"Walking hex: Plan tip-path '{tipLink}' = {tip.Chain.Joints.Length} axes; TreeFK has {tree.DriverCount} drivers. Family=legged (not Stewart).");
-            }
 
             da.SetData(0, goo);
             da.SetData(1, new JointStateGoo(new JointState(q)));
@@ -377,334 +368,5 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
     public override Guid ComponentGuid => Id;
 
-    private static double[] BuildStanceQ(
-        LeggedLayout layout, double hip, double femur, double tibia, List<double> overrideQ)
-    {
-        if (overrideQ.Count >= layout.DriverCount)
-        {
-            var q = new double[layout.DriverCount];
-            for (var i = 0; i < q.Length; i++) q[i] = overrideQ[i];
-            return q;
-        }
-
-        return LeggedGaitRhino.BuildStanceQ(layout, hip, femur, tibia);
-    }
-
-    private static RobotDescription BuildDescription(LeggedLayout layout)
-    {
-        var links = new List<UrdfLink>
-        {
-            new("body",
-                [HexPlateGeometry(layout.BodyR, thickness: 0.02, new Frame(0, 0, layout.BodyZ))],
-                r: 1, g: 0.4, b: 0.7, a: 0.85),
-        };
-        var joints = new List<UrdfJoint>();
-
-        for (var leg = 0; leg < layout.LegCount; leg++)
-        {
-            var name = layout.LegNames[leg];
-            var yaw = layout.HipYawsRad[leg];
-            var hx = layout.BodyR * Math.Cos(yaw);
-            var hy = layout.BodyR * Math.Sin(yaw);
-            var coxa = layout.Coxa;
-            var femur = layout.Femur;
-            var tibia = layout.Tibia;
-            var bodyZ = layout.BodyZ;
-            var coxaLink = $"{name}_coxa";
-            var femurLink = $"{name}_femur";
-            var tibiaLink = $"{name}_tibia";
-
-            links.Add(new UrdfLink(coxaLink, [LegSegMesh(coxa, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(femurLink, [LegSegMesh(femur, 0.014)], r: 1, g: 0.55, b: 0.15, a: 1));
-            links.Add(new UrdfLink(tibiaLink, [LegSegMesh(tibia, 0.012)], r: 1, g: 0.55, b: 0.15, a: 1));
-
-            joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink,
-                hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_femur", "revolute", coxaLink, femurLink,
-                coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
-            joints.Add(new UrdfJoint($"{name}_tibia", "revolute", femurLink, tibiaLink,
-                femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
-        }
-
-        if (!RobotDescription.TryAssemble("walking_hexapod", links, joints, tipLink: layout.TipLinkName,
-                out var desc, out var diag, homeQ: null) || desc is null)
-            throw new InvalidOperationException(string.Join("; ", diag.Errors));
-
-        return desc;
-    }
-
-    /// <summary>
-    /// Leg segment along Motus link +X as a mesh (not Box — ToRhinoMesh remaps Box axes via ToPlane).
-    /// </summary>
-    private static UrdfGeometry LegSegMesh(double length, double diameter)
-    {
-        var r = diameter * 0.5;
-        // ponytail: 8-corner box 0→length on +X; Mesh preview skips tool-axis remap.
-        double[][] verts =
-        [
-            [0, -r, -r], [length, -r, -r], [length, r, -r], [0, r, -r],
-            [0, -r, r], [length, -r, r], [length, r, r], [0, r, r],
-        ];
-        int[] indices =
-        [
-            0, 1, 2, 0, 2, 3, // -Z
-            4, 6, 5, 4, 7, 6, // +Z
-            0, 4, 5, 0, 5, 1, // -Y
-            2, 6, 7, 2, 7, 3, // +Y
-            0, 3, 7, 0, 7, 4, // -X (hip)
-            1, 5, 6, 1, 6, 2, // +X (knee)
-        ];
-        return UrdfGeometry.Mesh(verts, indices);
-    }
-
-    /// <summary>Flat hex plate; vertices at hip angles so legs attach at corners.</summary>
-    private static UrdfGeometry HexPlateGeometry(double radius, double thickness, Frame origin)
-    {
-        var n = 6;
-        var verts = new List<double[]>(n * 2);
-        var hz = thickness * 0.5;
-        for (var i = 0; i < n; i++)
-        {
-            var a = i * (Math.PI / 3.0); // match HexMithi hip yaws
-            var x = radius * Math.Cos(a);
-            var y = radius * Math.Sin(a);
-            verts.Add([x, y, hz]);
-            verts.Add([x, y, -hz]);
-        }
-
-        var indices = new List<int>();
-        // Top / bottom fans
-        for (var i = 1; i < n - 1; i++)
-        {
-            indices.Add(0); indices.Add(i * 2); indices.Add((i + 1) * 2);
-            indices.Add(1); indices.Add((i + 1) * 2 + 1); indices.Add(i * 2 + 1);
-        }
-        // Side walls
-        for (var i = 0; i < n; i++)
-        {
-            var j = (i + 1) % n;
-            var t0 = i * 2; var b0 = t0 + 1;
-            var t1 = j * 2; var b1 = t1 + 1;
-            indices.Add(t0); indices.Add(t1); indices.Add(b1);
-            indices.Add(t0); indices.Add(b1); indices.Add(b0);
-        }
-
-        return UrdfGeometry.Mesh(verts, indices, origin: origin);
-    }
-
-    private static List<JointLimit> LimitsAllDrivers(KinematicTree tree)
-    {
-        var limits = new List<JointLimit>(tree.DriverCount);
-        for (var di = 0; di < tree.DriverCount; di++)
-        {
-            var j = tree.Joints[tree.DriverJointIndices[di]];
-            var vel = j.Velocity ?? Math.PI;
-            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
-        }
-        return limits;
-    }
-
-    private static string[] DriverNames(KinematicTree tree)
-    {
-        var names = new string[tree.DriverCount];
-        for (var di = 0; di < tree.DriverCount; di++)
-            names[di] = tree.Joints[tree.DriverJointIndices[di]].Name;
-        return names;
-    }
-
-    private static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)
-    {
-        var byName = new Dictionary<string, KinematicJoint>(StringComparer.OrdinalIgnoreCase);
-        foreach (var j in tree.Joints)
-            byName[j.Name] = j;
-
-        var limits = new List<JointLimit>(tipJointNames.Count);
-        foreach (var name in tipJointNames)
-        {
-            if (!byName.TryGetValue(name, out var j))
-                throw new InvalidOperationException($"Tip joint '{name}' missing.");
-            var vel = j.Velocity ?? Math.PI;
-            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
-        }
-        return limits;
-    }
-}
-
-/// <summary>Walking-hex viewport meshes: hex body plate at hip radius, orange legs, ground-contact rings.</summary>
-internal static class WalkingHexPreview
-{
-    public readonly record struct Result(
-        IReadOnlyList<Mesh> Meshes,
-        IReadOnlyList<Color> Colors,
-        IReadOnlyList<Line> Wires,
-        IReadOnlyList<Circle> ContactCircles,
-        Curve? SupportPolygon);
-
-    public static Result Build(LeggedLayout layout, double[] q, Frame? baseFrame = null)
-    {
-        var meshes = new List<Mesh>();
-        var colors = new List<Color>();
-        var wires = new List<Line>();
-        var contacts = new List<Circle>();
-        var feet = new List<Point3d>();
-
-        var bodyColor = Color.FromArgb(200, 255, 105, 180);
-        var legColor = Color.FromArgb(220, 255, 140, 40);
-        var jointColor = Color.FromArgb(230, 255, 160, 70);
-        var contactColor = Color.FromArgb(180, 80, 200, 120);
-
-        var bodyR = layout.BodyR;
-        var bodyZ = layout.BodyZ;
-        var coxa = layout.Coxa;
-        var femur = layout.Femur;
-        var tibia = layout.Tibia;
-        var n = layout.LegCount;
-
-        // Hex/N-gon plate at hip radius so legs attach at vertices (not an inset box).
-        var bodyPts = new Point3d[n];
-        for (var i = 0; i < n; i++)
-        {
-            var a = layout.HipYawsRad[i];
-            bodyPts[i] = new Point3d(bodyR * Math.Cos(a), bodyR * Math.Sin(a), bodyZ);
-        }
-        if (HexSlab(bodyPts, 0.02) is { } bodyMesh)
-        {
-            meshes.Add(bodyMesh);
-            colors.Add(bodyColor);
-        }
-
-        const double segR = 0.007;
-        const double jointR = 0.010;
-        for (var leg = 0; leg < n; leg++)
-        {
-            var yaw0 = layout.HipYawsRad[leg];
-            var hip = new Point3d(bodyR * Math.Cos(yaw0), bodyR * Math.Sin(yaw0), bodyZ);
-            var coxaA = q[leg * 3 + 0];
-            var femurA = q[leg * 3 + 1];
-            var tibiaA = q[leg * 3 + 2];
-
-            var coxaDir = new Vector3d(Math.Cos(coxaA), Math.Sin(coxaA), 0);
-            var knee = hip + coxaDir * coxa;
-
-            var up = Vector3d.ZAxis;
-            var femurDir = coxaDir * Math.Cos(femurA) - up * Math.Sin(femurA);
-            femurDir.Unitize();
-            var ankle = knee + femurDir * femur;
-
-            var tibiaDir = coxaDir * Math.Cos(femurA + tibiaA) - up * Math.Sin(femurA + tibiaA);
-            tibiaDir.Unitize();
-            var foot = ankle + tibiaDir * tibia;
-            feet.Add(foot);
-
-            AddSeg(meshes, colors, wires, hip, knee, segR, jointR, legColor, jointColor);
-            AddSeg(meshes, colors, wires, knee, ankle, segR, jointR, legColor, jointColor);
-            AddSeg(meshes, colors, wires, ankle, foot, segR * 0.85, jointR * 0.85, legColor, jointColor);
-
-            if (Math.Abs(foot.Z) <= LeggedContactPreview.GroundTolMeters)
-            {
-                var ground = new Point3d(foot.X, foot.Y, 0);
-                contacts.Add(new Circle(new Plane(ground, Vector3d.ZAxis), LeggedContactPreview.RingRadiusMeters));
-                if (Mesh.CreateFromCylinder(
-                        new Cylinder(new Circle(new Plane(ground, Vector3d.ZAxis), LeggedContactPreview.RingRadiusMeters), 0.004),
-                        16, 1) is { } pad)
-                {
-                    meshes.Add(pad);
-                    colors.Add(contactColor);
-                }
-            }
-        }
-
-        Curve? support = null;
-        if (feet.Count >= 3)
-        {
-            var poly = new Polyline(feet);
-            poly.Add(feet[0]);
-            support = poly.ToNurbsCurve();
-        }
-
-        if (baseFrame is { } bf)
-        {
-            var xform = BodyWorldXform(bf);
-            for (var i = 0; i < meshes.Count; i++)
-                meshes[i].Transform(xform);
-            for (var i = 0; i < wires.Count; i++)
-            {
-                var a = wires[i].From;
-                var b = wires[i].To;
-                a.Transform(xform);
-                b.Transform(xform);
-                wires[i] = new Line(a, b);
-            }
-            for (var i = 0; i < contacts.Count; i++)
-            {
-                var c = contacts[i].Center;
-                c.Transform(xform);
-                contacts[i] = new Circle(new Plane(c, Vector3d.ZAxis), contacts[i].Radius);
-            }
-            if (support is not null)
-                support.Transform(xform);
-        }
-
-        return new Result(meshes, colors, wires, contacts, support);
-    }
-
-    private static Transform BodyWorldXform(Frame baseFrame)
-    {
-        var yaw = 2.0 * Math.Atan2(baseFrame.Qz, baseFrame.Qw);
-        var plane = new Plane(
-            new Point3d(baseFrame.X, baseFrame.Y, baseFrame.Z),
-            new Vector3d(Math.Cos(yaw), Math.Sin(yaw), 0),
-            new Vector3d(-Math.Sin(yaw), Math.Cos(yaw), 0));
-        return Transform.PlaneToPlane(Plane.WorldXY, plane);
-    }
-
-    private static void AddSeg(
-        List<Mesh> meshes, List<Color> colors, List<Line> wires,
-        Point3d a, Point3d b, double r, double jr, Color leg, Color joint)
-    {
-        wires.Add(new Line(a, b));
-        var len = a.DistanceTo(b);
-        if (len > 1e-9)
-        {
-            var dir = b - a;
-            dir.Unitize();
-            var plane = new Plane(a, dir);
-            if (Mesh.CreateFromCylinder(new Cylinder(new Circle(plane, r), len), 10, 1) is { } cyl)
-            {
-                meshes.Add(cyl);
-                colors.Add(leg);
-            }
-        }
-        if (Mesh.CreateFromSphere(new Sphere(a, jr), 8, 6) is { } ja)
-        {
-            meshes.Add(ja);
-            colors.Add(joint);
-        }
-    }
-
-    private static Mesh? HexSlab(Point3d[] ring, double thickness)
-    {
-        if (ring.Length < 3) return null;
-        var c = Point3d.Origin;
-        foreach (var p in ring) c += p;
-        c /= ring.Length;
-        var mesh = new Mesh();
-        mesh.Vertices.Add(c);
-        foreach (var p in ring) mesh.Vertices.Add(p);
-        for (var i = 0; i < ring.Length; i++)
-            mesh.Faces.AddFace(0, i + 1, i + 2 <= ring.Length ? i + 2 : 1);
-        mesh.Normals.ComputeNormals();
-
-        var top = mesh.DuplicateMesh();
-        top.Transform(Transform.Translation(0, 0, thickness * 0.5));
-        var bottom = mesh.DuplicateMesh();
-        bottom.Transform(Transform.Translation(0, 0, -thickness * 0.5));
-        bottom.Flip(true, true, true);
-        var slab = new Mesh();
-        slab.Append(top);
-        slab.Append(bottom);
-        slab.Normals.ComputeNormals();
-        slab.Compact();
-        return slab.IsValid ? slab : null;
-    }
+    private static double FlatTerrain(double x, double y) => 0;
 }

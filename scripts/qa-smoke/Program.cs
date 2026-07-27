@@ -1087,6 +1087,19 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         if (stanceFeet < 3)
             Fail($"Mid-gait expected ≥3 stance feet at Z≈0, got {stanceFeet}");
 
+        var contactRings = new List<Circle>();
+        LeggedContactPreview.CollectGroundCircles(
+            tree, previewGeom, midQ, gaitNames, null, gaitMidFrame, contactRings);
+        if (contactRings.Count < 3)
+            Fail($"Mid-gait contact rings expected ≥3, got {contactRings.Count}");
+        if (contactRings.All(c => Math.Abs(c.Center.X) < 0.02 && Math.Abs(c.Center.Y) < 0.02))
+            Fail("Contact rings stuck at origin — BasePath not applied to foot tips");
+        foreach (var c in contactRings)
+        {
+            if (Math.Abs(c.Center.Z - gaitMidFrame.Z) > LeggedContactPreview.GroundTolMeters + 1e-6)
+                Fail($"Contact ring Z={c.Center.Z:F4} expected near base Z={gaitMidFrame.Z:F4}");
+        }
+
         var treeFk = new TreeForwardKinematics(tree);
         var mats = new double[tree.Links.Count][];
         for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];

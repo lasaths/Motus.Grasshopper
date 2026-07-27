@@ -49,18 +49,26 @@ internal static class LeggedGaitRhino
                 out var net, out error, terrain))
             return false;
 
+        // Path outputs sit on the projected body path (terrain support plane), not the Z=0 input.
+        var pathPts = new List<Point3d>(net!.BasePath.Count);
         var planes = new List<Plane>();
-        for (var i = 0; i < net!.BasePath.Count; i++)
+        for (var i = 0; i < net.BasePath.Count; i++)
         {
+            var f = net.BasePath[i];
+            pathPts.Add(new Point3d(f.X, f.Y, f.Z));
             if (i == 0 || i == net.BasePath.Count - 1 || i % 15 == 0)
-                planes.Add(FrameConversion.ToPlanePlate(net.BasePath[i]));
+                planes.Add(FrameConversion.ToPlanePlate(f));
         }
+
+        Curve projected = pathPts.Count >= 2
+            ? new PolylineCurve(pathPts)
+            : curve;
 
         result = new Result(
             net.Trajectory,
             net,
             net.BasePath,
-            curve,
+            projected,
             planes,
             net.Warning,
             net.MinStaticStabilityMarginMeters,

@@ -48,6 +48,22 @@ public sealed class JointStateGoo : MotusGooBase<JointState>
     public override string ToString() => $"Joints[{Value?.AxisCount}]";
 }
 
+/// <summary>Compact hex size + stance for Motus Hex → WalkHex (Family=legged).</summary>
+public sealed class HexLayoutGoo : MotusGooBase<LeggedLayout>
+{
+    public double HipStance { get; set; } = 7.5 * Math.PI / 180.0;
+    public double FemurStance { get; set; } = 30.0 * Math.PI / 180.0;
+    public double TibiaStance { get; set; } = -30.0 * Math.PI / 180.0;
+    public IReadOnlyList<double>? DriverQ { get; set; }
+
+    public HexLayoutGoo() { }
+    public HexLayoutGoo(LeggedLayout layout) : base(layout) { }
+
+    public override string ToString() => Value is null
+        ? "Hex"
+        : $"Hex Br={Value.BodyR:F3} Cx={Value.Coxa:F3} Fm={Value.Femur:F3} Tb={Value.Tibia:F3} Bz={Value.BodyZ:F3}";
+}
+
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
@@ -64,6 +80,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public JointState? TreeDriverHome { get; set; }
     /// <summary>Per-waypoint mobile base frames (driver-index parallel to trajectory points).</summary>
     public IReadOnlyList<Frame>? BasePath { get; set; }
+    /// <summary>Optional ground height sampler (m) for Family=legged contact rings.</summary>
+    public LeggedGait.TerrainHeight? TerrainSampler { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }

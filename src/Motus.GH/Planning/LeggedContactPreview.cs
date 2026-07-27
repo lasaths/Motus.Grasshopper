@@ -6,11 +6,12 @@ using Rhino.Geometry;
 namespace Motus.GH.Planning;
 
 /// <summary>
-/// Ground-contact rings for Family=legged TreeFK preview (foot tip near body-floor / terrain).
+/// Ground-contact rings for Family=legged TreeFK preview (foot tip near terrain / body-floor).
 /// </summary>
 internal static class LeggedContactPreview
 {
-    public const double GroundTolMeters = 0.02;
+    /// <summary>Planted if tip within this of terrain Z. Must stay below default WalkHex Lift (0.02 m).</summary>
+    public const double GroundTolMeters = 0.008;
     public const double RingRadiusMeters = 0.028;
 
     public static void CollectGroundCircles(
@@ -21,6 +22,7 @@ internal static class LeggedContactPreview
         JointState? treeDriverHome,
         Frame? dynamicBase,
         ICollection<Circle> dest,
+        LeggedGait.TerrainHeight? terrain = null,
         double groundTol = GroundTolMeters,
         double radius = RingRadiusMeters)
     {
@@ -58,18 +60,30 @@ internal static class LeggedContactPreview
                 continue;
 
             if (!tipLenByLink.TryGetValue(name, out var tipLen) || tipLen <= 0)
-                tipLen = 0.19; // ponytail: WalkHex default tibia if geom missing
+                tipLen = 0.10; // ponytail: WalkHex default Tb if geom missing
 
             var local = Transforms.TransformPoint(mats[li], tipLen, 0, 0);
             var world = Transforms.TransformPoint(baseM, local[0], local[1], local[2]);
-            // Body-floor ≈ base.Z; planted feet sit near it (flat or mild terrain).
-            var baseZ = dynamicBase?.Z ?? 0;
-            if (Math.Abs(world[2] - baseZ) > groundTol)
+            var expectedZ = SampleGroundZ(terrain, dynamicBase, world[0], world[1]);
+            if (!double.IsFinite(expectedZ) || Math.Abs(world[2] - expectedZ) > groundTol)
                 continue;
 
-            var center = new Point3d(world[0], world[1], world[2]);
+            var center = new Point3d(world[0], world[1], expectedZ);
             dest.Add(new Circle(new Plane(center, Vector3d.ZAxis), radius));
         }
+    }
+
+    private static double SampleGroundZ(
+        LeggedGait.TerrainHeight? terrain, Frame? dynamicBase, double x, double y)
+    {
+        if (terrain is not null)
+        {
+            var z = terrain(x, y);
+            if (double.IsFinite(z))
+                return z;
+        }
+
+        return dynamicBase?.Z ?? 0;
     }
 
     private static Dictionary<string, double> TipLengthByTibiaLink(RobotCollisionModel? geom)
@@ -83,11 +97,14 @@ internal static class LeggedContactPreview
                 continue;
             var obj = link.LocalGeometry;
             // Cylinder→Capsule: origin at mid-link (L/2 along X), ExtentY = L/2 → tip at Origin.X + ExtentY.
+            // WalkHex tibias are Mesh (0→L on +X); Capsule/Box used by other authors.
             var tip = obj.Shape switch
             {
                 CollisionShape.Capsule => obj.Pose.X + obj.ExtentY,
                 CollisionShape.Box => obj.Pose.X + obj.ExtentX,
                 CollisionShape.Sphere => obj.Pose.X + obj.ExtentX,
+                CollisionShape.Mesh when obj.MeshAabbMax is { Length: >= 1 } max =>
+                    obj.Pose.X + max[0],
                 _ => 0,
             };
             if (tip > 0)

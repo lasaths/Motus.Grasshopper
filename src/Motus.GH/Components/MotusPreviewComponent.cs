@@ -713,7 +713,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             ctx.Model.JointNames,
             ctx.TreeDriverHome,
             dynamicBase,
-            _contactCircles);
+            _contactCircles,
+            _trajGoo?.TerrainSampler);
     }
 
     private void ReadCustomColors(IGH_DataAccess da)
@@ -847,14 +848,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (_trajectory is null || _previewPoints.Count == 0) return false;
         _playing = false;
         _position = Math.Clamp(MapScrubToTimeFraction(scrub, scrubFraction), 0, 1);
-        ResolveFrame(out var state, out _, out _, out var toolState);
+        ResolveFrame(out var state, out var elapsed, out _, out var toolState);
+        Frame? dynamicBase = null;
+        if (_trajGoo?.BasePath is { Count: > 0 } bp)
+            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), elapsed);
         if (_meshCache is not null)
         {
             if (_currentMeshes.Count == 0)
-                _currentMeshes = _meshCache.MeshesFor(state, toolState);
+                _currentMeshes = _meshCache.MeshesFor(state, toolState, dynamicBase);
             else
-                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
         }
+        if (_trajGoo is not null)
+            RefreshContactCircles(_trajGoo.Context(), state, dynamicBase);
         ExpirePreview(true);
         return true;
     }

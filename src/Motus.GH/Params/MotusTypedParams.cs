@@ -95,3 +95,16 @@ public sealed class Param_MotusToolState : GH_PersistentParam<EndEffectorStateGo
     protected override GH_GetterResult Prompt_Singular(ref EndEffectorStateGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<EndEffectorStateGoo> values) => GH_GetterResult.cancel;
 }
+
+/// <summary>Typed Motus hex size/stance pin (Motus Hex → WalkHex).</summary>
+public sealed class Param_MotusHex : GH_PersistentParam<HexLayoutGoo>
+{
+    public Param_MotusHex()
+        : base("Hex", "Hx", "Walking hex size & stance", "Motus", "Params") { }
+
+    public override Guid ComponentGuid => new("908aabb4-0e11-4ad1-9ced-ed87671c3499");
+    public override GH_Exposure Exposure => GH_Exposure.hidden;
+    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Model"));
+    protected override GH_GetterResult Prompt_Singular(ref HexLayoutGoo value) => GH_GetterResult.cancel;
+    protected override GH_GetterResult Prompt_Plural(ref List<HexLayoutGoo> values) => GH_GetterResult.cancel;
+}
