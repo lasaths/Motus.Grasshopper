@@ -237,3 +237,7 @@ re-report the last path — no disk IO until Write.
 ## Units
 
 Joint inputs: **radians** by default. Right-click the **J** input on **Motus Joint State** and toggle **Degrees** for degree input (persisted in the `.gh`/`.ghx`). Planes and preview geometry use **meters**.
+
+## Algorithms & citations
+
+Planner/retimer/family methods and DOIs: [motus-net/METHODS.md](motus-net/METHODS.md), [citation-audit.md](citation-audit.md). Manual Rhino checks: [regression-matrix.md](regression-matrix.md).
