@@ -273,18 +273,33 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 var validation = LeggedGait.ValidateForPlan(gait!.GaitResult);
                 if (!validation.Success)
                 {
-                    ClearPreview();
-                    _previewColors = [];
-                    _previewContactCircles = [];
-                    AddRuntimeMessage(
-                        GH_RuntimeMessageLevel.Error,
-                        validation.Errors.Count > 0
-                            ? string.Join("; ", validation.Errors)
-                            : "LeggedGait.ValidateForPlan failed.");
-                    return;
+                    // Preview Walk: SSM/constraint messages stay named, but do not kill Tr —
+                    // outdoor hills + odd N often dip McGhee–Frank margin slightly negative.
+                    var ssmOnly = validation.Errors.Count > 0
+                        && validation.Errors.All(e =>
+                            e.Contains("SSM", StringComparison.OrdinalIgnoreCase));
+                    if (!ssmOnly)
+                    {
+                        ClearPreview();
+                        _previewColors = [];
+                        _previewContactCircles = [];
+                        AddRuntimeMessage(
+                            GH_RuntimeMessageLevel.Error,
+                            validation.Errors.Count > 0
+                                ? string.Join("; ", validation.Errors)
+                                : "LeggedGait.ValidateForPlan failed.");
+                        return;
+                    }
+
+                    foreach (var e in validation.Errors)
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, StripMethodCite(e));
                 }
                 foreach (var warning in validation.Warnings)
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, warning);
+                {
+                    var cleaned = StripMethodCite(warning);
+                    if (string.IsNullOrWhiteSpace(cleaned)) continue;
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, cleaned);
+                }
 
                 trajGoo = new TrajectoryGoo(gait.Trajectory)
                 {
@@ -298,12 +313,16 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 pathCurveOut = gait.PathCurve;
                 pathPlanesOut = gait.PathPlanes.ToList();
                 if (gait.Warning is { } warn)
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, warn);
+                {
+                    var cleaned = StripMethodCite(warn);
+                    if (!string.IsNullOrWhiteSpace(cleaned))
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, cleaned);
+                }
                 if (double.IsFinite(gait.MinStaticStabilityMarginMeters))
                 {
                     AddRuntimeMessage(
                         GH_RuntimeMessageLevel.Remark,
-                        $"McGhee–Frank SSM min={gait.MinStaticStabilityMarginMeters:F4} m (DOI {LeggedMethodRefs.McGheeFrank1968Doi}; CoM≈body XY heuristic).");
+                        $"SSM min={gait.MinStaticStabilityMarginMeters:F4} m.");
                 }
             }
             else
@@ -382,4 +401,27 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
     public override Guid ComponentGuid => Id;
 
     private static double FlatTerrain(double x, double y) => 0;
+
+    /// <summary>DOI / method-stack blobs stay in Motus.NET MethodProvenance — not GH Status.</summary>
+    private static string StripMethodCite(string message)
+    {
+        if (string.IsNullOrEmpty(message)) return message;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(
+            message,
+            @"\s*\([^)]*doi:\s*[^)]+\)",
+            "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        cleaned = System.Text.RegularExpressions.Regex.Replace(
+            cleaned,
+            @"\s*;?\s*DOI\s+10\.[^\s);]+",
+            "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // NuGet 0.13.0 appended DescribeStack() into Warning.
+        cleaned = System.Text.RegularExpressions.Regex.Replace(
+            cleaned,
+            @"\s*LegIk3R=analytic[^.]*\.",
+            "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return cleaned.Trim().TrimEnd(',', ';');
+    }
 }

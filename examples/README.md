@@ -34,8 +34,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `06_turntable_group.ghx` | Turntable+arm URDF: coupled Plan vs decoupled Plan (SRDF `arm` group) |
 | `07_urdf_gripper_tool.ghx` | URDF gripper as Motus Tool `Description` (actuated graft) |
 | `08_stewart_tcp_path.ghx` | Motus Stewart → Plan TCP path (leg lengths in meters) |
-| `09_walking_hexapod.ghx` | Motus Body+Leg+Mechanism → Walk gait + optional terrain (`Tn`) |
-| `10_funky_octopod.ghx` | Body N=8 + Leg → Mechanism → Walk (flat ground) |
+| `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 
 ## Component coverage (01–06 core)
 
@@ -82,14 +81,14 @@ Joint State → Plan.Goal
 Group / Attach / RrtSettings → Plan advanced pins
 ```
 
-### Stewart (08) / Walk (09–10)
+### Stewart (08) / Walk (09)
 
 ```
 Stewart → Plan (TCP planes) → Preview / Waypoints   # Q = meters
 Body + Leg → Mechanism → Walk (Path/Planes [, Terrain]) → Tr → Preview    # not full-body Motus Plan
 ```
 
-Example 10 sets Body `N=8` (octopod) on the same components.
+Drag Number Slider `N` (4–12) on **09** to change leg count.
 
 ## SRDF / URDF assets
 

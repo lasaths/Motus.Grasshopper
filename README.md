@@ -173,7 +173,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 
 **Tools / attach / groups:** Motus Tool on Robot; Attach Body + Planning Group on Plan; SRDF on ColScene. Examples: `03_urdf_tool_frames.ghx`, `02_collision_srdf.ghx`.
 
-**Parallel / walking:** Motus Stewart → Plan TCP planes (`08_stewart_tcp_path.ghx`). Motus Body+Leg+Mechanism → Walk gait (`09_walking_hexapod.ghx`, `10_funky_octopod.ghx`) — not full-mechanism Motus Plan.
+**Parallel / walking:** Motus Stewart → Plan TCP planes (`08_stewart_tcp_path.ghx`). Motus Body+Leg+Mechanism → Walk (`09_walking_hexapod.ghx`; Number Slider `N`) — not full-mechanism Motus Plan.
 
 ## Examples
 
@@ -192,8 +192,7 @@ Nine generated definitions in [`examples/`](examples/README.md) (**never hand-ed
 | `06_turntable_group.ghx` | Coupled vs Group-locked Plan |
 | `07_urdf_gripper_tool.ghx` | Actuated gripper as Tool Description |
 | `08_stewart_tcp_path.ghx` | Stewart TCP Plan (meters) |
-| `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk gait + optional terrain |
-| `10_funky_octopod.ghx` | Body N=8 → Walk (flat) |
+| `09_walking_hexapod.ghx` | Walk graph + N slider (default 6, range 4–12) |
 
 </details>
 

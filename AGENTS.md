@@ -101,6 +101,5 @@ Also check in Rhino:
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
 - `06_turntable_group`: coupled Preview rotates table; decoupled (arm Group) keeps table fixed
-- `09_walking_hexapod`: Motus Body + Leg → Mechanism → Walk; Terrain Patch → `Tn`; omit `Tn` = flat Z=0
-- `10_funky_octopod`: Body `N=8` → Mechanism → Walk (flat)
+- `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Three.js stick viz via `Motus.NET/tools/legged-viewer`

@@ -442,6 +442,14 @@ const NATIVE = {
   merge: { guid: '3cadddef-1e2b-4c09-9390-0e8f78f7609f', name: 'Merge', nick: 'Merge', w: 62, h: 44 },
   scribble: { guid: '7f5c6c55-f846-4a08-9c9a-cfdc285cc6fe', name: 'Scribble' },
   group: { guid: 'c552a431-af5b-46a9-a8a4-0fcbc27ef596', name: 'Group' },
+  // Grasshopper.Kernel.Special.GH_NumberSlider (SliderGuid)
+  numberSlider: {
+    guid: '57da07bd-ecab-415d-9d86-af36d7073abc',
+    name: 'Number Slider',
+    nick: 'N',
+    w: 160,
+    h: 24,
+  },
 };
 
 /**
@@ -846,6 +854,49 @@ function motusComponent(key, x, y, wireMap, options = {}) {
                   </items>
                   <chunks count="${chunkCount}">
                     ${containerChunks}
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`, node };
+}
+
+/**
+ * Native GH Number Slider (integer). Wire outRef(node, 'Number') into Motus Body N.
+ * Interval: 0=Float, 1=Integer, 2=Odd, 3=Even (GH_NumberSlider.Write).
+ */
+function nativeNumberSlider(x, y, { value = 6, min = 4, max = 12, nick = 'N', w = NATIVE.numberSlider.w } = {}) {
+  const spec = NATIVE.numberSlider;
+  const instance = id();
+  const h = spec.h;
+  const node = { key: 'numberSlider', instance, outputs: [{ name: 'Number', _guid: instance }] };
+  return { xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', spec.guid)}
+                ${item('Name', 'gh_string', '10', spec.name)}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="6">
+                    ${item('Description', 'gh_string', '10', 'Numeric slider for a single value')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', spec.name)}
+                    ${item('NickName', 'gh_string', '10', esc(nick))}
+                    ${item('Optional', 'gh_bool', '1', 'false')}
+                    ${item('SourceCount', 'gh_int32', '3', '0')}
+                  </items>
+                  <chunks count="2">
+                    ${bounds(x, y, w, h)}
+                    <chunk name="Slider">
+                      <items count="7">
+                        ${item('Digits', 'gh_int32', '3', '0')}
+                        ${item('GripDisplay', 'gh_int32', '3', '1')}
+                        ${item('Interval', 'gh_int32', '3', '1')}
+                        ${item('Max', 'gh_double', '6', String(max))}
+                        ${item('Min', 'gh_double', '6', String(min))}
+                        ${item('SnapCount', 'gh_int32', '3', '0')}
+                        ${item('Value', 'gh_double', '6', String(value))}
+                      </items>
+                    </chunk>
                   </chunks>
                 </chunk>
               </chunks>
@@ -2209,25 +2260,31 @@ function graph08() {
   return buildGraph(objs);
 }
 
-/** Logic asserted by Motus.NET Example09 + qa-smoke (no Rhino UI). Outdoor mesh in .ghx. */
-function graph09() {
-  const title = nativeScribble(40, 40, '09 · Walking hexapod', 28);
+/**
+ * Shared Walk graph (Body+Leg+Mechanism + Ground + arc → Walk → Preview).
+ * Logic asserted by Motus.NET Example09 + qa-smoke for N=6. N is the only structural knob.
+ */
+function graphWalking({ n, label, fileName, description }) {
+  const title = nativeScribble(40, 40, label, 28);
   const note = nativePanel(
     40,
     80,
-    'Body + Leg → Mechanism → Walk Mech; Ground → Tn; Planes arc → gait Tr → Preview scrub. Green rings = planted feet. Motus Hex removed in 0.13 — migrate Body+Leg+Mechanism.',
+    'Slider N → Body → Leg → Mechanism → Walk Mech; Ground → Tn; Planes arc → gait Tr → Preview. Drag N (4–12) for hex/octo/… Green rings = planted feet.',
     'Note',
     560,
     88,
   );
   const uz = nativeUnitZ(40, 180);
-  const groundOrigin = nativeConstructPoint(200, 180, [0.22, 0, 0]);
-  const ground = motusComponent('terrainPatch', 320, 180, {
+  const nSlider = nativeNumberSlider(200, 140, { value: n, min: 4, max: 12, nick: 'N', w: 180 });
+  const groundOrigin = nativeConstructPoint(200, 200, [0.22, 0, 0]);
+  const ground = motusComponent('terrainPatch', 400, 200, {
     Origin: [outRef(groundOrigin.node, 'Point')],
+  }, { numbers: { Amp: 0.02 } });
+  const body = motusComponent('body', 560, 140, {
+    N: [outRef(nSlider.node, 'Number')],
   });
-  const body = motusComponent('body', 480, 160, {});
-  const leg = motusComponent('leg', 480, 300, {});
-  const mech = motusComponent('mechanism', 620, 200, {
+  const leg = motusComponent('leg', 560, 300, {});
+  const mech = motusComponent('mechanism', 700, 200, {
     Body: [outRef(body.node, 'Body')],
     Leg: [outRef(leg.node, 'Leg')],
   });
@@ -2251,8 +2308,9 @@ function graph09() {
     Terrain: [outRef(ground.node, 'Mesh')],
   }, { numbers: { Lift: 0.06 } });
   const { scrub, preview } = previewWithScrub(560, 720, outRef(walk.node, 'Trajectory'));
-  const gModel = nativeGroup('Walking Hex path', [
+  const gModel = nativeGroup('Walking path', [
     { xml: uz.xml, node: uz.node },
+    nSlider,
     groundOrigin,
     ground,
     body,
@@ -2266,65 +2324,24 @@ function graph09() {
 
   const objs = [
     title, note, { xml: uz.xml },
-    groundOrigin, ground, body, leg, mech,
+    nSlider, groundOrigin, ground, body, leg, mech,
     ...arcParts, planesMerge, walk, scrub, preview, gModel, gPreview,
   ];
-  objs._meta = {
+  objs._meta = { fileName, description };
+  return buildGraph(objs);
+}
+
+function graph09() {
+  return graphWalking({
+    n: 6,
+    label: '09 · Walking hexapod',
     fileName: '09_walking_hexapod.ghx',
     description:
-      'Walking hexapod: Body+Leg+Mechanism + outdoor Ground + arc → Walk gait → Preview + Scrub. Not Stewart. (0.9: Motus Hex removed.)',
-  };
-  return buildGraph(objs);
+      'Body N slider (default 6, range 4–12) + Leg + Mechanism + Ground + arc → Walk → Preview. Drag N for other leg counts.',
+  });
 }
 
-/** Octopod (N=8) — same Body+Leg+Mechanism→Walk graph as 09 with Body N=8. */
-function graph10() {
-  const title = nativeScribble(40, 40, '10 · Funky octopod', 28);
-  const note = nativePanel(
-    40,
-    80,
-    'Body N=8 + Leg → Mechanism → Walk. Same stack as 09 — no Hex special case. Auto crawl/wave from Motus.NET GaitSchedule.',
-    'Note',
-    560,
-    72,
-  );
-  const uz = nativeUnitZ(40, 180);
-  const body = motusComponent('body', 200, 180, {}, { numbers: { N: 8, BodyR: 0.08, BodyZ: 0.07 } });
-  const leg = motusComponent('leg', 200, 320, {});
-  const mech = motusComponent('mechanism', 360, 220, {
-    Body: [outRef(body.node, 'Body')],
-    Leg: [outRef(leg.node, 'Leg')],
-  });
-  const arcParts = [];
-  const planeRefs = [];
-  const ARC_N = 7;
-  for (let i = 0; i < ARC_N; i++) {
-    const a = Math.PI - (i / (ARC_N - 1)) * Math.PI;
-    const px = 0.25 + 0.16 * Math.cos(a);
-    const py = 0.16 * Math.sin(a);
-    const pt = nativeConstructPoint(40, 300 + i * 44, [px, py, 0]);
-    const pl = nativePlane(140, 300 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
-    arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
-    planeRefs.push(outRef(pl.node, 'Plane'));
-  }
-  const planesMerge = nativeMerge(280, 420, planeRefs);
-  const walk = motusComponent('walk', 40, 680, {
-    Mechanism: [outRef(mech.node, 'Mechanism')],
-    Planes: [outRef(planesMerge.node, 'Result')],
-  });
-  const { scrub, preview } = previewWithScrub(520, 680, outRef(walk.node, 'Trajectory'));
-  const objs = [
-    title, note, { xml: uz.xml },
-    body, leg, mech, ...arcParts, planesMerge, walk, scrub, preview,
-  ];
-  objs._meta = {
-    fileName: '10_funky_octopod.ghx',
-    description: 'N=8 radial walker: Body+Leg+Mechanism → Walk (ADR 0005). Flat ground (no Tn).',
-  };
-  return buildGraph(objs);
-}
-
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph10];
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09];
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',
@@ -2340,6 +2357,7 @@ const legacy = [
   '10_robotiq_tool.ghx',
   '11_gripper_motion_program.ghx',
   '12_sequential_goals.ghx',
+  '10_funky_octopod.ghx',
 ];
 
 for (const name of legacy) {
