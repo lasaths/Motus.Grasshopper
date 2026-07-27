@@ -40,6 +40,7 @@ const MOTUS_COMPONENTS = new Map([
   ['a1b2c3d4-5e6f-7081-92a3-b4c5d6e7f809', 'Motus Reach Samples'],
   ['d9e3b2c1-5f4a-4b8d-9e2f-3c7a1d0b6f82', 'Motus Joint Table'],
   ['a9e1c3f0-7b2d-4e8a-9c1f-6d4b2a0e8f73', 'Motus Stewart'],
+  ['b8e2c4f1-8a3d-4c7e-9f1b-5d6e7a8b9c0d', 'Motus Walking Hex'],
   ['2b3c4d5e-6f7a-4b2c-9d3e-4f5a6b7c8d92', 'Motus Urdf Link'],
   ['3c4d5e6f-7a8b-4c3d-ae4f-5a6b7c8d9ea3', 'Motus Urdf Joint'],
   ['4d5e6f7a-8b9c-4d4e-bf5a-6b7c8d9eafb4', 'Motus Urdf Assemble'],

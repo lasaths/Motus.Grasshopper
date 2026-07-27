@@ -167,6 +167,24 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
                 goo.PreviewHome = homeState;
             }
 
+            if (tree.DriverCount > tip.Chain.Joints.Length)
+            {
+                var fullQ = new double[tree.DriverCount];
+                if (home.Count > 0)
+                {
+                    var byName = new Dictionary<string, double>(tip.JointNames.Count, StringComparer.OrdinalIgnoreCase);
+                    for (var i = 0; i < tip.JointNames.Count && i < home.Count; i++)
+                        byName[tip.JointNames[i]] = home[i];
+                    for (var di = 0; di < tree.DriverCount; di++)
+                    {
+                        var jName = tree.Joints[tree.DriverJointIndices[di]].Name;
+                        if (byName.TryGetValue(jName, out var v))
+                            fullQ[di] = v;
+                    }
+                }
+                goo.TreeDriverHome = new JointState(fullQ);
+            }
+
             ApplyPreview(goo, sourcePath: $"jointtbl:{tree.Fingerprint}");
             da.SetData(0, goo);
         }

@@ -2,6 +2,7 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.OMPL.NET;
 using Motus.Presets;
+using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Motus.GH.Planning;
 using Rhino.Geometry;
@@ -441,6 +442,22 @@ try
             Fail($"Frame roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
     }
     Ok("FrameConversion ToPlane/FromPlane roundtrip within tolerance");
+
+    for (var i = 0; i < 8; i++)
+    {
+        var origin = new Point3d(rnd.NextDouble() * 0.2, rnd.NextDouble() * 0.2, 0.5 + rnd.NextDouble() * 0.1);
+        var pl = new Plane(origin, Vector3d.XAxis, Vector3d.YAxis);
+        var frame = FrameConversion.FromPlanePlate(pl);
+        var backPl = FrameConversion.ToPlanePlate(frame);
+        var back = FrameConversion.FromPlanePlate(backPl);
+        if (Math.Abs(back.X - frame.X) > 1e-4 || Math.Abs(back.Y - frame.Y) > 1e-4 || Math.Abs(back.Z - frame.Z) > 1e-4)
+            Fail($"Stewart plate roundtrip position drift at sample {i}");
+        var dot = Math.Abs(back.Qw * frame.Qw + back.Qx * frame.Qx + back.Qy * frame.Qy + back.Qz * frame.Qz);
+        var oriErr = 2 * Math.Acos(Math.Clamp(dot, -1, 1));
+        if (oriErr > 1e-3)
+            Fail($"Stewart plate roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
+    }
+    Ok("FrameConversion ToPlanePlate/FromPlanePlate roundtrip within tolerance");
 }
 catch (DllNotFoundException)
 {
@@ -843,6 +860,391 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     if (KinematicsResolver.CreateInverseKinematics(preset, tip.Chain) is not NumericalInverseKinematics)
         Fail("Rail 7-DOF must use numerical IK, not UR analytic");
     Ok("Wave 2 JointTable tip-path Validate + Mobility SE2 + rail numerical IK");
+}
+
+// Legged (Family=legged): tip-path plan + TreeDriverHome fill + gait (HI-005/006)
+{
+    static double[] BuildHexStanceQ(double hip, double femur, double tibia)
+    {
+        var layout = LeggedLayout.HexMithi(0.12, 0.06, 0.17, 0.19, 0.12);
+        return Motus.Geometry.LeggedGait.BuildStanceQ(layout, hip, femur, tibia);
+    }
+
+    static RobotDescription BuildLeggedDescription(LeggedLayout layout, string assembleName)
+    {
+        var links = new List<UrdfLink>
+        {
+            new("body", [UrdfGeometry.Cylinder(layout.BodyR * 0.85, 0.03, new Frame(0, 0, layout.BodyZ))]),
+        };
+        var joints = new List<UrdfJoint>();
+        for (var leg = 0; leg < layout.LegCount; leg++)
+        {
+            var name = layout.LegNames[leg];
+            var yaw = layout.HipYawsRad[leg];
+            var hx = layout.BodyR * Math.Cos(yaw);
+            var hy = layout.BodyR * Math.Sin(yaw);
+            var coxa = layout.Coxa;
+            var femur = layout.Femur;
+            var tibia = layout.Tibia;
+            var bodyZ = layout.BodyZ;
+            var coxaLink = $"{name}_coxa";
+            var femurLink = $"{name}_femur";
+            var tibiaLink = $"{name}_tibia";
+            links.Add(new UrdfLink(coxaLink, [UrdfGeometry.Cylinder(0.012, coxa, new Frame(coxa * 0.5, 0, 0))]));
+            links.Add(new UrdfLink(femurLink, [UrdfGeometry.Cylinder(0.012, femur, new Frame(femur * 0.5, 0, 0))]));
+            links.Add(new UrdfLink(tibiaLink, [UrdfGeometry.Cylinder(0.010, tibia, new Frame(tibia * 0.5, 0, 0))]));
+            joints.Add(new UrdfJoint($"{name}_hip", "revolute", "body", coxaLink, hx, hy, bodyZ, 0, 0, 1, -Math.PI, Math.PI));
+            joints.Add(new UrdfJoint($"{name}_femur", "revolute", coxaLink, femurLink, coxa, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+            joints.Add(new UrdfJoint($"{name}_tibia", "revolute", femurLink, tibiaLink, femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
+        }
+
+        if (!RobotDescription.TryAssemble(assembleName, links, joints, tipLink: layout.TipLinkName,
+                out var desc, out var diag, homeQ: null) || desc is null)
+            Fail($"Legged assemble ({assembleName}): {string.Join("; ", diag.Errors)}");
+        return desc;
+    }
+
+    static List<JointLimit> LimitsAlongTip(KinematicTree tree, IReadOnlyList<string> tipJointNames)
+    {
+        var byName = new Dictionary<string, KinematicJoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var j in tree.Joints)
+            byName[j.Name] = j;
+        var limits = new List<JointLimit>(tipJointNames.Count);
+        foreach (var name in tipJointNames)
+        {
+            if (!byName.TryGetValue(name, out var j))
+                Fail($"Tip joint '{name}' missing from tree.");
+            var vel = j.Velocity ?? Math.PI;
+            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+        }
+        return limits;
+    }
+
+    var hexLayout = LeggedLayout.HexMithi(0.12, 0.06, 0.17, 0.19, 0.12);
+    var hexDesc = BuildLeggedDescription(hexLayout, "walking_hexapod");
+    var tree = hexDesc.ToKinematicTree();
+    var tipLink = hexLayout.TipLinkName;
+    var tip = tree.ExtractSerialTip("body", tipLink);
+    if (tip.Chain.Joints.Length != 3)
+        Fail($"Walking hex tip path expected 3 axes, got {tip.Chain.Joints.Length}");
+    var hs = 7.5 * Math.PI / 180.0;
+    var fs = 30.0 * Math.PI / 180.0;
+    var ts = -30.0 * Math.PI / 180.0;
+    var home18 = BuildHexStanceQ(hs, fs, ts);
+    if (home18.Length != 18)
+        Fail($"Walking hex TreeDriverHome expected 18 drivers, got {home18.Length}");
+    {
+        var hips = Enumerable.Range(0, 6).Select(leg => home18[leg * 3]).ToArray();
+        if (hips.Max() - hips.Min() < 1.0)
+            Fail($"Walking hex stance hips should spread by mount yaw (spread={hips.Max() - hips.Min():F3} rad)");
+        for (var leg = 1; leg < 6; leg++)
+        {
+            var delta = hips[leg] - hips[leg - 1];
+            if (Math.Abs(Math.Abs(delta) - Math.PI / 3.0) > 0.35)
+                Fail($"Walking hex consecutive hip delta leg {leg - 1}→{leg} = {delta:F3} rad, expected ~±π/3");
+        }
+    }
+    if (tree.DriverCount != 18)
+        Fail($"Walking hex tree expected 18 drivers, got {tree.DriverCount}");
+
+    var preset = new RobotPreset
+    {
+        Manufacturer = RobotManufacturer.Unknown,
+        ModelName = "walking_hexapod",
+        Family = Units.LeggedFamily,
+        AxisCount = tip.Chain.Joints.Length,
+        JointLimits = LimitsAlongTip(tree, tip.JointNames),
+        BaseFrame = BaseFrame.Identity,
+        ToolFrame = ToolFrame.Identity,
+    };
+    var hexRobot = new RobotModel(preset);
+    var tipStart = new JointState(new[] { -0.1309, 0.5236, -0.5236 });
+    var tipGoal = new JointState(new[] { -0.1309, 0.6109, -0.5236 });
+    var hexPlan = new JointLinearPlanner().Plan(new PlanningRequest(hexRobot, tipStart, tipGoal));
+    if (!hexPlan.Success)
+        Fail($"Walking hex tip-path plan: {string.Join("; ", hexPlan.Errors)}");
+
+    var driverQ = new double[18];
+    var fillErr = KinematicsPreview.TryFillTreeDriverQ(tree, tipStart.Positions, tip.JointNames, home18, driverQ);
+    if (fillErr is not null)
+        Fail($"FillTreeDriverQ: {fillErr}");
+    for (var i = 0; i < 3; i++)
+    {
+        if (Math.Abs(driverQ[i] - tipStart.Positions[i]) > 1e-9)
+            Fail($"FillTreeDriverQ tip driver[{i}] should match trajectory");
+    }
+    for (var di = 3; di < 18; di++)
+    {
+        if (Math.Abs(driverQ[di] - home18[di]) > 1e-9)
+            Fail($"FillTreeDriverQ non-tip driver[{di}] should stay at TreeDriverHome");
+    }
+    var missingHomeErr = KinematicsPreview.TryFillTreeDriverQ(tree, tipStart.Positions, tip.JointNames, null, driverQ);
+    if (missingHomeErr is null)
+        Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
+    Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
+
+    var previewGeom = MechanismPreviewGeometry.Build(hexDesc);
+    if (previewGeom is null)
+        Fail("Walking hex preview geometry missing");
+    var gaitLimits = new List<JointLimit>(18);
+    for (var i = 0; i < 18; i++)
+        gaitLimits.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+    var gaitNames = new string[18];
+    for (var i = 0; i < 18; i++) gaitNames[i] = tree.Joints[tree.DriverJointIndices[i]].Name;
+    var gaitModel = new RobotModel(new RobotPreset
+    {
+        Manufacturer = RobotManufacturer.Unknown,
+        ModelName = "walking_hex_gait_smoke",
+        Family = Units.LeggedFamily,
+        AxisCount = 18,
+        JointLimits = gaitLimits,
+        BaseFrame = BaseFrame.Identity,
+        ToolFrame = ToolFrame.Identity,
+    }, jointNames: gaitNames);
+    try
+    {
+        var cache = KinematicsPreview.PreviewMeshCache.TryCreate(
+            gaitModel, previewGeom, chain: null, tree: tree, armJointNames: gaitNames,
+            treeDriverHome: new JointState(home18));
+        if (cache is null)
+            Fail("PreviewMeshCache should build for 18-DOF gait tree without serial FK");
+        var meshes = cache.MeshesFor(new JointState(home18));
+        if (meshes.Count == 0)
+            Fail("TreeFK preview meshes empty for walking hex gait");
+        Ok("Walking hex TreeFK preview cache (no serial FK)");
+    }
+    catch (DllNotFoundException)
+    {
+        Ok("Walking hex TreeFK preview smoke skipped (Rhino native DLL unavailable in this host)");
+    }
+
+    try
+    {
+        var arc = new ArcCurve(new Arc(new Point3d(0.05, 0, 0), 0.45, Math.PI));
+        if (!LeggedGaitRhino.TryBuild(
+                hexLayout, arc, null, 0.08, 0.06, 0.03,
+                7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+                gaitModel, out var gait, out var gaitErr))
+            Fail($"LeggedGaitRhino hex: {gaitErr}");
+        if (gait!.Trajectory.Points.Count < 10)
+            Fail("LeggedGait should sample ≥ 10 trajectory points");
+        if (gait.BasePath.Count != gait.Trajectory.Points.Count)
+            Fail("BasePath length must match trajectory point count");
+        if (gait.Trajectory.Points[0].JointState.AxisCount != 18)
+            Fail("Gait trajectory must be 18-DOF");
+        var midBase = BasePathSampler.AtTime(
+            gait.BasePath, gait.Trajectory, gait.Trajectory.DurationSeconds * 0.5);
+        if (Math.Abs(midBase.Y) < 0.08)
+            Fail("Mid-walk base frame should be displaced along arc (m)");
+
+        // Step must affect cadence: smaller Step → more cycles → mid-q differs.
+        if (!LeggedGaitRhino.TryBuild(
+                hexLayout, arc, null, 0.08, 0.20, 0.03,
+                7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+                gaitModel, out var gaitCoarse, out var gaitCoarseErr))
+            Fail($"LeggedGaitRhino coarse Step: {gaitCoarseErr}");
+        var midFine = gait.Trajectory.Points[gait.Trajectory.Points.Count / 2].JointState.Positions;
+        var midCoarse = gaitCoarse!.Trajectory.Points[gaitCoarse.Trajectory.Points.Count / 2].JointState.Positions;
+        var qDiff = 0.0;
+        for (var i = 0; i < midFine.Length; i++)
+            qDiff += Math.Abs(midFine[i] - midCoarse[i]);
+        if (qDiff < 1e-3)
+            Fail("Step pin should change mid-gait q (fine Step=0.06 vs coarse Step=0.20)");
+
+        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        var midIdx = gait.Trajectory.Points.Count / 2;
+        var midQ = gait.Trajectory.Points[midIdx].JointState.Positions;
+        var gaitMidFrame = gait.BasePath[midIdx];
+        const double footTol = 0.015;
+        const double kneeMinZ = 0.02;
+        var stanceFeet = 0;
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
+                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
+                bodyZ);
+            var q0 = midQ[leg * 3];
+            var q1 = midQ[leg * 3 + 1];
+            var q2 = midQ[leg * 3 + 2];
+            var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
+            var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
+            var yaw = 2.0 * Math.Atan2(gaitMidFrame.Qz, gaitMidFrame.Qw);
+            var footWorld = new Point3d(
+                gaitMidFrame.X + Math.Cos(yaw) * footBody.X - Math.Sin(yaw) * footBody.Y,
+                gaitMidFrame.Y + Math.Sin(yaw) * footBody.X + Math.Cos(yaw) * footBody.Y,
+                footBody.Z);
+            var kneeBodyV = LegIk3R.KneePosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, q0, q1);
+            var kneeBody = new Point3d(kneeBodyV.X, kneeBodyV.Y, kneeBodyV.Z);
+            if (Math.Abs(footWorld.Z) < footTol)
+                stanceFeet++;
+            else if (footWorld.Z < -footTol)
+                Fail($"Mid-gait leg {leg} foot below ground Z={footWorld.Z:F4} m");
+
+            if (kneeBody.Z < kneeMinZ)
+                Fail($"Mid-gait leg {leg} knee Z={kneeBody.Z:F4} m (expected > {kneeMinZ} m)");
+        }
+        if (stanceFeet < 3)
+            Fail($"Mid-gait expected ≥3 stance feet at Z≈0, got {stanceFeet}");
+
+        var treeFk = new TreeForwardKinematics(tree);
+        var mats = new double[tree.Links.Count][];
+        for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+        treeFk.ComputeLinkTransformsInto(midQ, mats);
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
+                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
+                bodyZ);
+            var q0 = midQ[leg * 3];
+            var q1 = midQ[leg * 3 + 1];
+            var q2 = midQ[leg * 3 + 2];
+            var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
+            var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
+            var li = tree.IndexOfLink($"{hexLayout.LegNames[leg]}_tibia");
+            var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
+            if (Math.Abs(footBody.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK Z={footBody.Z:F4} ≠ TreeFK Z={tipBody[2]:F4} (preview would float)");
+        }
+
+        Ok("Walking hex gait builds 18-DOF trajectory + foot-target IK (stance Z≈0, knees clear)");
+    }
+    catch (DllNotFoundException ex)
+    {
+        Ok($"Walking hex gait smoke skipped (Rhino native DLL unavailable: {ex.Message})");
+    }
+
+    try
+    {
+        var treeFk = new TreeForwardKinematics(tree);
+        var mats = new double[tree.Links.Count][];
+        for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
+        treeFk.ComputeLinkTransformsInto(home18, mats);
+        const double bodyR = 0.12, coxa = 0.06, femur = 0.17, tibia = 0.19, bodyZ = 0.12;
+        for (var leg = 0; leg < 6; leg++)
+        {
+            var hipBody = new Point3d(
+                bodyR * Math.Cos(hexLayout.HipYawsRad[leg]),
+                bodyR * Math.Sin(hexLayout.HipYawsRad[leg]),
+                bodyZ);
+            var q0 = home18[leg * 3];
+            var q1 = home18[leg * 3 + 1];
+            var q2 = home18[leg * 3 + 2];
+            var footBodyV = LegIk3R.FootPosition(new Vec3(hipBody.X, hipBody.Y, hipBody.Z), coxa, femur, tibia, q0, q1, q2);
+            var footBody = new Point3d(footBodyV.X, footBodyV.Y, footBodyV.Z);
+            var li = tree.IndexOfLink($"{hexLayout.LegNames[leg]}_tibia");
+            var tipBody = Transforms.TransformPoint(mats[li], tibia, 0, 0);
+            if (Math.Abs(footBody.X - tipBody[0]) > 0.004 || Math.Abs(footBody.Y - tipBody[1]) > 0.004 || Math.Abs(footBody.Z - tipBody[2]) > 0.004)
+                Fail($"Leg {leg}: analytic FK ({footBody.X:F4},{footBody.Y:F4},{footBody.Z:F4}) ≠ TreeFK tip ({tipBody[0]:F4},{tipBody[1]:F4},{tipBody[2]:F4})");
+        }
+        Ok("Walking hex analytic FK matches TreeFK at stance (URDF +Y pitch)");
+    }
+    catch (DllNotFoundException ex)
+    {
+        Ok($"Walking hex TreeFK parity skipped (Rhino native DLL unavailable: {ex.Message})");
+    }
+
+    // Quad layout proves LeggedLayout is not hex-hardcoded (assemble needs no Rhino curves).
+    {
+        var quad = LeggedLayout.QuadSmoke(0.10, 0.06, 0.17, 0.19, 0.12);
+        if (quad.Validate() is { } qErr)
+            Fail($"QuadSmoke layout invalid: {qErr}");
+        if (quad.LegCount != 4 || quad.DriverCount != 12)
+            Fail($"QuadSmoke expected 4 legs / 12 DOF, got {quad.LegCount}/{quad.DriverCount}");
+        if (quad.SwingGroups.Count != 2 || quad.SwingGroups[0].Length + quad.SwingGroups[1].Length != 4)
+            Fail("QuadSmoke swing groups must bipartition 4 legs");
+        var quadDesc = BuildLeggedDescription(quad, "quad_smoke");
+        var quadTree = quadDesc.ToKinematicTree();
+        if (quadTree.DriverCount != 12)
+            Fail($"Quad tree expected 12 drivers, got {quadTree.DriverCount}");
+        var tipQ = quadTree.ExtractSerialTip("body", quad.TipLinkName);
+        if (tipQ.Chain.Joints.Length != 3)
+            Fail($"Quad tip path expected 3 axes, got {tipQ.Chain.Joints.Length}");
+        Ok("LeggedLayout QuadSmoke (N=4) validates + assembles 12-DOF tree");
+
+        try
+        {
+            var quadLimits = new List<JointLimit>(12);
+            for (var i = 0; i < 12; i++)
+                quadLimits.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+            var quadNames = new string[12];
+            for (var i = 0; i < 12; i++)
+                quadNames[i] = quadTree.Joints[quadTree.DriverJointIndices[i]].Name;
+            var quadModel = new RobotModel(new RobotPreset
+            {
+                Manufacturer = RobotManufacturer.Unknown,
+                ModelName = "quad_gait_smoke",
+                Family = Units.LeggedFamily,
+                AxisCount = 12,
+                JointLimits = quadLimits,
+                BaseFrame = BaseFrame.Identity,
+                ToolFrame = ToolFrame.Identity,
+            }, jointNames: quadNames);
+            var line = new LineCurve(new Point3d(0, 0, 0), new Point3d(0.4, 0, 0));
+            if (!LeggedGaitRhino.TryBuild(
+                    quad, line, null, 0.08, 0.08, 0.025,
+                    7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+                    quadModel, out var quadGait, out var quadErr))
+                Fail($"LeggedGaitRhino quad: {quadErr}");
+            if (quadGait!.Trajectory.Points[0].JointState.AxisCount != 12)
+                Fail("Quad gait trajectory must be 12-DOF");
+            if (quadGait.BasePath.Count < 5)
+                Fail("Quad gait should sample several base frames");
+            Ok("LeggedGait QuadSmoke (N=4) builds 12-DOF trajectory");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Ok($"Quad gait smoke skipped (Rhino native DLL unavailable: {ex.Message})");
+        }
+    }
+}
+
+// Example 09 logic (generate-examples graph09) — Motus.NET only; does not open .ghx / Rhino UI.
+{
+    Console.WriteLine("\n== Example 09 walking hex logic ==");
+    var layout09 = LeggedLayout.HexMithi(0.06, 0.035, 0.08, 0.10, 0.07);
+    var limits09 = new List<JointLimit>(18);
+    for (var i = 0; i < 18; i++)
+        limits09.Add(new JointLimit(-Math.PI, Math.PI, Math.PI, Math.PI * 2));
+    var model09 = new RobotModel(layout09.ToPreset("hex_ex09", 18, limits09));
+    var path09 = new List<Vec3>();
+    const int arcN09 = 9;
+    for (var i = 0; i < arcN09; i++)
+    {
+        var a = Math.PI - i / (arcN09 - 1.0) * Math.PI;
+        path09.Add(new Vec3(0.22 + 0.18 * Math.Cos(a), 0.18 * Math.Sin(a), 0));
+    }
+    const double groundZ09 = 0.02; // Center Box top in graph09
+    Motus.Geometry.LeggedGait.TerrainHeight terrain09 = static (_, _) => groundZ09;
+    if (!Motus.Geometry.LeggedGait.TryBuild(
+            layout09, path09, 0.06, 0.04, 0.02,
+            7.5 * Math.PI / 180, 30 * Math.PI / 180, -30 * Math.PI / 180,
+            model09, out var gait09, out var err09, terrain09))
+        Fail($"Example 09 gait: {err09}");
+    if (gait09!.Trajectory.Points[0].JointState.AxisCount != 18)
+        Fail("Example 09 trajectory must be 18-DOF");
+    if (Math.Abs(gait09.BasePath[0].Z - groundZ09) > 1e-6)
+        Fail($"Example 09 base Z={gait09.BasePath[0].Z:F4} expected {groundZ09} (box top)");
+    var mid09 = gait09.Trajectory.Points.Count / 2;
+    var q09 = gait09.Trajectory.Points[mid09].JointState.Positions;
+    var bf09 = gait09.BasePath[mid09];
+    var planted09 = 0;
+    for (var leg = 0; leg < 6; leg++)
+    {
+        var hy = layout09.HipYawsRad[leg];
+        var hip = new Vec3(layout09.BodyR * Math.Cos(hy), layout09.BodyR * Math.Sin(hy), layout09.BodyZ);
+        var footBody = LegIk3R.FootPosition(hip, layout09.Coxa, layout09.Femur, layout09.Tibia,
+            q09[leg * 3], q09[leg * 3 + 1], q09[leg * 3 + 2]);
+        if (footBody.Z > 0.012) continue;
+        var fz = bf09.Z + footBody.Z;
+        if (Math.Abs(fz - groundZ09) > 0.015)
+            Fail($"Example 09 leg {leg} plant Z={fz:F4} expected ~{groundZ09}");
+        planted09++;
+    }
+    if (planted09 < 3)
+        Fail($"Example 09 mid-gait expected ≥3 plants on box top, got {planted09}");
+    Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
 }
 
 {

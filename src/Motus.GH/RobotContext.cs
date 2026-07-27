@@ -16,6 +16,7 @@ public readonly struct RobotContext
     public Color?[]? PreviewMeshColors { get; }
     public KinematicTree? Tree { get; }
     public StewartPlatform? Stewart { get; }
+    public JointState? TreeDriverHome { get; }
 
     public RobotContext(
         RobotModel model,
@@ -26,7 +27,8 @@ public readonly struct RobotContext
         RobotCollisionModel? previewGeometry = null,
         Color?[]? previewMeshColors = null,
         KinematicTree? tree = null,
-        StewartPlatform? stewart = null)
+        StewartPlatform? stewart = null,
+        JointState? treeDriverHome = null)
     {
         Model = model;
         EffectiveModel = effectiveModel;
@@ -37,6 +39,7 @@ public readonly struct RobotContext
         PreviewMeshColors = previewMeshColors;
         Tree = tree;
         Stewart = stewart;
+        TreeDriverHome = treeDriverHome;
     }
 
     public bool IsStewart =>
@@ -56,6 +59,7 @@ public readonly struct RobotContext
             goo.EffectivePreviewGeometry(),
             goo.PreviewMeshColors,
             goo.Tree,
-            goo.Stewart);
+            goo.Stewart,
+            goo.TreeDriverHome);
     }
 }

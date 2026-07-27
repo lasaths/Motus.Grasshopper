@@ -55,6 +55,33 @@ internal static class GhExtract
         return false;
     }
 
+    /// <summary>Reject dof mismatch and non-finite joint values before planners run.</summary>
+    public static bool ValidateJointStateForPlan(
+        JointState js,
+        RobotModel robot,
+        string label,
+        out string? error)
+    {
+        error = null;
+        var expected = robot.Preset.AxisCount;
+        if (js.AxisCount != expected)
+        {
+            error = $"{label}: joint count {js.AxisCount} != robot AxisCount {expected}.";
+            return false;
+        }
+
+        for (var i = 0; i < js.AxisCount; i++)
+        {
+            if (!double.IsFinite(js.Positions[i]))
+            {
+                error = $"{label}: non-finite joint value at index {i} (NaN/Inf).";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static bool TryGoals(
         IGH_DataAccess da,
         int index,
@@ -147,6 +174,8 @@ internal static class GhExtract
 
         if (goo is JointStateGoo js && js.Value is not null)
         {
+            if (!ValidateJointStateForPlan(js.Value, session, "Start", out error))
+                return false;
             start = js.Value;
             return true;
         }
@@ -160,7 +189,7 @@ internal static class GhExtract
                     error = "Stewart robot missing StewartPlatform handle. Use Motus Stewart.";
                     return false;
                 }
-                var stewartPose = new CartesianPose(FrameConversion.FromPlane(plane));
+                var stewartPose = new CartesianPose(FrameConversion.FromPlanePlate(plane));
                 var stewartIk = new StewartInverseKinematics(ctx.Stewart).TrySolveDetailed(stewartPose);
                 if (!stewartIk.Success || stewartIk.JointState is null)
                 {
@@ -583,7 +612,7 @@ internal static class GhExtract
             {
                 if (goals[i].plane is not { } plane)
                     continue;
-                var result = ik.TrySolveDetailed(new CartesianPose(FrameConversion.FromPlane(plane)));
+                var result = ik.TrySolveDetailed(new CartesianPose(FrameConversion.FromPlanePlate(plane)));
                 if (!result.Success)
                     errors.Add($"Goal[{i}]: {result}");
             }
@@ -651,14 +680,27 @@ internal static class GhExtract
         JointState? goalState = goal.joints;
         if (goal.plane is { } plane)
         {
-            var reach = CartesianGoalSolver.TryReachFromStart(
-                ctx.EffectiveModel,
-                new CartesianPose(FrameConversion.FromPlane(plane)),
-                start,
-                ctx.Chain);
-            if (!reach.Success)
-                return null;
-            goalState = reach.Solution;
+            if (ctx.IsStewart || Units.IsStewart(ctx.EffectiveModel.Preset))
+            {
+                if (ctx.Stewart is null)
+                    return null;
+                var stewartIk = new StewartInverseKinematics(ctx.Stewart)
+                    .TrySolveDetailed(new CartesianPose(FrameConversion.FromPlanePlate(plane)));
+                if (!stewartIk.Success || stewartIk.JointState is null)
+                    return null;
+                goalState = stewartIk.JointState;
+            }
+            else
+            {
+                var reach = CartesianGoalSolver.TryReachFromStart(
+                    ctx.EffectiveModel,
+                    new CartesianPose(FrameConversion.FromPlane(plane)),
+                    start,
+                    ctx.Chain);
+                if (!reach.Success)
+                    return null;
+                goalState = reach.Solution;
+            }
         }
 
         if (goalState is null)

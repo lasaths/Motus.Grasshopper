@@ -21,6 +21,8 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
     public string? UrdfSourcePath { get; set; }
     /// <summary>Optional home for on-component preview (Serial Chain Q).</summary>
     public JointState? PreviewHome { get; set; }
+    /// <summary>Full TreeFK driver baseline when Plan/preview q is tip-path only.</summary>
+    public JointState? TreeDriverHome { get; set; }
 
     public RobotModelGoo() { }
     public RobotModelGoo(RobotModel m) : base(m) { }

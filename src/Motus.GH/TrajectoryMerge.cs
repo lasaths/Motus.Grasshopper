@@ -121,7 +121,9 @@ internal static class TrajectoryMerge
             ToolSnapshot = first.ToolSnapshot,
             ToolCapabilitiesSnapshot = first.ToolCapabilitiesSnapshot,
             DiagnosticsSnapshot = first.DiagnosticsSnapshot,
-            ProvenanceSnapshot = first.ProvenanceSnapshot
+            ProvenanceSnapshot = first.ProvenanceSnapshot,
+            TreeDriverHome = first.TreeDriverHome,
+            BasePath = first.BasePath
         };
     }
 

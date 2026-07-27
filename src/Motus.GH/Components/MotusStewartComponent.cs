@@ -2,8 +2,10 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
 using Motus.GH.Rhino;
+using Rhino.Display;
 using Rhino.Geometry;
 using Grasshopper.Kernel;
+using System.Drawing;
 
 namespace Motus.GH.Components;
 
@@ -12,6 +14,9 @@ namespace Motus.GH.Components;
 /// </summary>
 public sealed class MotusStewartComponent : RobotSourceComponentBase
 {
+    private List<Color> _previewColors = [];
+    private readonly Dictionary<Color, DisplayMaterial> _matCache = new();
+
     public MotusStewartComponent()
         : base(
             "Motus Stewart",
@@ -67,6 +72,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
                 if (!File.Exists(path))
                 {
                     ClearPreview();
+                    _previewColors = [];
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Stewart JSON not found: {path}");
                     return;
                 }
@@ -90,9 +96,11 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
                 PreviewHome = home
             };
 
-            // Wireframe preview: base + platform + legs at home.
-            _previewWires = KinematicsPreview.StewartLegLines(stewart.Platform, home, homePose).ToList();
-            _previewMeshes = [];
+            // Filled hex preview: base + platform plates, orange legs, joints, COG.
+            var preview = KinematicsPreview.StewartPreview(stewart.Platform, home, homePose);
+            _previewMeshes = preview.Meshes.ToList();
+            _previewWires = preview.Wires.ToList();
+            _previewColors = preview.Colors.ToList();
             ExpirePreview(true);
 
             da.SetData(0, goo);
@@ -102,8 +110,31 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
         catch (Exception ex)
         {
             ClearPreview();
+            _previewColors = [];
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
         }
+    }
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (Locked || _previewMeshes.Count == 0) return;
+        for (var i = 0; i < _previewMeshes.Count; i++)
+        {
+            var c = i < _previewColors.Count ? _previewColors[i] : Color.White;
+            if (!_matCache.TryGetValue(c, out var mat))
+            {
+                mat = new DisplayMaterial(c) { Transparency = 0.25 };
+                _matCache[c] = mat;
+            }
+            args.Display.DrawMeshShaded(_previewMeshes[i], mat);
+        }
+    }
+
+    public override void DrawViewportWires(IGH_PreviewArgs args)
+    {
+        // Meshes carry the look; skip white ghost wires when filled preview exists.
+        if (Locked || _previewMeshes.Count > 0) return;
+        base.DrawViewportWires(args);
     }
 
     public override Guid ComponentGuid => new("a9e1c3f0-7b2d-4e8a-9c1f-6d4b2a0e8f73");

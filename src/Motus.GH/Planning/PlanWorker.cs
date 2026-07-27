@@ -39,6 +39,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
     public ToolDefinition? ToolSnapshot { get; private set; }
+    public JointState? TreeDriverHome { get; private set; }
 
     public PlanExecutionResult? Result { get; private set; }
     public List<string> RuntimeRemarks { get; } = [];
@@ -79,6 +80,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         PreviewMeshColors = snap.PreviewMeshColors;
         BaseFrameOverride = snap.BaseFrameOverride;
         ToolSnapshot = snap.ToolSnapshot;
+        TreeDriverHome = snap.TreeDriverHome;
         _inputsReady = true;
     }
 
@@ -253,6 +255,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
             ToolSnapshot = ToolSnapshot,
             ToolCapabilitiesSnapshot = ToolSnapshot?.Capabilities,
             DiagnosticsSnapshot = diagnostics,
+            TreeDriverHome = TreeDriverHome,
             ProvenanceSnapshot = new PlannerProvenance
             {
                 PlannerId = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext)

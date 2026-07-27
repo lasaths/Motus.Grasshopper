@@ -8,6 +8,7 @@ using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.UI;
+using Motus.GH.Planning;
 using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino;
@@ -25,6 +26,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
     private static readonly Color InvalidColor = Color.FromArgb(220, 220, 60, 60);
+    private static readonly Color ContactColor = Color.FromArgb(220, 80, 200, 120);
 
     private PreviewColorMode _colorMode = PreviewColorMode.Urdf;
     private bool _showCustomColors;
@@ -33,6 +35,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private IReadOnlyList<Color?>? _drawMeshColors;
 
     private Trajectory? _trajectory;
+    private TrajectoryGoo? _trajGoo;
     private Trajectory? _previewTrajectory;
     private DateTime _playStartUtc;
     private double _playStartPosition;
@@ -46,10 +49,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private Trajectory? _staticsFor;
     private global::Rhino.Geometry.Curve? _tcpCurve;
     private List<global::Rhino.Geometry.Line> _invalidSegments = new();
+    private List<Circle> _contactCircles = [];
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private KinematicsPreview.PreviewMeshCache? _meshCache;
-    private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount) _cacheSig;
+    private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount, int homeFp) _cacheSig;
+    private StewartPlatform? _playStewart;
     private List<TrajectoryPoint> _previewPoints = [];
     private readonly Dictionary<(Color Color, float Transparency), DisplayMaterial> _materialCache = new();
 
@@ -168,6 +173,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             }
             if (_tcpCurve is not null)
                 bb.Union(_tcpCurve.GetBoundingBox(false));
+            foreach (var c in _contactCircles)
+                bb.Union(c.BoundingBox);
             return bb.IsValid ? bb : BoundingBox.Unset;
         }
     }
@@ -187,6 +194,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             args.Display.DrawCurve(_tcpCurve, PathColor, 2);
         foreach (var line in _invalidSegments)
             args.Display.DrawLine(line, InvalidColor, 3);
+        foreach (var c in _contactCircles)
+            args.Display.DrawCircle(c, ContactColor, 2);
     }
 
     public override bool Write(GH_IWriter writer)
@@ -311,11 +320,24 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
     private void DrawColoredMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes, bool isStartGhost)
     {
-        var urdfColors = _colorMode == PreviewColorMode.Urdf ? _drawMeshColors : null;
         var transparency = isStartGhost ? PreviewColorResolver.StartTransparency : PreviewColorResolver.CurrentTransparency;
         for (var i = 0; i < meshes.Count; i++)
         {
-            var color = PreviewColorResolver.Resolve(i, _colorMode, urdfColors, _customColors, isStartGhost);
+            Color color;
+            // Baked URDF/Stewart colours only when mode is Urdf — Override must win.
+            if (_colorMode == PreviewColorMode.Urdf
+                && _drawMeshColors is { Count: > 0 }
+                && i < _drawMeshColors.Count
+                && _drawMeshColors[i] is { } baked)
+            {
+                color = isStartGhost
+                    ? Color.FromArgb((int)(PreviewColorResolver.StartTransparency * 255), baked)
+                    : baked;
+            }
+            else
+            {
+                color = PreviewColorResolver.Resolve(i, _colorMode, _drawMeshColors, _customColors, isStartGhost);
+            }
             args.Display.DrawMeshShaded(meshes[i], MaterialFor(color, transparency));
         }
     }
@@ -386,6 +408,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         ResolveFrame(out var state, out var elapsed, out _, out var toolState);
+        Frame? dynamicBase = null;
+        if (_trajGoo?.BasePath is { Count: > 0 } bp)
+            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), elapsed);
         var duration = _trajectory.DurationSeconds;
         if (elapsed >= duration - 1e-6)
         {
@@ -394,8 +419,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _playing = false;
             _position = duration > 0 ? 1 : 0;
             ResolveFrame(out state, out _, out _, out toolState);
+            if (_trajGoo?.BasePath is { Count: > 0 } bp2)
+                dynamicBase = BasePathSampler.AtTime(bp2, PreviewTrajectory(), duration);
             if (_meshCache is not null && _currentMeshes.Count > 0)
-                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+                _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
+            if (_trajGoo is not null)
+                RefreshContactCircles(_trajGoo.Context(), state, dynamicBase);
             SyncScrubSlider(_position, expireDownstream: false);
             ExpirePreview(true);
             OnDisplayExpired(false);
@@ -406,6 +435,18 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         if (_meshCache is null)
         {
+            if (_playStewart is not null)
+            {
+                var stewartPrev = KinematicsPreview.StewartPreview(_playStewart, state);
+                _currentMeshes = stewartPrev.Meshes.ToList();
+                _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
+                SyncScrubSlider(_position, expireDownstream: false);
+                ExpirePreview(true);
+                OnDisplayExpired(false);
+                RhinoDoc.ActiveDoc?.Views.Redraw();
+                return;
+            }
+
             SyncScrubSlider(_position, expireDownstream: false);
             var doc = OnPingDocument();
             if (doc is not null)
@@ -415,7 +456,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         }
 
-        _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+        _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
+        RefreshContactCircles(_trajGoo!.Context(), state, dynamicBase);
         SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
@@ -443,7 +485,15 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 bdSig = HashCode.Combine(bdSig, b.Parameter, b.DriverJoint, b.OpenValue, b.ClosedDriverValue);
         }
 
-        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0, ctx.Tree?.Fingerprint ?? 0, bdSig);
+        var homeFp = 0;
+        if (ctx.TreeDriverHome is { Positions: var homePos })
+        {
+            homeFp = homePos.Length;
+            foreach (var v in homePos)
+                homeFp = HashCode.Combine(homeFp, v);
+        }
+
+        var sig = (previewGeometry.Links.Count, previewGeometry.ToolGeometry?.Name, ctx.Chain?.Joints.Length ?? 0, toolCapabilities?.Parameters.Count ?? 0, ctx.Tree?.Fingerprint ?? 0, bdSig, homeFp);
         if (_meshCache is not null && sig == _cacheSig)
         {
             _drawMeshColors = _meshCache.MeshColors ??
@@ -462,7 +512,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             ctx.PreviewMeshColors,
             ctx.Tree,
             ctx.Model.JointNames,
-            toolBindings);
+            toolBindings,
+            ctx.TreeDriverHome);
         _drawMeshColors = _meshCache?.MeshColors ??
                           PreviewColorResolver.AlignMeshColors(previewGeometry, ctx.PreviewMeshColors);
     }
@@ -473,6 +524,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
+        _playStewart = ctx.Stewart;
         var previewGeometry = RobotPreviewGeometry.ForViewport(
             ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
             trajGoo.ToolSnapshot);
@@ -498,12 +550,14 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 wiredScrub.InvalidateTimelineCache();
         }
         _trajectory = t;
+        _trajGoo = trajGoo;
         if (t.Points.Count == 0)
         {
             _currentMeshes = [];
             _startMeshes = [];
             _tcpCurve = null;
             _invalidSegments = [];
+            _contactCircles = [];
             _previewTrajectory = null;
             ExpirePreview(true);
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Trajectory has no points.");
@@ -526,16 +580,36 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 GH_RuntimeMessageLevel.Warning,
                 $"Trajectory axis count ({t.Robot.Preset.AxisCount}) differs from preview robot axis count ({ctx.Model.Preset.AxisCount}).");
         }
+        if (ctx.Tree is not null
+            && ctx.Tree.DriverCount > ctx.Model.Preset.AxisCount
+            && ctx.TreeDriverHome is null)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                $"Tree has {ctx.Tree.DriverCount} drivers but trajectory has {ctx.Model.Preset.AxisCount} axes and TreeDriverHome is missing — TreeFK preview needs full driver home on the robot source.");
+        }
         var previewPoints = BuildPreviewPoints(t, ctx.Model, out _);
         _previewPoints = previewPoints;
         _previewTrajectory = new Trajectory(ctx.Model, previewPoints);
         ResolveFrame(out var state, out var timeSeconds, out _index, out var toolState);
+        Frame? dynamicBase = null;
+        if (_trajGoo?.BasePath is { Count: > 0 } bp)
+            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), timeSeconds);
         // Concatenate() allocates a new Trajectory each solve — compare content, not reference.
         var staticsDirty = trajectoryChanged || _staticsFor is null;
         if (staticsDirty)
         {
-            var pl = KinematicsPreview.TcpPath(ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool);
-            _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
+            if (_trajGoo?.BasePath is { Count: >= 2 } bodyPath)
+            {
+                var pts = bodyPath.Select(f => KinematicsPreview.ToPoint(f)).ToList();
+                _tcpCurve = new Polyline(pts).ToNurbsCurve();
+            }
+            else
+            {
+                var pl = KinematicsPreview.TcpPath(
+                    ctx.EffectiveModel, previewPoints.Select(p => p.JointState), ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart);
+                _tcpCurve = pl.Count >= 2 ? pl.ToNurbsCurve() : null;
+            }
             KinematicsPreview.TrajectorySegments(
                 ctx.EffectiveModel,
                 PreviewTrajectory(),
@@ -559,17 +633,33 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
         if (_meshCache is not null)
         {
-            // Always update in place — MeshesFor duplicates every link mesh on idle solves.
-            if (_currentMeshes.Count == 0)
-                _currentMeshes = _meshCache.MeshesFor(state, toolState);
-            else
-                _meshCache.UpdateMeshes(state, _currentMeshes, toolState);
+            try
+            {
+                // Always update in place — MeshesFor duplicates every link mesh on idle solves.
+                if (_currentMeshes.Count == 0)
+                    _currentMeshes = _meshCache.MeshesFor(state, toolState, dynamicBase);
+                else
+                    _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
+            }
+            catch (InvalidOperationException ex)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+                _currentMeshes = [];
+            }
+        }
+        else if (ctx.Stewart is not null)
+        {
+            var stewartPrev = KinematicsPreview.StewartPreview(ctx.Stewart, state);
+            _currentMeshes = stewartPrev.Meshes.ToList();
+            _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
         }
         else
         {
             _currentMeshes = KinematicsPreview.LinkMeshes(ctx.EffectiveModel, state, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList();
             _drawMeshColors = PreviewColorResolver.AlignMeshColors(previewGeometry!, ctx.PreviewMeshColors);
         }
+
+        RefreshContactCircles(ctx, state, dynamicBase);
 
         if (_playing)
         {
@@ -605,6 +695,25 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 da.SetData(widthOut, toolState?.GetValueOrDefault("width"));
         }
         ExpirePreview(true);
+    }
+
+    private void RefreshContactCircles(RobotContext ctx, JointState state, Frame? dynamicBase)
+    {
+        _contactCircles.Clear();
+        if (ctx.Tree is null)
+            return;
+        if (!Units.IsLegged(ctx.Model.Preset) && !Units.IsLegged(ctx.EffectiveModel.Preset))
+            return;
+
+        var previewGeom = ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel;
+        LeggedContactPreview.CollectGroundCircles(
+            ctx.Tree,
+            previewGeom,
+            state.Positions,
+            ctx.Model.JointNames,
+            ctx.TreeDriverHome,
+            dynamicBase,
+            _contactCircles);
     }
 
     private void ReadCustomColors(IGH_DataAccess da)
