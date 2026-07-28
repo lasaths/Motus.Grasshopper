@@ -11,6 +11,7 @@ Aligned with **Motus.NET 0.13.2**.
 - Planning collision via TreeFK so turntable geometry participates in RRT (not tip-chain only)
 - Plane/LIN on AllDrivers: tip-chain IK; side branches held at start and re-embedded
 - URDF box/cylinder preview uses `ToPlanePlate` (Motus XYZ ≡ Rhino XYZ)
+- **Motus Tool Cap rethink:** Cap is face dropdown schema only (`None` \| `Robotiq2F85`); no name-sneak Cap; Tool State face Preset; wired Cap-less Tool → Error (unwired still warns + Robotiq). Pins stay stable (no VariableParameter morph — GHX wires survive). Examples `03`/`04`/`07` regenerated.
 
 ### Motus.NET pin
 

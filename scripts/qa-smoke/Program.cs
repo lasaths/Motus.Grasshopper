@@ -605,6 +605,34 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     Ok("Tool GeometryForState scales collision with width parameter");
 }
 
+// Cap contract: schema parse + Tool State gate (no name-sneak; wired Cap-less → error)
+{
+    if (!Motus.GH.ToolCapContract.TryParseSchema("None", out var noneCaps) || noneCaps is not null)
+        Fail("Cap=None must parse to null schema");
+    if (!Motus.GH.ToolCapContract.TryParseSchema("Robotiq2F85", out var rq) ||
+        !ReferenceEquals(rq, ToolCapabilities.Robotiq2F85))
+        Fail("Cap=Robotiq2F85 must resolve Motus.NET singleton");
+    if (Motus.GH.ToolCapContract.TryParseSchema("AcmeGripper", out _))
+        Fail("Unknown Cap must fail parse");
+
+    var bare = new ToolDefinition("tool", Frame.Identity);
+    if (Motus.GH.ToolCapContract.TryResolveForToolState(bare, toolOrRobotWired: true, out _, out var wiredErr, out _))
+        Fail("Wired Cap-less Tool State must error");
+    if (wiredErr is null || !wiredErr.Contains("no Cap", StringComparison.OrdinalIgnoreCase))
+        Fail($"Wired Cap-less error should name Cap: {wiredErr}");
+
+    if (!Motus.GH.ToolCapContract.TryResolveForToolState(null, toolOrRobotWired: false, out var demoCaps, out _, out var demoWarn))
+        Fail("Unwired Tool State must allow Robotiq demo fallback");
+    if (!ReferenceEquals(demoCaps, ToolCapabilities.Robotiq2F85) || demoWarn is null)
+        Fail("Unwired Tool State must warn + Robotiq");
+
+    var capped = new ToolDefinition("robotiq_2f85", Frame.Identity, null, ToolCapabilities.Robotiq2F85);
+    if (!Motus.GH.ToolCapContract.TryResolveForToolState(capped, toolOrRobotWired: true, out var okCaps, out _, out var okWarn)
+        || !ReferenceEquals(okCaps, ToolCapabilities.Robotiq2F85) || okWarn is not null)
+        Fail("Wired Cap=Robotiq2F85 Tool State must succeed silently");
+    Ok("Tool Cap contract: no name-sneak; wired Cap-less errors; unwired warns");
+}
+
 // Wave 2: ToolParameterBinding width→driver + TreeFK mimic moves finger tip
 {
     if (Math.Abs(ToolParameterBinding.Robotiq2F85DriverAngleRadians(0.085)) > 1e-9)
@@ -673,19 +701,25 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
         names,
         qClosed,
         bindings);
+    var jLeft = Array.FindIndex(names, n => string.Equals(n, "j_left", StringComparison.OrdinalIgnoreCase));
+    if (jLeft < 0) Fail("Merged tree should expose j_left driver");
+    if (Math.Abs(qClosed[jLeft] - ToolParameterBinding.Robotiq2F85ClosedDriverRadians) > 1e-6)
+        Fail($"Bd=j_left Binding should write closed driver {ToolParameterBinding.Robotiq2F85ClosedDriverRadians}, got {qClosed[jLeft]}");
     var fill = new double[merged.DriverCount];
     var fillErr = Motus.GH.Rhino.KinematicsPreview.TryFillTreeDriverQ(
         merged, new double[armTree.DriverCount], null, toolHome, fill);
     if (fillErr is not null) Fail($"TreeDriverHome seed should fill drivers: {fillErr}");
+    // Revolute about Z: link L origin stays at the joint — assert rotation, not translation.
     var tipL = merged.IndexOfLink("L");
     var gripFk = new TreeForwardKinematics(merged);
     var mats = new double[merged.Links.Count][];
     for (var i = 0; i < mats.Length; i++) mats[i] = new double[16];
     gripFk.ComputeLinkTransformsInto(qOpen, mats);
-    var yOpen = mats[tipL][7];
+    var r00Open = mats[tipL][0];
+    var r01Open = mats[tipL][1];
     gripFk.ComputeLinkTransformsInto(qClosed, mats);
-    if (Math.Abs(mats[tipL][7] - yOpen) < 1e-3)
-        Fail("Example 07 Binding Bd=j_left should move finger L on close");
+    if (Math.Abs(mats[tipL][0] - r00Open) < 1e-3 && Math.Abs(mats[tipL][1] - r01Open) < 1e-3)
+        Fail("Example 07 Binding Bd=j_left should rotate finger L on close");
     Ok("Example 07 authored gripper Attach + Binding closes finger");
 }
 
@@ -953,7 +987,8 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
             Fail($"Walking hex stance hips should spread by mount yaw (spread={hips.Max() - hips.Min():F3} rad)");
         for (var leg = 1; leg < 6; leg++)
         {
-            var delta = hips[leg] - hips[leg - 1];
+            // Stance hips follow mount yaw (± hipStance); Atan2 wraps to (-π,π], so unwrap before Δ.
+            var delta = Math.Atan2(Math.Sin(hips[leg] - hips[leg - 1]), Math.Cos(hips[leg] - hips[leg - 1]));
             if (Math.Abs(Math.Abs(delta) - Math.PI / 3.0) > 0.35)
                 Fail($"Walking hex consecutive hip delta leg {leg - 1}→{leg} = {delta:F3} rad, expected ~±π/3");
         }

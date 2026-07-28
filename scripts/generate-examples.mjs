@@ -83,14 +83,14 @@ const MOTUS = {
     inputs: [],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
   tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 124,
+    desc: 'TCP + Cap schema (face dropdown) + optional G/L or Rd+Bd. Cap ≠ ToolMode.',
     inputs: [
       { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
       { name: 'TCP', nick: 'P', desc: 'TCP in flange frame (Z = tool axis); unwired + Description → TipTcp', optional: true, plane: true },
       { name: 'Geometry', nick: 'G', desc: 'Optional static gripper mesh (legacy Cap+STL); ignored when Description wired', optional: true },
       { name: 'GeomPlane', nick: 'L', desc: 'Geometry pose in TCP-local frame', optional: true, plane: true },
-      { name: 'Capabilities', nick: 'Cap', desc: 'None or Robotiq2F85 (jaw presets for Motus Tool State)', optional: true, text: 'None' },
       { name: 'Description', nick: 'Rd', desc: 'Optional actuated mechanism (Motus Urdf Assemble) grafted on Motus Robot Tl', optional: true },
-      { name: 'Binding', nick: 'Bd', desc: 'Optional driver joint name for Cap width', optional: true, text: '' },
+      { name: 'Binding', nick: 'Bd', desc: 'Driver joint for Cap width when Rd wired', optional: true, text: '' },
     ],
     outputs: [{ name: 'Tool', nick: 'Tl', desc: 'Tool definition' }] },
   urdfLink: { guid: '2b3c4d5e-6f7a-4b2c-9d3e-4f5a6b7c8d92', name: 'Motus Urdf Link', nick: 'ULink', w: 74, h: 64,
@@ -263,12 +263,12 @@ const MOTUS = {
     ],
     outputs: [{ name: 'Attach', nick: 'A', desc: 'Attached body' }] },
   toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 74, h: 84,
+    desc: 'End-effector state from Cap schema; Preset on-component; Width used when Custom',
     inputs: [
-      { name: 'Tool', nick: 'Tl', desc: 'Motus Tool or Robot (uses Robot.Tool / bundled capabilities)', optional: true },
-      { name: 'Preset', nick: 'P', desc: 'Open, Closed, or Custom', optional: false, text: 'Open' },
+      { name: 'Tool', nick: 'Tl', desc: 'Motus Tool or Robot (uses Robot.Tool / bundled Cap schema)', optional: true },
       { name: 'Width', nick: 'W', desc: 'Jaw width (m) when Preset=Custom', optional: true, number: 0.085 },
-      { name: 'Speed', nick: 'Sp', desc: 'Grip speed ratio 0–1', optional: true, number: 0.5 },
-      { name: 'Force', nick: 'F', desc: 'Grip force ratio 0–1', optional: true, number: 0.5 },
+      { name: 'Speed', nick: 'Sp', desc: 'Grip speed ratio 0–1 (export hint)', optional: true, number: 0.5 },
+      { name: 'Force', nick: 'F', desc: 'Grip force ratio 0–1 (export hint)', optional: true, number: 0.5 },
     ],
     outputs: [{ name: 'State', nick: 'Ts', desc: 'End-effector state' }] },
   segment: { guid: '7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31', name: 'Motus Move', nick: 'Move', w: 74, h: 100,
@@ -802,6 +802,18 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     item('CanvasPivotX', 'gh_double', '6', String(x + spec.w / 2)),
     item('CanvasPivotY', 'gh_double', '6', String(y + spec.h / 2)),
   ] : [];
+  const toolCap = (options.toolCapabilities || options.text?.Capabilities || 'None').toString().trim();
+  const toolFlags = key === 'tool' ? [
+    item('ToolCapabilities', 'gh_string', '10', esc(toolCap === '' ? 'None' : toolCap)),
+    item('CanvasPivotX', 'gh_double', '6', String(x + spec.w / 2)),
+    item('CanvasPivotY', 'gh_double', '6', String(y + spec.h / 2)),
+  ] : [];
+  const toolStatePreset = (options.toolStatePreset || options.text?.Preset || 'Open').toString().trim();
+  const toolStateFlags = key === 'toolState' ? [
+    item('ToolStatePreset', 'gh_string', '10', esc(toolStatePreset)),
+    item('CanvasPivotX', 'gh_double', '6', String(x + spec.w / 2)),
+    item('CanvasPivotY', 'gh_double', '6', String(y + spec.h / 2)),
+  ] : [];
   // Motus Preview Write() fields — required for Scrub wire restore + ShowStart.
   // Examples default SS/ShowStart on (ghost start pose); pass bools.ShowStart:false to opt out.
   const showStart = key === 'preview'
@@ -827,6 +839,8 @@ function motusComponent(key, x, y, wireMap, options = {}) {
     ...hiddenFlag,
     item('InstanceGuid', 'gh_guid', '9', instance),
     ...moveFlags,
+    ...toolFlags,
+    ...toolStateFlags,
     item('Name', 'gh_string', '10', spec.name),
     item('NickName', 'gh_string', '10', spec.nick),
     ...planFlags.filter((f) => !f.includes('AutoPlan')),
@@ -1852,7 +1866,7 @@ function graph03() {
   const tool = motusComponent('tool', 440, 300, {
     TCP: [outRef(tcpPl.node, 'Plane')],
     Geometry: [outRef(loadMesh.node, 'Mesh')],
-  }, { text: { Name: 'robotiq_2f85', Capabilities: 'Robotiq2F85' } });
+  }, { text: { Name: 'robotiq_2f85' }, toolCapabilities: 'Robotiq2F85' });
   const robot = motusComponent('robot', 660, 40, {
     Path: [outRef(urdfFile.node, 'Path')],
     Base: [outRef(basePl.node, 'Plane')],
@@ -1899,7 +1913,7 @@ function graph04() {
   const ptpGoal = motusComponent('joints', 40, 320, {}, { jointValues: GOAL_JOINTS });
   const stateOpen = motusComponent('toolState', 220, 320, {
     Tool: [outRef(robot.node, 'Robot')],
-  }, { text: { Preset: 'Open' } });
+  }, { toolStatePreset: 'Open' });
   const segPtp = motusComponent('segment', 420, 300, {
     Goal: [outRef(ptpGoal.node, 'State')],
     ToolState: [outRef(stateOpen.node, 'State')],
@@ -1926,7 +1940,7 @@ function graph04() {
   // Row 4 — SET
   const stateClosed = motusComponent('toolState', 40, 920, {
     Tool: [outRef(robot.node, 'Robot')],
-  }, { text: { Preset: 'Closed' } });
+  }, { toolStatePreset: 'Closed' });
   const segSet = motusComponent('segment', 420, 900, {
     ToolState: [outRef(stateClosed.node, 'State')],
   }, { text: { Type: 'SET' }, numbers: { Duration: 0.2 } });
@@ -2129,7 +2143,7 @@ function graph07() {
   // Cap supplies Open/Closed width schema; Bd maps width → authored driver (not robotiq_* names).
   const tool = motusComponent('tool', 900, 240, {
     Description: [outRef(assemble.node, 'Description')],
-  }, { text: { Name: 'demo_gripper', Capabilities: 'Robotiq2F85', Binding: 'j_left' } });
+  }, { text: { Name: 'demo_gripper', Binding: 'j_left' }, toolCapabilities: 'Robotiq2F85' });
 
   // Arm-only primitives — ur10e.urdf/.robotiq need mesh assets; minimal always previews.
   const urdfFile = nativeFilePath(
@@ -2146,7 +2160,7 @@ function graph07() {
   const goal = motusComponent('joints', 1100, 400, {}, { jointValues: GOAL_JOINTS });
   const stateClosed = motusComponent('toolState', 1100, 520, {
     Tool: [outRef(tool.node, 'Tool')],
-  }, { text: { Preset: 'Closed' } });
+  }, { toolStatePreset: 'Closed' });
   // InitialToolState = Cap DefaultState (Open); Ramp lerps width → Closed over the PTP.
   const segPtp = motusComponent('segment', 1280, 360, {
     Goal: [outRef(goal.node, 'State')],

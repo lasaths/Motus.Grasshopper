@@ -39,7 +39,17 @@ internal static class RhinoBootstrap
     {
         var rhino8 = Environment.GetEnvironmentVariable("Rhino8Dir");
         if (!string.IsNullOrWhiteSpace(rhino8))
+        {
+            // Windows install root (…/Rhino 8/System/RhinoCommon.dll)
             yield return Path.Combine(rhino8, "System", "RhinoCommon.dll");
+            // macOS .app bundle (Rhino8Dir = …/Rhino 8.app)
+            yield return Path.Combine(
+                rhino8,
+                "Contents/Frameworks/RhCore.framework/Versions/Current/Resources/RhinoCommon.dll");
+            yield return Path.Combine(
+                rhino8,
+                "Contents/Frameworks/RhCore.framework/Versions/A/Resources/RhinoCommon.dll");
+        }
 
         if (OperatingSystem.IsWindows())
             yield return Path.Combine(
@@ -49,6 +59,9 @@ internal static class RhinoBootstrap
         if (OperatingSystem.IsMacOS())
         {
             yield return "/Applications/Rhino 8.app/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/RhinoCommon.dll";
+            yield return "/Applications/Rhino 8.app/Contents/Frameworks/RhCore.framework/Versions/A/Resources/RhinoCommon.dll";
+            yield return "/Volumes/Storage/00_Applications/Rhino 8.app/Contents/Frameworks/RhCore.framework/Versions/Current/Resources/RhinoCommon.dll";
+            yield return "/Volumes/Storage/00_Applications/Rhino 8.app/Contents/Frameworks/RhCore.framework/Versions/A/Resources/RhinoCommon.dll";
         }
     }
 }

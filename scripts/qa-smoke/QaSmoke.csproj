@@ -14,6 +14,7 @@
     <Compile Include="..\..\src\Motus.GH\Planning\BasePathSampler.cs" Link="Planning\BasePathSampler.cs" />
     <Compile Include="..\..\src\Motus.GH\Planning\LeggedContactPreview.cs" Link="Planning\LeggedContactPreview.cs" />
     <Compile Include="..\..\src\Motus.GH\Preview\MechanismPreviewGeometry.cs" Link="Preview\MechanismPreviewGeometry.cs" />
+    <Compile Include="..\..\src\Motus.GH\ToolCapContract.cs" Link="ToolCapContract.cs" />
     <!-- Compile-only: NuGet RhinoCommon is a ref assembly. RhinoBootstrap loads the install DLL at runtime. -->
     <PackageReference Include="RhinoCommon" Version="$(RhinoCommonPackageVersion)" ExcludeAssets="runtime" />
   </ItemGroup>

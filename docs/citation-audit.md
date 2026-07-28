@@ -1,6 +1,6 @@
 # Citation audit (P8)
 
-Snapshot of Motus.NET method provenance for hosts that cannot yet resolve nuget.org 0.12.0. Canonical sources after Motus.NET release: upstream `docs/METHODS.md` and `docs/REFERENCES.bib`.
+Motus.NET method provenance snapshot. Canonical: upstream [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md) · [`REFERENCES.bib`](https://github.com/lasaths/Motus.NET/blob/master/docs/REFERENCES.bib) · local [motus-net/METHODS.md](motus-net/METHODS.md). Pin: NuGet **0.13.2**.
 
 | Area | Primary | DOI | SOTA alts (documented, not required) |
 |------|---------|-----|--------------------------------------|
@@ -13,5 +13,3 @@ Snapshot of Motus.NET method provenance for hosts that cannot yet resolve nuget.
 | Stewart | Merlet; Dasgupta & Mruthyunjaya | 10.1007/1-4020-4133-0; 10.1016/S0094-114X(99)00006-3 | Closed-form FK variants |
 | Legged | LeggedMethodRefs stack | Song&Waldron; McGhee&Frank; Lynch&Park | Bretl & Lall 10.1109/TRO.2008.2001360 (out of scope) |
 | SE2 mobility | Holonomic SE2 + RRT-Connect | LaValle *Planning Algorithms* | Nonholonomic / Reeds–Shepp (out of scope) |
-
-Apply Motus.NET patches from [patches/motus-net-0.12.0](../patches/motus-net-0.12.0/README.md) before relying on NuGet 0.12.0.

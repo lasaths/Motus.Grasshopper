@@ -46,11 +46,11 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 | <img src="src/Motus.GH/Resources/icons/file-duotone.png" width="24" alt="" /> | **Robot** | Load `.urdf` / `.xacro`; optional Base / Tool |
 | <img src="src/Motus.GH/Resources/icons/path-duotone.png" width="24" alt="" /> | **Serial Chain** | Parametric serial / rail+arm from link lengths |
 | <img src="src/Motus.GH/Resources/icons/stack-duotone.png" width="24" alt="" /> | **Stewart** | Stewart/Gough hexapod (`Family=stewart`; `Q` = leg lengths in **m**) |
-| <img src="src/Motus.GH/Resources/icons/polygon-duotone.png" width="24" alt="" /> | **Walking Hex** | Legged hexapod gait (`Family=legged`; Path → `Tr`) |
+| <img src="src/Motus.GH/Resources/icons/polygon-duotone.png" width="24" alt="" /> | **Body / Leg / Mechanism / Walk** | N-leg gait (`Family=legged`; Path → `Tr`) — not Stewart |
 | <img src="src/Motus.GH/Resources/icons/tree-structure-duotone.png" width="24" alt="" /> | **Joint Table** | Branched tree; Plan = tip path; optional **SE2** mobility |
 | <img src="src/Motus.GH/Resources/icons/circles-three-plus-duotone.png" width="24" alt="" /> | **Reach Samples** | TCP reach overlay samples |
-| <img src="src/Motus.GH/Resources/icons/wrench-duotone.png" width="24" alt="" /> | **Tool** | TCP + optional geometry / mechanism Description |
-| <img src="src/Motus.GH/Resources/icons/sliders-horizontal-duotone.png" width="24" alt="" /> | **Tool State** | Gripper width / Open-Closed for programs |
+| <img src="src/Motus.GH/Resources/icons/wrench-duotone.png" width="24" alt="" /> | **Tool** | TCP + Cap schema (face dropdown) + optional G/L or Rd+Bd |
+| <img src="src/Motus.GH/Resources/icons/sliders-horizontal-duotone.png" width="24" alt="" /> | **Tool State** | Cap-driven presets (Open/Closed/Custom on-component) |
 | <img src="src/Motus.GH/Resources/icons/download-simple-duotone.png" width="24" alt="" /> | **Load Mesh** | STL for Tool geometry |
 | <img src="src/Motus.GH/Resources/icons/gear-six-duotone.png" width="24" alt="" /> | **Joint State** | Joint vector (rad; toggle ° on `J`) |
 | <img src="src/Motus.GH/Resources/icons/crosshair-duotone.png" width="24" alt="" /> | **TCP Pose** | FK joints → TCP plane |

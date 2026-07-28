@@ -1,5 +1,8 @@
+using System.Drawing;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
+using GH_IO.Serialization;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH;
@@ -11,54 +14,144 @@ using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Motus.GH.UI;
 using Rhino.Geometry;
-using System;
-using System.Collections.Generic;
 
 namespace Motus.GH.Components;
 
+/// <summary>
+/// Motus Tool — TCP + Cap schema (face dropdown) + optional G/L or Rd+Bd.
+/// Cap = ToolCapabilities schema for Tool State / export (not ToolMode, not bindings).
+/// Pins stay stable (no VariableParameter morph) so GHX wires survive Cap changes.
+/// </summary>
 public sealed class MotusToolComponent : MotusComponentBase
 {
     private const int MaxMeshVertices = 50_000;
     private List<Mesh> _previewMeshes = new();
 
+    private string _cap = ToolCapContract.None;
+    private PointF? _canvasPivot;
+
     public MotusToolComponent()
-        : base("Motus Tool", "Tool", "Define end-effector TCP and optional gripper geometry or mechanism", "Model", "wrench") { }
+        : base(
+            "Motus Tool",
+            "Tool",
+            "Define end-effector TCP and optional gripper geometry or mechanism. Cap (on-component) is parameter schema for Tool State / export — not ToolMode, not bindings.",
+            "Model",
+            "wrench") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Next: Tl->Motus Robot Tool Tl",
-        "Wire: optional Motus Load Mesh to Geometry G (legacy static tool)",
+        "Note: Cap dropdown = schema (None|Robotiq2F85); Bd maps width→driver when Rd wired",
+        "Wire: optional Motus Load Mesh to Geometry G (legacy Cap+STL)",
         "Wire: optional Motus Urdf Assemble Rd to Description Rd (actuated mechanism)",
     ];
+
+    public override void CreateAttributes()
+    {
+        var pivot = _canvasPivot;
+        if (pivot is null && Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                pivot = p;
+        }
+
+        m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
+        if (pivot is { } keep)
+            m_attributes.Pivot = keep;
+    }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddTextParameter("Name", "N", "Tool name", GH_ParamAccess.item, "tool");
-        p.AddPlaneParameter("TCP", "P", "TCP in flange frame (Z = tool axis); unwired + Description derives from its TipTcp", GH_ParamAccess.item, Plane.WorldXY);
+        p.AddPlaneParameter(
+            "TCP",
+            "P",
+            "TCP in flange frame (Z = tool axis); unwired + Description derives from its TipTcp",
+            GH_ParamAccess.item,
+            Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
-        p.AddGeometryParameter("Geometry", "G", "Optional static gripper mesh or brep (TCP-local); legacy — Bindings squash allowed", GH_ParamAccess.item);
+        p.AddGeometryParameter(
+            "Geometry",
+            "G",
+            "Optional static gripper mesh or brep (TCP-local); ignored when Description wired",
+            GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("GeomPlane", "L", "Geometry pose in TCP-local frame", GH_ParamAccess.item, Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("Capabilities", "Cap", "None or Robotiq2F85 (jaw presets for Motus Tool State)", GH_ParamAccess.item, "None");
-        p[p.ParamCount - 1].Optional = true;
         p.AddParameter(new Param_MotusRobotDescription(), "Description", "Rd",
-            "Optional actuated mechanism (RobotDescription, e.g. Motus Urdf Assemble) grafted onto Motus Robot's tree at its tip link",
+            "Optional actuated mechanism (RobotDescription, e.g. Motus Urdf Assemble) grafted onto Motus Robot tip",
             GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddTextParameter("Binding", "Bd", "Optional driver joint name for Cap width (overrides Robotiq2F85 default 'robotiq_left_knuckle')", GH_ParamAccess.item);
+        p.AddTextParameter(
+            "Binding",
+            "Bd",
+            "Driver joint for Cap width when Rd wired (default robotiq_left_knuckle for Cap=Robotiq2F85)",
+            GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
         p.AddParameter(new Param_MotusTool(), "Tool", "Tl", "Tool definition", GH_ParamAccess.item);
 
-    public override void AddedToDocument(GH_Document doc)
+    public override bool Write(GH_IWriter writer)
     {
-        base.AddedToDocument(doc);
-        if (Params.Input[4].SourceCount > 0) return;
-        doc.ScheduleSolution(1, _ =>
-            GhValueList.AttachDropdown(this, 4, new[] { "None", "Robotiq2F85" }, "Capabilities"));
+        writer.SetString("ToolCapabilities", _cap);
+        if (Attributes is not null)
+        {
+            writer.SetDouble("CanvasPivotX", Attributes.Pivot.X);
+            writer.SetDouble("CanvasPivotY", Attributes.Pivot.Y);
+        }
+
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        if (reader.ItemExists("ToolCapabilities"))
+            _cap = ToolCapContract.Normalize(reader.GetString("ToolCapabilities"));
+        if (reader.ItemExists("CanvasPivotX") && reader.ItemExists("CanvasPivotY"))
+        {
+            _canvasPivot = new PointF(
+                (float)reader.GetDouble("CanvasPivotX"),
+                (float)reader.GetDouble("CanvasPivotY"));
+        }
+
+        var ok = base.Read(reader);
+        if (Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                _canvasPivot = p;
+        }
+
+        MigrateLegacyCapPin();
+        // Remove legacy Cap pin if an older document still has it (face dropdown owns schema).
+        var capIdx = IndexOf("Capabilities");
+        if (capIdx >= 0)
+            Params.UnregisterInputParameter(Params.Input[capIdx]);
+
+        RestoreCanvasPivot();
+        return ok;
+    }
+
+    private void MigrateLegacyCapPin()
+    {
+        var capIdx = IndexOf("Capabilities");
+        if (capIdx < 0) return;
+        var param = Params.Input[capIdx];
+        if (param.SourceCount == 0 && param is Param_String ps && ps.PersistentDataCount > 0)
+        {
+            var v = ps.PersistentData.get_FirstItem(false)?.Value;
+            if (!string.IsNullOrWhiteSpace(v))
+                _cap = ToolCapContract.Normalize(v);
+        }
+    }
+
+    private void RestoreCanvasPivot()
+    {
+        if (_canvasPivot is not { } p || Attributes is null) return;
+        Attributes.Pivot = p;
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -66,29 +159,28 @@ public sealed class MotusToolComponent : MotusComponentBase
         var name = "tool";
         var tcp = Plane.WorldXY;
         var geomPlane = Plane.WorldXY;
-        var capsText = "None";
         var bindingJoint = "";
         IGH_GeometricGoo? geo = null;
         RobotDescriptionGoo? descriptionGoo = null;
+
         da.GetData(0, ref name);
         da.GetData(1, ref tcp);
         var tcpWired = Params.Input[1].SourceCount > 0;
         da.GetData(2, ref geo);
         da.GetData(3, ref geomPlane);
-        da.GetData(4, ref capsText);
-        da.GetData(5, ref descriptionGoo);
-        da.GetData(6, ref bindingJoint);
+        da.GetData(4, ref descriptionGoo);
+        da.GetData(5, ref bindingJoint);
 
         var mechanism = descriptionGoo?.Value;
 
-        if (!TryResolveCapabilities(name, capsText, out var caps, out var capsRemark))
+        if (!ToolCapContract.TryParseSchema(_cap, out var caps))
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                "Capabilities must be None or Robotiq2F85.");
+                "Cap must be None or Robotiq2F85 (parameter schema for Tool State / export).");
             return;
         }
-        if (capsRemark is not null)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, capsRemark);
+
+        Message = ToolCapContract.Normalize(_cap);
 
         Frame tcpFrame;
         if (tcpWired && tcp.IsValid)
@@ -115,7 +207,8 @@ public sealed class MotusToolComponent : MotusComponentBase
         else
         {
             _previewMeshes = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "TCP plane must be valid, or wire a Description to derive it from TipTcp.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                "TCP plane must be valid, or wire a Description to derive it from TipTcp.");
             return;
         }
 
@@ -160,10 +253,34 @@ public sealed class MotusToolComponent : MotusComponentBase
         da.SetData(0, new ToolGoo(tool) { Mechanism = mechanism });
     }
 
-    /// <summary>
-    /// Width→driver-joint bindings (Wave 3): explicit Binding pin wins (paired with Robotiq open/closed
-    /// defaults); Cap=Robotiq2F85 falls back to <c>robotiq_left_knuckle</c>. Driver must exist on mechanism.
-    /// </summary>
+    private DropDownAttributes.Model BuildDropdownModel() =>
+        new(
+            ["Cap"],
+            [ToolCapContract.Schemas],
+            [ToolCapContract.Normalize(_cap)]);
+
+    private void OnDropdownSelect(int listIndex, int itemIndex)
+    {
+        if (listIndex != 0) return;
+        if (itemIndex < 0 || itemIndex >= ToolCapContract.Schemas.Length) return;
+        var next = ToolCapContract.Schemas[itemIndex];
+        if (next == ToolCapContract.Normalize(_cap)) return;
+        RecordUndoEvent("Tool Cap");
+        _cap = next;
+        ExpireSolution(true);
+    }
+
+    private int IndexOf(string name)
+    {
+        for (var i = 0; i < Params.Input.Count; i++)
+        {
+            if (string.Equals(Params.Input[i].Name, name, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
     private static bool TryResolveBindings(
         RobotDescription? mechanism,
         ToolCapabilities? caps,
@@ -184,14 +301,14 @@ public sealed class MotusToolComponent : MotusComponentBase
                 return false;
             }
 
-            bindings = new[]
-            {
+            bindings =
+            [
                 new ToolDriverBinding(
                     Parameter: "width",
                     DriverJoint: joint,
                     OpenValue: ToolParameterBinding.Robotiq2F85OpenWidthMeters,
                     ClosedDriverValue: ToolParameterBinding.Robotiq2F85ClosedDriverRadians)
-            };
+            ];
             return true;
         }
 
@@ -219,39 +336,6 @@ public sealed class MotusToolComponent : MotusComponentBase
             if (j.IsActuated && j.MimicJoint is null &&
                 string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase))
                 return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryResolveCapabilities(
-        string name,
-        string capsText,
-        out ToolCapabilities? caps,
-        out string? remark)
-    {
-        caps = null;
-        remark = null;
-        var raw = (capsText ?? "None").Trim();
-        if (raw.Equals("None", StringComparison.OrdinalIgnoreCase) ||
-            raw.Equals("Off", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(raw))
-        {
-            // Migration: name still hints Robotiq when Cap left at None.
-            if (name.Contains("robotiq", StringComparison.OrdinalIgnoreCase))
-            {
-                caps = ToolCapabilities.Robotiq2F85;
-                remark = "Capabilities=None but Name looks like Robotiq — using Robotiq2F85. Set Cap explicitly.";
-            }
-            return true;
-        }
-
-        if (raw.Equals("Robotiq2F85", StringComparison.OrdinalIgnoreCase) ||
-            raw.Equals("Robotiq", StringComparison.OrdinalIgnoreCase) ||
-            raw.Equals("2F85", StringComparison.OrdinalIgnoreCase))
-        {
-            caps = ToolCapabilities.Robotiq2F85;
-            return true;
         }
 
         return false;

@@ -43,8 +43,8 @@ Model ──► Plan ──► Preview
 | Motus Terrain Patch | Origin, Size, Amp | Outdoor heightfield mesh → Walk `Tn` |
 | Motus Joint Table | Parent / Child / Type / Ox; optional Oy,Oz, Name, **Tip**, Base, Home, **SE2** (X,Y,yaw) | Same Robot goo — Plan uses **tip path** only; side branches are TreeFK preview only |
 | Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
-| Motus Tool | Name, TCP plane (flange frame); optional static Geometry, Cap, **Description** (`RobotDescription`), Binding driver joint | Tool definition |
-| Motus Tool State | Optional Tool; Preset (Open/Closed/Custom); Width, Speed, Force | End-effector state (`EndEffectorStateGoo`) |
+| Motus Tool | Name, TCP; **Cap** face dropdown (`None` \| `Robotiq2F85` schema); optional G/L and/or Rd+Bd | Tool definition |
+| Motus Tool State | Optional Tool; **Preset** face dropdown; Width (used when Custom); Speed, Force | End-effector state (`EndEffectorStateGoo`) |
 | Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
 | Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
 | Motus TCP Pose | Robot, Joint state | TCP plane (FK position + orientation in base frame) |
@@ -57,11 +57,13 @@ Model ──► Plan ──► Preview
 
 **Motus Body** + **Motus Leg** + **Motus Mechanism** → **Motus Walk** cover N-leg walkers (`Family=legged`, joint `Q` in **radians**) — **not** Stewart. Assemble hips + leg recipe into `Mech`, then Path/Planes + optional Terrain (`Tn` / Motus Terrain Patch) → foot-target gait `Tr` → Preview / Export / Waypoints. Walk runs `LeggedGait.ValidateForPlan` as a Status gate: SSM dips on hills/odd-N stay named **warnings** (trajectory still emits); other validation failures remain errors. Optional **Motus Body Pose** overrides Auto (TerrainSupport if `Tn`, else PathFollow). Motus Hex was removed in 0.13 — see [ADR 0005](adr/0005-general-legged-mechanism.md) and [CHANGELOG](../CHANGELOG.md). Example: `09_walking_hexapod.ghx`.
 
-`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). Optional `Geometry` is collision + preview volume in TCP-local coordinates (legacy static tool — jaw-width squash allowed). Tools named `robotiq_*` auto-attach `ToolCapabilities` (width, speed, force). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
+`Motus Tool` defines the end-effector **TCP** in the flange frame (Z = tool axis, matching KUKA|prc / Robots conventions). **Cap** is an on-component dropdown (`None` \| `Robotiq2F85`) for the **parameter schema** used by Tool State / export (`width` m, `speed`/`force` ratio) — not ToolMode, not mesh choice, not bindings. `None` means no schema (no name-based auto-Cap). Pins stay stable (G/L/Rd/Bd always present, optional) so example wires survive Cap changes; Rd+G both wired → warning, ignore G.
+
+Optional `Geometry` is collision + preview volume in TCP-local coordinates (legacy static tool — jaw-width squash when Bindings empty). Box/sphere tools use the fast collision path; **mesh** tool geometry disables native FCL and falls back to the mesh checker. UR presets with non-zero TCP use numerical IK (analytic IK requires flange-equivalent tool).
 
 Optionally wire a **Description** (`RobotDescription`, e.g. from **Motus Urdf Assemble**) for an *actuated* mechanism instead of a static mesh: **Motus Robot** grafts it onto the arm's kinematic tree at the tip link (`KinematicTree.Attach`, rotation-aware) so TreeFK drives real mechanism links, not a squashed mesh. Leave **TCP** unwired to derive it from the mechanism's `TipTcp()`. **Binding** names the driver joint that Cap's `width` parameter maps to (defaults to `robotiq_left_knuckle` when Cap = Robotiq2F85 and Binding is unwired). This is the fast path when the arm itself is a URDF/xacro load (**Motus Robot**); for composing an arm *and* mechanism from scratch, the Urdf authoring family's **Motus Urdf Attach** + `RobotDescriptionSession.Project` below remains the structural, from-scratch route.
 
-`Motus Tool State` builds an `EndEffectorState` for motion program segments. Wire **Preset** Open/Closed for Robotiq jaw width, or Custom + **Width**. Optional **Tool** validates parameter names against the tool schema.
+`Motus Tool State` builds an `EndEffectorState` for motion program segments. **Preset** (Open/Closed/Custom) is on-component; **Width** is used when Preset=Custom. Wire **Tool** (or Robot with bundled Cap) — a wired Tool/Robot with Cap=None errors (no silent Robotiq invent). Unwired Tool State warns and assumes Robotiq for zero-config demos. Cap ≠ Motus Move **ToolMode** (Hold/Ramp/Instant export timing).
 
 `Motus Load URDF` was removed; use **Motus Robot** instead.
 
