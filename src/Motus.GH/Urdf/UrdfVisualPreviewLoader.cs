@@ -109,7 +109,8 @@ internal static class UrdfVisualPreviewLoader
         {
             var radius = ParseDouble(cyl.Attribute("radius")?.Value, 0.05);
             var length = ParseDouble(cyl.Attribute("length")?.Value, 0.1);
-            return [(CollisionObject.Capsule(name, pose, radius, length / 2), null)];
+            // True cylinder mesh along Motus/URDF +Z — Capsule would grow sphere caps (fat disks → blobs).
+            return [(CylinderAsMesh(name, pose, radius, length), null)];
         }
         if (geom.Element("sphere") is { } sph)
         {
@@ -759,6 +760,46 @@ internal static class UrdfVisualPreviewLoader
 
     private static Frame FrameFromRpy(double x, double y, double z, double roll, double pitch, double yaw) =>
         Transforms.ToFrame(Transforms.FromRpy(x, y, z, roll, pitch, yaw));
+
+    /// <summary>URDF cylinder along Motus +Z as a closed mesh (not Capsule — short fat cylinders must not grow sphere caps).</summary>
+    private static CollisionObject CylinderAsMesh(string name, Frame pose, double radius, double length)
+    {
+        const int sides = 20;
+        var half = length * 0.5;
+        var verts = new List<double[]>(sides * 2 + 2);
+        var botCenter = verts.Count;
+        verts.Add([0, 0, -half]);
+        var topCenter = verts.Count;
+        verts.Add([0, 0, half]);
+        var botRing = verts.Count;
+        for (var i = 0; i < sides; i++)
+        {
+            var a = 2 * Math.PI * i / sides;
+            verts.Add([radius * Math.Cos(a), radius * Math.Sin(a), -half]);
+        }
+        var topRing = verts.Count;
+        for (var i = 0; i < sides; i++)
+        {
+            var a = 2 * Math.PI * i / sides;
+            verts.Add([radius * Math.Cos(a), radius * Math.Sin(a), half]);
+        }
+
+        var idx = new List<int>(sides * 12);
+        for (var i = 0; i < sides; i++)
+        {
+            var i1 = (i + 1) % sides;
+            var b0 = botRing + i;
+            var b1 = botRing + i1;
+            var t0 = topRing + i;
+            var t1 = topRing + i1;
+            idx.Add(botCenter); idx.Add(b1); idx.Add(b0);
+            idx.Add(topCenter); idx.Add(t0); idx.Add(t1);
+            idx.Add(b0); idx.Add(b1); idx.Add(t1);
+            idx.Add(b0); idx.Add(t1); idx.Add(t0);
+        }
+
+        return CollisionObject.Mesh(name, pose, verts, idx);
+    }
 
     private static (double x, double y, double z) ParseTriple(string? s, double dx = 0, double dy = 0, double dz = 0)
     {

@@ -295,6 +295,7 @@ public static class KinematicsPreview
         var tool = toolFrame ?? robot.Preset.ToolFrame;
         var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
         var tipQ = TipJointPositions(state.Positions, tipN);
+        var tipState = TipJointState(state, tipN);
         var origins = fk.ComputeLinkOrigins(tipQ, baseF.Frame);
         var lines = new List<Line>();
         var prev = ToPoint(baseF.Frame);
@@ -305,7 +306,7 @@ public static class KinematicsPreview
             prev = pt;
         }
 
-        var tcp = ToPoint(fk.ComputeTcp(state, baseF, tool).Tcp);
+        var tcp = ToPoint(fk.ComputeTcp(tipState, baseF, tool).Tcp);
         if (prev.DistanceTo(tcp) > 1e-6)
             lines.Add(new Line(prev, tcp));
         return lines;
@@ -340,7 +341,9 @@ public static class KinematicsPreview
 
         var baseF = baseFrame ?? robot.Preset.BaseFrame;
         var tool = toolFrame ?? robot.Preset.ToolFrame;
-        var linkTransforms = fk.ComputeLinkTransforms(state.Positions);
+        var tipN = chain?.Joints.Length ?? robot.Preset.AxisCount;
+        var tipQ = TipJointPositions(state.Positions, tipN);
+        var linkTransforms = fk.ComputeLinkTransforms(tipQ);
         var baseM = Transforms.FromFrame(baseF.Frame);
         foreach (var link in geometry.Links)
         {
@@ -356,7 +359,7 @@ public static class KinematicsPreview
         }
 
         if (geometry.ToolGeometry is null) yield break;
-        var toolM = ToolCollisionPreview.WorldMatrix(fk, state.Positions, baseF, tool, geometry);
+        var toolM = ToolCollisionPreview.WorldMatrix(fk, tipQ, baseF, tool, geometry);
         var toolWorld = TransformCollision(geometry.ToolGeometry, toolM);
         if (ToRhinoMesh(toolWorld) is { } toolMesh)
             yield return toolMesh;

@@ -100,7 +100,7 @@ Also check in Rhino:
 - Motus Stewart → Plan TCP plane list → Preview scrub; Waypoints warns meters ≠ MoveJ; drag Br/Pr sliders on `08_stewart_tcp_path`
 - Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
-- `06_dkp_group`: UR beside 2-DOF DKP; AllDrivers; coupled Preview moves DKP, decoupled (arm Group) keeps DKP fixed
+- `06_turntable_group`: UR beside 1-DOF turntable; GH Center Box → Motus Robot Attach on `turntable_link` (TreeFK); AllDrivers multi-waypoint TCP tracks spoke
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Three.js stick viz via `Motus.NET/tools/legged-viewer`

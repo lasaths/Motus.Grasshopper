@@ -189,7 +189,7 @@ Nine generated definitions in [`examples/`](examples/README.md) (**never hand-ed
 | `03_urdf_tool_frames.ghx` | URDF + Tool frames |
 | `04_motion_program.ghx` | PTP/LIN/CIRC/SET Program |
 | `05_serial_reach.ghx` | Serial Chain + Reach Samples |
-| `06_dkp_group.ghx` | UR + DKP: coupled vs Group-locked Plan |
+| `06_turntable_group.ghx` | UR + turntable: GH fixture→Robot Attach on turntable_link; TCP tracks spoke |
 | `07_urdf_gripper_tool.ghx` | Actuated gripper as Tool Description |
 | `08_stewart_tcp_path.ghx` | Stewart TCP Plan (meters) |
 | `09_walking_hexapod.ghx` | Walk graph + N slider (default 6, range 4–12) |

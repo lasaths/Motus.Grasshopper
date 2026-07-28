@@ -62,15 +62,17 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     protected List<Mesh> _previewMeshes = [];
     protected List<Mesh> _collisionPreviewMeshes = [];
     protected List<Line> _previewWires = [];
+    private Plane _previewTcp = Plane.Unset;
     private string? _previewKey;
     private bool _showCollisionPreview;
+    private bool _showTcp;
 
     protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName)
         : base(name, nickname, desc, "Model", iconName) { }
 
     protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)
     {
-        var key = PreviewKey(goo, sourcePath, _showCollisionPreview);
+        var key = PreviewKey(goo, sourcePath, _showCollisionPreview, _showTcp);
         if (key == _previewKey && _previewMeshes.Count > 0)
             return;
 
@@ -79,6 +81,14 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
         _collisionPreviewMeshes = _showCollisionPreview
             ? RobotViewportPreview.BuildPlanningCollisionMeshes(goo, sourcePath)
             : [];
+        _previewTcp = Plane.Unset;
+        if (_showTcp && goo.Value is not null)
+        {
+            var home = goo.PreviewHome ?? HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
+            var ctx = RobotContext.FromGoo(goo);
+            _previewTcp = KinematicsPreview.TcpPlane(
+                ctx.EffectiveModel, home, ctx.Chain, ctx.Base, ctx.Tool, ctx.Stewart);
+        }
         ExpirePreview(true);
     }
 
@@ -88,16 +98,25 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
         _previewMeshes = [];
         _collisionPreviewMeshes = [];
         _previewWires = [];
+        _previewTcp = Plane.Unset;
         ExpirePreview(true);
     }
 
-    private static string PreviewKey(RobotModelGoo goo, string? sourcePath, bool showCollision) =>
-        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Chain?.Joints.Length}|{goo.Tree?.Fingerprint}|{goo.PreviewHome}|col:{showCollision}";
+    private static string PreviewKey(RobotModelGoo goo, string? sourcePath, bool showCollision, bool showTcp) =>
+        $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Value?.Preset.AxisCount}|{goo.Chain?.Joints.Length}|{goo.Tree?.Fingerprint}|{goo.PreviewHome}|col:{showCollision}|tcp:{showTcp}";
 
-    public override BoundingBox ClippingBox =>
-        RobotViewportPreview.ComputeBounds(
-            _collisionPreviewMeshes.Count > 0 ? _collisionPreviewMeshes : _previewMeshes,
-            _previewWires);
+    public override BoundingBox ClippingBox
+    {
+        get
+        {
+            var bb = RobotViewportPreview.ComputeBounds(
+                _collisionPreviewMeshes.Count > 0 ? _collisionPreviewMeshes : _previewMeshes,
+                _previewWires);
+            if (_previewTcp.IsValid)
+                bb.Union(_previewTcp.Origin);
+            return bb;
+        }
+    }
 
     public override void DrawViewportMeshes(IGH_PreviewArgs args)
     {
@@ -111,17 +130,21 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     {
         if (Locked) return;
         RobotViewportPreview.DrawWires(args, _previewWires, _previewMeshes.Count == 0);
+        if (_showTcp)
+            RobotViewportPreview.DrawTcp(args, _previewTcp);
     }
 
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
     {
         Menu_AppendItem(menu, "Preview collision meshes", CollisionPreviewMenuClick, true, _showCollisionPreview);
+        Menu_AppendItem(menu, "Show TCP", TcpPreviewMenuClick, true, _showTcp);
         base.AppendAdditionalMenuItems(menu);
     }
 
     public override bool Write(GH_IWriter writer)
     {
         writer.SetBoolean("ShowCollisionPreview", _showCollisionPreview);
+        writer.SetBoolean("ShowTcp", _showTcp);
         return base.Write(writer);
     }
 
@@ -129,6 +152,8 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     {
         if (reader.ItemExists("ShowCollisionPreview"))
             _showCollisionPreview = reader.GetBoolean("ShowCollisionPreview");
+        if (reader.ItemExists("ShowTcp"))
+            _showTcp = reader.GetBoolean("ShowTcp");
         return base.Read(reader);
     }
 
@@ -136,6 +161,14 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     {
         RecordUndoEvent("Preview collision meshes");
         _showCollisionPreview = !_showCollisionPreview;
+        _previewKey = null;
+        ExpireSolution(true);
+    }
+
+    private void TcpPreviewMenuClick(object? sender, EventArgs e)
+    {
+        RecordUndoEvent("Show TCP");
+        _showTcp = !_showTcp;
         _previewKey = null;
         ExpireSolution(true);
     }
@@ -155,6 +188,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
     [
         "Next: Rb->Motus Plan Rb",
         "Wire: Path to .urdf/.xacro; optional Tool Tl; AllDrivers for DKP/branches",
+        "Wire: optional Attach geometry + AttachLink + AttachOrigin for TreeFK fixture",
     ];
 
     protected override void RegisterInputParams(GH_InputParamManager p)
@@ -175,6 +209,26 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
             GH_ParamAccess.item,
             false);
         p[p.ParamCount - 1].Optional = true;
+        p.AddGeometryParameter(
+            "Attach",
+            "At",
+            "Optional fixture geometry (Box/Mesh/Brep/…) grafted onto AttachLink — TreeFK + preview",
+            GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter(
+            "AttachLink",
+            "Al",
+            "Parent link for Attach (required when Attach is wired)",
+            GH_ParamAccess.item,
+            "");
+        p[p.ParamCount - 1].Optional = true;
+        p.AddPointParameter(
+            "AttachOrigin",
+            "Ao",
+            "Attach origin in AttachLink frame (meters; translation only)",
+            GH_ParamAccess.item,
+            Point3d.Origin);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -193,6 +247,12 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         ToolGoo? toolGoo = null;
         da.GetData(4, ref toolGoo);
         da.GetData(5, ref allDrivers);
+        IGH_GeometricGoo? attachGeom = null;
+        da.GetData(6, ref attachGeom);
+        var attachLink = "";
+        da.GetData(7, ref attachLink);
+        var attachOrigin = Point3d.Origin;
+        da.GetData(8, ref attachOrigin);
 
         if (!da.GetData(0, ref path) || string.IsNullOrWhiteSpace(path))
         {
@@ -211,13 +271,67 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
             {
                 goo.Tool = toolGoo.Value;
                 if (toolGoo.Mechanism is not null)
-                    AttachMechanism(goo, toolGoo.Mechanism, tipLink);
+                {
+                    if (goo.Tree is null)
+                    {
+                        AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                            "Tool Description mechanism requires a kinematic tree (URDF/xacro robot) — mechanism was not attached.");
+                    }
+                    else
+                    {
+                        GraftDescription(
+                            goo,
+                            toolGoo.Mechanism,
+                            ResolveMechanismMount(goo.Tree, tipLink),
+                            Frame.Identity,
+                            "Tool mechanism");
+                    }
+                }
                 else if (toolGoo.Value.Bindings is { Count: > 0 })
                 {
                     // TL-009: Mechanism is live-wire only — internalized Tool keeps Cap/Bindings but drops Rd.
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                         "Tool has Bindings but no live Description (Rd) — re-wire Motus Tool→Tl; internalized Tool drops the mechanism.");
                 }
+            }
+
+            if (attachGeom is not null)
+            {
+                if (string.IsNullOrWhiteSpace(attachLink))
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                        "AttachLink is required when Attach geometry is wired.");
+                    ClearPreview();
+                    return;
+                }
+
+                if (!UrdfGeometryFromGoo.TryConvert(attachGeom, out var urdfGeom, out var geomError) || urdfGeom is null)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, geomError ?? "Invalid Attach geometry.");
+                    ClearPreview();
+                    return;
+                }
+
+                const string attachPartName = "attach";
+                var link = new UrdfLink(attachPartName, [urdfGeom], [urdfGeom]);
+                if (!RobotDescription.TryAssemble(
+                        attachPartName,
+                        [link],
+                        [],
+                        tipLink: attachPartName,
+                        out var attachDesc,
+                        out var diagnostics) || attachDesc is null)
+                {
+                    var msg = diagnostics.Errors.Count > 0
+                        ? string.Join("; ", diagnostics.Errors)
+                        : "Could not assemble Attach geometry.";
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg);
+                    ClearPreview();
+                    return;
+                }
+
+                var attachFrame = new Frame(attachOrigin.X, attachOrigin.Y, attachOrigin.Z);
+                GraftDescription(goo, attachDesc, attachLink.Trim(), attachFrame, "Attach");
             }
 
             if (allDrivers && goo.Tree is { } tree && goo.Chain is { Joints.Length: var tipN }
@@ -238,44 +352,40 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
     }
 
     /// <summary>
-    /// Graft an actuated tool mechanism (Motus Tool's Description pin) onto the arm's kinematic tree at
-    /// its tip link (<see cref="KinematicTree.Attach"/> — rotation-aware, unlike <see cref="RobotDescription.Attach"/>
-    /// which is translation-only-origin and meant for the pure Urdf-authoring family). TCP/Cap semantics
-    /// for the merged tool stay on <see cref="RobotModelGoo.Tool"/> (consumed via <see cref="RobotModel.WithTool"/>
-    /// in <see cref="RobotModelGoo.EffectiveModel"/>) — this only extends <see cref="RobotModelGoo.Tree"/>
-    /// (TreeFK) and merges mechanism visuals into <see cref="RobotModelGoo.PreviewGeometry"/>.
+    /// Graft a <see cref="RobotDescription"/> onto the robot tree (TreeFK + preview meshes).
+    /// Motus Tool mechanisms mount at tip/tool0; Motus Robot Attach uses a named parent link + origin.
     /// </summary>
-    private void AttachMechanism(RobotModelGoo goo, RobotDescription mechanism, string tipLink)
+    private void GraftDescription(
+        RobotModelGoo goo,
+        RobotDescription mechanism,
+        string mountLink,
+        Frame attachFrame,
+        string label)
     {
         if (goo.Tree is null)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                "Tool Description mechanism requires a kinematic tree (URDF/xacro robot) — mechanism was not attached.");
+                $"{label} requires a kinematic tree (URDF/xacro robot) — description was not attached.");
             return;
         }
-
-        // Tip = planning serial tip; mount prefers tool0 when present so changing Tip for IK doesn't move the graft.
-        var mountLink = ResolveMechanismMount(goo.Tree, tipLink);
 
         try
         {
             var mechanismTree = mechanism.ToKinematicTree();
-            goo.Tree = goo.Tree.Attach(mountLink, mechanismTree, mechanism.RootLinkName, Frame.Identity);
+            goo.Tree = goo.Tree.Attach(mountLink, mechanismTree, mechanism.RootLinkName, attachFrame);
         }
         catch (Exception ex)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Could not attach tool mechanism: {ex.Message}");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Could not attach {label}: {ex.Message}");
             return;
         }
 
-        // Trajectory Q is tip-path (arm axes only); extra tool drivers need a full home seed so
-        // TreeFK + ToolParameterBinding can pose fingers (example 07 Cap+Bd Ramp/SET).
         SeedTreeDriverHome(goo);
 
         if (MechanismPreviewGeometry.Build(mechanism) is not { } mechanismPreview)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Tool mechanism attached to tree, but no previewable visuals (need meshable Rhino geometry on Motus Urdf Link V).");
+                $"{label} attached to tree, but no previewable visuals (need meshable Rhino geometry on Motus Urdf Link V).");
             return;
         }
 
@@ -288,7 +398,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
             goo.PreviewGeometry?.ToolGeometryAttachOffset);
 
         AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-            $"Tool mechanism attached at '{mountLink}' (+{mechanismPreview.Links.Count} preview links).");
+            $"{label} attached at '{mountLink}' (+{mechanismPreview.Links.Count} preview links).");
     }
 
     /// <summary>Zero-fill <see cref="RobotModelGoo.TreeDriverHome"/> to tree driver count (open fingers).</summary>

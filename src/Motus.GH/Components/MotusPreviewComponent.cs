@@ -52,6 +52,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Circle> _contactCircles = [];
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
+    private Plane _previewTcp = Plane.Unset;
+    private bool _showTcp;
     private KinematicsPreview.PreviewMeshCache? _meshCache;
     private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount, int homeFp) _cacheSig;
     private StewartPlatform? _playStewart;
@@ -105,6 +107,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         Menu_AppendSeparator(menu);
         Menu_AppendItem(menu, "Show custom colours input", (_, _) => ToggleCustomColorsInput(), true, _showCustomColors);
         Menu_AppendItem(menu, "Show debug outputs", (_, _) => ToggleDebugOutputs(), true, _showDebugOutputs);
+        Menu_AppendItem(menu, "Show TCP", (_, _) => ToggleShowTcp(), true, _showTcp);
         base.AppendAdditionalMenuItems(menu);
     }
 
@@ -173,6 +176,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             }
             if (_tcpCurve is not null)
                 bb.Union(_tcpCurve.GetBoundingBox(false));
+            if (_previewTcp.IsValid)
+                bb.Union(_previewTcp.Origin);
             foreach (var c in _contactCircles)
                 bb.Union(c.BoundingBox);
             return bb.IsValid ? bb : BoundingBox.Unset;
@@ -196,6 +201,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             args.Display.DrawLine(line, InvalidColor, 3);
         foreach (var c in _contactCircles)
             args.Display.DrawCircle(c, ContactColor, 2);
+        if (_showTcp)
+            RobotViewportPreview.DrawTcp(args, _previewTcp);
     }
 
     public override bool Write(GH_IWriter writer)
@@ -205,6 +212,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         writer.SetInt32("ColorMode", (int)_colorMode);
         writer.SetBoolean("ShowCustomColors", _showCustomColors);
         writer.SetBoolean("ShowDebugOutputs", _showDebugOutputs);
+        writer.SetBoolean("ShowTcp", _showTcp);
         return base.Write(writer);
     }
 
@@ -220,6 +228,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _showCustomColors = reader.GetBoolean("ShowCustomColors");
         if (reader.ItemExists("ShowDebugOutputs"))
             _showDebugOutputs = reader.GetBoolean("ShowDebugOutputs");
+        if (reader.ItemExists("ShowTcp"))
+            _showTcp = reader.GetBoolean("ShowTcp");
         // Migrate older documents that always had debug outputs.
         if (Params.Output.Count > CoreOutputCount)
             _showDebugOutputs = true;
@@ -255,6 +265,26 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _showDebugOutputs = !_showDebugOutputs;
         EnsureDebugOutputs();
         ExpireSolution(true);
+    }
+
+    private void ToggleShowTcp()
+    {
+        RecordUndoEvent("Show TCP");
+        _showTcp = !_showTcp;
+        ExpireSolution(true);
+    }
+
+    private void UpdatePreviewTcp(RobotContext ctx, JointState state, Frame? dynamicBase)
+    {
+        if (!_showTcp)
+        {
+            _previewTcp = Plane.Unset;
+            return;
+        }
+
+        BaseFrame? baseF = dynamicBase is { } db ? new BaseFrame(db) : ctx.Base;
+        _previewTcp = KinematicsPreview.TcpPlane(
+            ctx.EffectiveModel, state, ctx.Chain, baseF, ctx.Tool, ctx.Stewart);
     }
 
     private void EnsureCustomColorsParam()
@@ -424,7 +454,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             if (_meshCache is not null && _currentMeshes.Count > 0)
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
             if (_trajGoo is not null)
-                RefreshContactCircles(_trajGoo.Context(), state, dynamicBase);
+            {
+                var ctxEnd = _trajGoo.Context();
+                RefreshContactCircles(ctxEnd, state, dynamicBase);
+                UpdatePreviewTcp(ctxEnd, state, dynamicBase);
+            }
             SyncScrubSlider(_position, expireDownstream: false);
             ExpirePreview(true);
             OnDisplayExpired(false);
@@ -440,6 +474,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 var stewartPrev = KinematicsPreview.StewartPreview(_playStewart, state);
                 _currentMeshes = stewartPrev.Meshes.ToList();
                 _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
+                if (_trajGoo is not null)
+                    UpdatePreviewTcp(_trajGoo.Context(), state, dynamicBase);
                 SyncScrubSlider(_position, expireDownstream: false);
                 ExpirePreview(true);
                 OnDisplayExpired(false);
@@ -457,7 +493,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
-        RefreshContactCircles(_trajGoo!.Context(), state, dynamicBase);
+        var ctxPlay = _trajGoo!.Context();
+        RefreshContactCircles(ctxPlay, state, dynamicBase);
+        UpdatePreviewTcp(ctxPlay, state, dynamicBase);
         SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
@@ -556,6 +594,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _currentMeshes = [];
             _startMeshes = [];
             _tcpCurve = null;
+            _previewTcp = Plane.Unset;
             _invalidSegments = [];
             _contactCircles = [];
             _previewTrajectory = null;
@@ -660,6 +699,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         RefreshContactCircles(ctx, state, dynamicBase);
+        UpdatePreviewTcp(ctx, state, dynamicBase);
 
         if (_playing)
         {

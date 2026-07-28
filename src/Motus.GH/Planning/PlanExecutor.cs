@@ -86,6 +86,14 @@ internal static class PlanExecutor
                 : sub => reportProgress(spanStart + sub * spanSize);
 
             var goal = request.Goals[goalIndex];
+            // GroupMap locks non-group joints at segment start (JointLinear used to ignore GroupMap).
+            if (goal.joints is { } goalJs &&
+                request.PlanningContext.ActiveGroup is not null &&
+                session.JointNames is { Count: > 0 })
+            {
+                var map = JointIndexMap.Resolve(session, request.PlanningContext.ActiveGroup);
+                goal = (new JointState(map.EmbedGroupState(currentStart, map.ExtractGroupPositions(goalJs)).Positions.ToArray()), null);
+            }
 
             var preflightSw = Stopwatch.StartNew();
             var preflight = GhExtract.TryPreflightCollision(

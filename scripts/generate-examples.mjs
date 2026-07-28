@@ -28,9 +28,18 @@ const HEX_TIP_GOAL = [-0.1309, 0.6109, -0.5236];
 /** Collision-free home-ish start for obstacle demos (away from table/box). */
 const COLLISION_START = [0.0, -1.4, 1.4, -1.7, -1.5708, 0.0];
 const COLLISION_GOAL = [1.0, -0.9, 1.0, -1.4, -1.5708, 0.3];
-/** ur10e_with_dkp.xacro AllDrivers: […UR10e×6, dkp_yaw, dkp_tilt] — goal tilts/yaws DKP. */
-const DKP_START = [...START_JOINTS, 0.0, 0.0];
-const DKP_GOAL = [...GOAL_JOINTS, 1.0, 0.35];
+/** ur10e_with_turntable.xacro AllDrivers: […UR×6, turntable_yaw].
+ * Robotiq TCP (not tool0) tracks orange spoke corner; flange Motus Z = −world Z (gripper hangs vertical).
+ * Waypoints every π/8 so joint-linear stays on the cube (~5 mm). */
+const TT_WAYPOINTS = [
+  [-0.1539, -1.0030, 1.4702, -2.0380, -1.5708, -1.7247, 0.0],
+  [-0.0487, -1.0357, 1.5236, -2.0587, -1.5708, -1.6195, 0.3927],
+  [0.0431, -1.1099, 1.6412, -2.1022, -1.5708, -1.5277, 0.7854],
+  [0.1125, -1.2196, 1.8057, -2.1569, -1.5708, -1.4583, 1.1781],
+  [0.1456, -1.3596, 1.9966, -2.2078, -1.5708, -1.4252, 1.5708],
+];
+const TT_START = TT_WAYPOINTS[0];
+const TT_GOAL = TT_WAYPOINTS[TT_WAYPOINTS.length - 1];
 
 /** GH / Motus param type GUIDs (ComponentGuid). Required for IGH_VariableParameterComponent ParameterData. */
 const PTYPE = {
@@ -57,7 +66,7 @@ const PTYPE = {
 const USE_PARAMETER_DATA = new Set(['plan', 'preview', 'segment']);
 
 const MOTUS = {
-  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 124,
+  robot: { guid: 'aa3e8488-943e-426f-b205-e8db5f684998', name: 'Motus Robot', nick: 'Robot', w: 74, h: 164,
     inputs: [
       { name: 'Path', nick: 'P', desc: 'Path to .urdf or .xacro file', optional: false, text: '' },
       { name: 'BaseLink', nick: 'B', desc: 'Base link name', optional: true, text: 'base_link' },
@@ -65,6 +74,9 @@ const MOTUS = {
       { name: 'Base', nick: 'Bf', desc: 'Optional base frame override (TCP goals are in this frame)', optional: true, plane: true },
       { name: 'Tool', nick: 'Tl', desc: 'Optional Motus Tool definition', optional: true },
       { name: 'AllDrivers', nick: 'All', desc: 'Plan tip path + side-branch drivers (e.g. DKP)', optional: true, bool: false },
+      { name: 'Attach', nick: 'At', desc: 'Optional fixture geometry grafted at AttachLink', optional: true },
+      { name: 'AttachLink', nick: 'Al', desc: 'Parent link for Attach', optional: true, text: '' },
+      { name: 'AttachOrigin', nick: 'Ao', desc: 'Attach origin in AttachLink frame (m)', optional: true, point: [0, 0, 0] },
     ],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
   ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
@@ -1981,91 +1993,70 @@ function graph05() {
 }
 
 /**
- * 06 — UR prefab + 2-DOF DKP: coupled (arm+DKP) vs decoupled (arm Group locks DKP).
- * AllDrivers promotes side-branch DKP into Plan DOF. Group locking needs RRT (shared keep-out).
+ * 06 — UR prefab + 1-DOF turntable: Robotiq TCP tracks spoke fixture; GH box → Robot Attach.
+ * AllDrivers = tip×6 + turntable_yaw. Plan moves arm+table together.
+ * Fixture = Center Box → Robot At + Point → Ao on turntable_link (TreeFK).
  */
 function graph06() {
-  const title = nativeScribble(40, -60, '06  UR + DKP Group', 28);
+  const title = nativeScribble(40, -60, '06  UR + Turntable', 28);
   const note = nativePanel(
     420,
     -60,
-    'UR10e beside 2-axis DKP. AllDrivers on. Coupled: Group off (arm+DKP). Decoupled: arm Group locks DKP. Scrub both.',
+    'Fixture: Box → Robot At; Point → Ao on turntable_link (TreeFK). AllDrivers Plan moves arm + turntable together — scrub Preview (Show TCP) to watch TCP track the spoke.',
     'Note',
     520,
-    40,
+    44,
   );
   const urdfFile = nativeFilePath(
     40,
     40,
-    absPath('resources/robots/ur10e_robotiq/ur10e_with_dkp.xacro'),
+    absPath('resources/robots/ur10e_robotiq/ur10e_with_turntable.xacro'),
     '*.xacro;*.urdf|*.xacro;*.urdf|All files|*.*',
   );
+
+  // Fixture in link frame (meters) → Motus Robot Attach (no ULink/Assemble).
+  const xy = nativeXYPlane(420, 40);
+  const fixtureBox = nativeCenterBox(420, 100, outRef(xy.node, 'Plane'), [0.02, 0.02, 0.02]);
+  const attachOrigin = nativeConstructPoint(420, 200, [0.275, 0.025, 0.035]);
+
   const robot = motusComponent('robot', 280, 40, {
     Path: [outRef(urdfFile.node, 'Path')],
-  }, { text: { BaseLink: 'world', TipLink: 'tool0' }, bools: { AllDrivers: true }, hidden: true });
-  const start = motusComponent('joints', 40, 180, {}, { jointValues: DKP_START });
-  const goal = motusComponent('joints', 40, 300, {}, { jointValues: DKP_GOAL });
-
-  const keepCenter = nativeConstructPoint(40, 420, [2.0, 2.0, 0.4]);
-  const keep = motusComponent('colSphere', 220, 420, {
-    Center: [outRef(keepCenter.node, 'Point')],
-  }, { text: { Name: 'keepout' }, numbers: { Radius: 0.08 } });
-  const scene = motusComponent('colScene', 420, 420, {
-    Objects: [outRef(keep.node, 'Object')],
+    Attach: [outRef(fixtureBox.node, 'Box')],
+    AttachOrigin: [outRef(attachOrigin.node, 'Point')],
+  }, {
+    text: { BaseLink: 'world', TipLink: 'tool0', AttachLink: 'turntable_link' },
+    bools: { AllDrivers: true },
+    hidden: true,
   });
-  const group = motusComponent('group', 620, 420, {}, {
-    text: { Name: 'arm', BaseLink: 'base_link', TipLink: 'tool0' },
-    textList: {
-      Joints: [
-        'shoulder_pan_joint',
-        'shoulder_lift_joint',
-        'elbow_joint',
-        'wrist_1_joint',
-        'wrist_2_joint',
-        'wrist_3_joint',
-      ],
-    },
+  const start = motusComponent('joints', 40, 180, {}, { jointValues: TT_START });
+  const midGoals = TT_WAYPOINTS.slice(1).map((q, i) =>
+    motusComponent('joints', 40, 260 + i * 90, {}, { jointValues: q }));
+  const goalsMerge = nativeMerge(220, 320, midGoals.map((g) => outRef(g.node, 'State')));
+
+  const plan = motusComponent('plan', 40, 700, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goalsMerge.node, 'Result')],
+    Start: [outRef(start.node, 'State')],
   });
-  const rrt = motusComponent('rrtSettings', 800, 420, {});
+  const preview = previewWithScrub(40, 700, outRef(plan.node, 'Trajectory'));
 
-  const planCoupled = motusComponent('plan', 40, 680, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(goal.node, 'State')],
-    Start: [outRef(start.node, 'State')],
-    Collision: [outRef(scene.node, 'Scene')],
-    RrtSettings: [outRef(rrt.node, 'Settings')],
-  }, { advanced: ['Collision', 'RrtSettings'] });
-  const coupled = previewWithScrub(40, 680, outRef(planCoupled.node, 'Trajectory'));
-
-  const planDecoupled = motusComponent('plan', 40, 980, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Goal: [outRef(goal.node, 'State')],
-    Start: [outRef(start.node, 'State')],
-    Collision: [outRef(scene.node, 'Scene')],
-    Group: [outRef(group.node, 'Group')],
-    RrtSettings: [outRef(rrt.node, 'Settings')],
-  }, { advanced: ['Collision', 'Group', 'RrtSettings'] });
-  const decoupled = previewWithScrub(40, 980, outRef(planDecoupled.node, 'Trajectory'));
-
-  const gRobot = nativeGroup('Prefab UR10e + DKP', [urdfFile, robot, start, goal], GROUP_COLOUR.robot);
-  const gScene = nativeGroup('Scene + arm group', [
-    keepCenter, keep, scene, group, rrt,
+  const gRobot = nativeGroup('Prefab UR10e + turntable', [urdfFile, robot, start, ...midGoals, goalsMerge], GROUP_COLOUR.robot);
+  const gFixture = nativeGroup('Fixture → turntable_link', [
+    { xml: xy.xml, node: xy.node }, fixtureBox, attachOrigin,
   ], GROUP_COLOUR.collision);
-  const gCoupled = nativeGroup('Coupled (arm+DKP)', [planCoupled, coupled.scrub, coupled.preview], GROUP_COLOUR.plan);
-  const gDecoupled = nativeGroup('Decoupled (arm Group)', [planDecoupled, decoupled.scrub, decoupled.preview], GROUP_COLOUR.preview);
+  const gPlan = nativeGroup('Plan + Preview', [plan, preview.scrub, preview.preview], GROUP_COLOUR.plan);
 
   const objs = [
     title, note,
-    urdfFile, robot, start, goal,
-    { xml: keepCenter.xml }, keep, scene, group, rrt,
-    planCoupled, coupled.scrub, coupled.preview,
-    planDecoupled, decoupled.scrub, decoupled.preview,
-    gRobot, gScene, gCoupled, gDecoupled,
+    urdfFile, robot, start, ...midGoals, goalsMerge,
+    { xml: xy.xml }, { xml: fixtureBox.xml }, { xml: attachOrigin.xml },
+    plan, preview.scrub, preview.preview,
+    gRobot, gFixture, gPlan,
   ];
   objs._meta = {
-    fileName: '06_dkp_group.ghx',
+    fileName: '06_turntable_group.ghx',
     description:
-      'Prefab UR10e+Robotiq beside 2-DOF DKP: AllDrivers coupled Plan vs arm Group (locks DKP). Shared RRT scene; scrub both Previews.',
+      'UR10e+turntable: GH fixture box → Robot Attach on turntable_link (TreeFK); AllDrivers multi-waypoint Robotiq TCP tracks spoke corner.',
   };
   return buildGraph(objs);
 }

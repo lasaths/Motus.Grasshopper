@@ -6,8 +6,9 @@ Aligned with **Motus.NET 0.13.2**.
 
 ### Added / fixed
 
-- Example `06_dkp_group` (UR beside 2-DOF DKP); Motus Robot `AllDrivers` Plan DOF = tip + side branches
-- Planning collision via TreeFK so DKP geometry participates in RRT (not tip-chain only)
+- Example `06_turntable_group` (UR + 1-DOF 8-spoke turntable); Motus Robot `AllDrivers` Plan DOF = tip + side branches
+- Synced joint goals: arm TCP tracks turntable fixture as `turntable_yaw` rotates
+- Planning collision via TreeFK so turntable geometry participates in RRT (not tip-chain only)
 - Plane/LIN on AllDrivers: tip-chain IK; side branches held at start and re-embedded
 - URDF box/cylinder preview uses `ToPlanePlate` (Motus XYZ ≡ Rhino XYZ)
 

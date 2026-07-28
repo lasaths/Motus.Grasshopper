@@ -45,11 +45,26 @@ internal static class BundledToolLoader
 
     public static ToolDefinition? TryDefaultForUrdfPath(string urdfPath)
     {
+        if (!LooksLikeUr10eRobotiq(urdfPath))
+            return null;
+        return TryLoadRobotiq(urdfPath);
+    }
+
+    /// <summary>
+    /// Prefab siblings (e.g. <c>ur10e_with_turntable.xacro</c>) keep tip at tool0/flange in the URDF
+    /// while Robotiq meshes live past tip — still need the bundled TCP offset (~0.163 m).
+    /// </summary>
+    private static bool LooksLikeUr10eRobotiq(string urdfPath)
+    {
         var file = Path.GetFileNameWithoutExtension(urdfPath);
         if (file.Contains("robotiq", StringComparison.OrdinalIgnoreCase) ||
-            file.Equals("ur10e_robotiq", StringComparison.OrdinalIgnoreCase))
-            return TryLoadRobotiq(urdfPath);
-        return null;
+            file.Equals("ur10e_robotiq", StringComparison.OrdinalIgnoreCase) ||
+            file.StartsWith("ur10e_with_", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var resolved = UrdfPathResolver.ResolveUrdfPath(urdfPath);
+        return resolved.Contains("ur10e_robotiq", StringComparison.OrdinalIgnoreCase)
+            || resolved.Contains($"{Path.DirectorySeparatorChar}robotiq", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ToolDefinition? TryLoadRobotiq(string? urdfPath = null)

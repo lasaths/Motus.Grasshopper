@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!-- Prefab UR10e+Robotiq beside a 1-DOF industrial turntable (Z yaw).
+     Tip path: world→UR→tool0. Side branch: turntable_yaw (Motus Robot AllDrivers).
+     Fixture corner for synced IK: turntable_link (0.275, 0.025, 0.035) — GH ColBox in example 06.
+     Example IK: Robotiq TCP on fixture; tool0 Motus Z = world −Z (gripper hangs vertical). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ur10e_with_turntable">
+  <link name="world"/>
+
+  <!-- Pedestal: taller column + flange so the base reads clearly -->
+  <link name="turntable_base_link">
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry><box size="0.16 0.16 0.10"/></geometry>
+      <material name="tt_base"><color rgba="0.30 0.30 0.33 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.11" rpy="0 0 0"/>
+      <geometry><box size="0.30 0.30 0.025"/></geometry>
+      <material name="tt_flange"><color rgba="0.26 0.26 0.28 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry><box size="0.30 0.30 0.12"/></geometry>
+    </collision>
+  </link>
+
+  <!-- Rotating platen: flat plate + 8 radial arms; fixture corner on +X arm -->
+  <link name="turntable_link">
+    <visual>
+      <origin xyz="0 0 0.012" rpy="0 0 0"/>
+      <geometry><box size="0.22 0.22 0.024"/></geometry>
+      <material name="tt_plate"><color rgba="0.22 0.52 0.46 1"/></material>
+    </visual>
+    <!-- 8 arms: 0.20×0.06×0.03, tip at r≈0.28 -->
+    <visual>
+      <origin xyz="0.18 0 0.015" rpy="0 0 0"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0.127 0.127 0.015" rpy="0 0 0.7854"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0 0.18 0.015" rpy="0 0 1.5708"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="-0.127 0.127 0.015" rpy="0 0 2.3562"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="-0.18 0 0.015" rpy="0 0 3.1416"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="-0.127 -0.127 0.015" rpy="0 0 -2.3562"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0 -0.18 0.015" rpy="0 0 -1.5708"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <visual>
+      <origin xyz="0.127 -0.127 0.015" rpy="0 0 -0.7854"/>
+      <geometry><box size="0.20 0.06 0.03"/></geometry>
+      <material name="tt_spoke"><color rgba="0.28 0.60 0.50 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry><box size="0.56 0.56 0.04"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="turntable_base_fixed" type="fixed">
+    <parent link="world"/>
+    <child link="turntable_base_link"/>
+    <origin xyz="0.70 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="turntable_yaw" type="revolute">
+    <parent link="turntable_base_link"/>
+    <child link="turntable_link"/>
+    <origin xyz="0 0 0.125" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" velocity="1.5"/>
+  </joint>
+
+  <xacro:include filename="ur10e_robotiq.urdf"/>
+
+  <joint name="ur_world_mount" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+</robot>

@@ -117,4 +117,15 @@ internal static class RobotViewportPreview
     foreach (var line in wires)
       args.Display.DrawLine(line, WireColor, 2);
   }
+
+  /// <summary>Rhino plane triad at TCP (Z = Motus approach for serial tools).</summary>
+  public static void DrawTcp(IGH_PreviewArgs args, Plane plane, double axisMeters = 0.08)
+  {
+    if (!plane.IsValid || axisMeters <= 0) return;
+    var o = plane.Origin;
+    args.Display.DrawLine(new Line(o, o + plane.XAxis * axisMeters), Color.FromArgb(220, 220, 60, 60), 2);
+    args.Display.DrawLine(new Line(o, o + plane.YAxis * axisMeters), Color.FromArgb(220, 60, 180, 80), 2);
+    args.Display.DrawLine(new Line(o, o + plane.ZAxis * axisMeters), Color.FromArgb(230, 60, 120, 220), 3);
+    args.Display.DrawPoint(o, PointStyle.RoundSimple, 4, Color.White);
+  }
 }
