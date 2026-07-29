@@ -82,7 +82,8 @@ const MOTUS = {
   ur10e: { guid: '84b06a7d-8a3d-46ec-968f-25e74c249ad1', name: 'Motus UR10e Robotiq', nick: 'UR10e', w: 74, h: 44,
     inputs: [],
     outputs: [{ name: 'Robot', nick: 'Rb', desc: 'Robot model with URDF kinematics chain' }] },
-  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 74, h: 124,
+  // w≥96: DropDownAttributes Cap strip; h gets +DROPDOWN_EXTRA_H in motusComponent.
+  tool: { guid: 'b7c4e2a1-9f3d-4b6e-8c1d-2a5f9e0b3d71', name: 'Motus Tool', nick: 'Tool', w: 96, h: 124,
     desc: 'TCP + Cap schema (face dropdown) + optional G/L or Rd+Bd. Cap ≠ ToolMode.',
     inputs: [
       { name: 'Name', nick: 'N', desc: 'Tool name', optional: false, text: 'gripper' },
@@ -149,7 +150,7 @@ const MOTUS = {
       { name: 'State', nick: 'Js', desc: 'Joint state', optional: false },
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
-  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 74, h: 104,
+  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 96, h: 104,
     desc: 'Quick planner: plane=LIN, joint=joint-linear/RRT. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model from Motus UR10e or Motus Robot', optional: false, typeId: PTYPE.robot },
@@ -168,7 +169,8 @@ const MOTUS = {
       { name: 'Status', nick: 'Msg', desc: 'Status message (read before controller handoff)', typeId: PTYPE.string },
       { name: 'Warnings', nick: 'W', desc: 'Capability / validation warnings', access: 1, typeId: PTYPE.string },
     ] },
-  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 74, h: 84,
+  // w≥96 for Play button min width; live h grows by BUTTON_EXTRA_H.
+  preview: { guid: 'd4a8f1c2-3e5b-4a7d-9c1e-8f2b6d4e0a91', name: 'Motus Preview', nick: 'Preview', w: 96, h: 84,
     inputs: [
       { name: 'Trajectory', nick: 'Tr', desc: 'Motus trajectory from Motus Plan (list concatenates sequential goals)', optional: false, access: 1, typeId: PTYPE.trajectory },
       { name: 'ShowStart', nick: 'SS', desc: 'Also preview the trajectory start pose as a ghost', optional: false, bool: true, typeId: PTYPE.boolean },
@@ -262,7 +264,7 @@ const MOTUS = {
       { name: 'SourceName', nick: 'Src', desc: 'Optional scene object name to hide while attached', optional: true, text: '' },
     ],
     outputs: [{ name: 'Attach', nick: 'A', desc: 'Attached body' }] },
-  toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 74, h: 84,
+  toolState: { guid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Motus Tool State', nick: 'ToolState', w: 96, h: 84,
     desc: 'End-effector state from Cap schema; Preset on-component; Width used when Custom',
     inputs: [
       { name: 'Tool', nick: 'Tl', desc: 'Motus Tool or Robot (uses Robot.Tool / bundled Cap schema)', optional: true },
@@ -291,7 +293,7 @@ const MOTUS = {
       WAIT: [{ name: 'Duration', nick: 'D', desc: 'SET/WAIT duration (s)', optional: true, number: 0, typeId: PTYPE.number }],
     },
     outputs: [{ name: 'Segment', nick: 'Seg', desc: 'Motion segment', typeId: PTYPE.segment }] },
-  progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program', nick: 'Program', w: 74, h: 144,
+  progPlan: { guid: '8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42', name: 'Motus Program', nick: 'Program', w: 96, h: 144,
     desc: 'Plan Motus Move sequence (Auto Plan or click Plan); LIN failures do not fall back to joint paths',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model', optional: false },
@@ -761,7 +763,7 @@ function motusComponent(key, x, y, wireMap, options = {}) {
   }
   if (spec.typeInputs?.[segType])
     inputDefs = [...inputDefs, ...spec.typeInputs[segType]];
-  // Adjust height by pin count.
+  // Adjust height by pin count (dropdown/Play chrome is live-only — budget via belowY / PLAN_*).
   if (spec.h && inputDefs.length)
     spec.h = Math.max(44, 24 + inputDefs.length * 20);
   const inputs = inputDefs.map((inp) => {
@@ -981,16 +983,34 @@ function motusScrub(x, y, value = 0, w = MOTUS.scrub.w) {
 }
 
 /**
- * Plan → Scrub → Preview spacing (hand-tuned GH clipboard on 02):
- *   Plan (px,py) → Scrub (+132,+76) → Preview (+373,+9)
+ * Plan → Scrub → Preview spacing (Cassis-measured live Bounds, 0.13.2):
+ * Button/dropdown chrome widens Plan/Preview (~±11) and adds ~28–36px height.
+ * Scrub must clear Preview's live left edge: scrubRight + gap < previewLeft.
+ *   Plan (px,py) → Scrub (+120,+88) → Preview (+420,+9)
  */
-const PLAN_SCRUB_DX = 132;
-const PLAN_SCRUB_DY = 76;
-const PLAN_PREVIEW_DX = 373;
+const BUTTON_EXTRA_H = 28;
+const DROPDOWN_EXTRA_H = 36;
+const PLAN_SCRUB_DX = 120;
+const PLAN_SCRUB_DY = 88;
+const PLAN_SCRUB_W = 200;
+const PLAN_PREVIEW_DX = 420;
 const PLAN_PREVIEW_DY = 9;
+const STACK_GAP = 24;
+/** Authored Preview pin height + Play button — use for stacking Waypoints/Export. */
+const PREVIEW_LAYOUT_H = 84 + BUTTON_EXTRA_H;
+
+/** Y just below an authored component after live Play/Replan button chrome. */
+function belowY(y, authoredH, gap = STACK_GAP) {
+  return y + authoredH + BUTTON_EXTRA_H + gap;
+}
+
+/** Y below Preview in a Plan→Scrub→Preview cluster. */
+function belowPreview(planY, gap = STACK_GAP) {
+  return planY + PLAN_PREVIEW_DY + PREVIEW_LAYOUT_H + gap;
+}
 
 function previewWithScrub(planX, planY, trajectoryRef, options = {}) {
-  const scrubW = options.scrubWidth ?? 220;
+  const scrubW = options.scrubWidth ?? PLAN_SCRUB_W;
   const scrub = motusScrub(planX + PLAN_SCRUB_DX, planY + PLAN_SCRUB_DY, options.scrubValue ?? 0, scrubW);
   const previewInputs = {
     Trajectory: [trajectoryRef],
@@ -1486,6 +1506,8 @@ function buildGraph(objects) {
   });
   const docId = id();
   const { fileName, description } = objects._meta;
+  // Optional per-example canvas framing (default = compact left band).
+  const view = objects._meta.view ?? { x: 400, y: 200, zoom: 0.75 };
   return `<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <Archive name="Root">
   <items count="1">
@@ -1525,8 +1547,8 @@ function buildGraph(objects) {
             <chunk name="Revisions"><items count="1">${item('RevisionCount', 'gh_int32', '3', '0')}</items></chunk>
             <chunk name="Projection">
               <items count="2">
-                ${item('Target', 'gh_drawing_point', '30', '\n                  <X>400</X>\n                  <Y>200</Y>\n                ')}
-                ${item('Zoom', 'gh_single', '5', '0.75')}
+                ${item('Target', 'gh_drawing_point', '30', `\n                  <X>${view.x}</X>\n                  <Y>${view.y}</Y>\n                `)}
+                ${item('Zoom', 'gh_single', '5', String(view.zoom))}
               </items>
             </chunk>
             <chunk name="Views"><items count="1">${item('ViewCount', 'gh_int32', '3', '0')}</items></chunk>
@@ -1736,32 +1758,39 @@ function ur10eRobot(x, y) {
 
 /** 01 — quick plan: sequential joint + TCP Pose LIN + Export / Waypoints / Preview (was 01+02+12). */
 function graph01() {
-  // Bands: title → robot | goals → plan/preview (right). Clear Y gaps between groups.
+  // Bands: title → robot | goals → plan/preview (right). Align Merge Y with Plan Goal for flat wires.
   const title = nativeScribble(40, -60, '01  Quick plan', 28);
   const note = nativePanel(420, -60, 'Auto Plan on. Scrub Preview when Status OK.', 'Note', 260, 40);
+  const planX = 560;
+  const planY = 200;
   const robot = ur10eRobot(40, 40);
-  const start = motusComponent('joints', 40, 180, {}, { jointValues: MOTION_START });
+  const start = motusComponent('joints', 40, 220, {}, { jointValues: MOTION_START });
   const goalJoint = motusComponent('joints', 40, 360, {}, { jointValues: GOAL_JOINTS });
-  const tcp = motusComponent('tcpPose', 240, 260, {
+  const tcp = motusComponent('tcpPose', 240, 340, {
     Robot: [outRef(robot.node, 'Robot')],
     State: [outRef(goalJoint.node, 'State')],
   });
   const uz = nativeUnitZ(40, 500);
   const ptLin = nativeConstructPoint(40, 560, [0.48, 0.18, 0.48]);
   const plLin = nativePlane(200, 560, ptLin.node.outputs[0], uz.node.outputs[0]);
-  const goalsMerge = nativeMerge(360, 400, [
+  const goalsMerge = nativeMerge(360, 220, [
     outRef(goalJoint.node, 'State'),
     outRef(tcp.node, 'Plane'),
     outRef(plLin.node, 'Plane'),
   ]);
-  const plan = motusComponent('plan', 560, 200, {
+  const plan = motusComponent('plan', planX, planY, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goalsMerge.node, 'Result')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(560, 200, outRef(plan.node, 'Trajectory'));
-  const waypoints = motusComponent('waypoints', 560 + PLAN_PREVIEW_DX, 380, { Trajectory: [outRef(plan.node, 'Trajectory')] });
-  const exp = motusComponent('export', 560 + PLAN_PREVIEW_DX, 540, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(planX, planY, outRef(plan.node, 'Trajectory'));
+  const stackX = planX + PLAN_PREVIEW_DX;
+  const waypoints = motusComponent('waypoints', stackX, belowPreview(planY), {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+  const exp = motusComponent('export', stackX, belowPreview(planY) + 100, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
   const gRobot = nativeGroup('Robot + start', [robot, start], GROUP_COLOUR.robot);
   const gGoals = nativeGroup('Goals (merge → Plan)', [goalJoint, tcp, { xml: uz.xml, node: uz.node }, ptLin, plLin, goalsMerge], GROUP_COLOUR.goals);
   const gOut = nativeGroup('Plan + preview', [plan, scrub, preview, waypoints, exp], GROUP_COLOUR.preview);
@@ -1872,15 +1901,20 @@ function graph03() {
     Base: [outRef(basePl.node, 'Plane')],
     Tool: [outRef(tool.node, 'Tool')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
-  const start = motusComponent('joints', 660, 240, {}, { jointValues: START_JOINTS });
-  const goal = motusComponent('joints', 660, 380, {}, { jointValues: GOAL_JOINTS });
-  const plan = motusComponent('plan', 880, 200, {
+  // Robot shows all pins (h≈204); keep joints clear of its live Bounds.
+  const start = motusComponent('joints', 660, 280, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 660, 420, {}, { jointValues: GOAL_JOINTS });
+  const planX = 900;
+  const planY = 200;
+  const plan = motusComponent('plan', planX, planY, {
     Robot: [outRef(robot.node, 'Robot')],
     Goal: [outRef(goal.node, 'State')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(880, 200, outRef(plan.node, 'Trajectory'));
-  const exp = motusComponent('export', 880 + PLAN_PREVIEW_DX, 400, { Trajectory: [outRef(plan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(planX, planY, outRef(plan.node, 'Trajectory'));
+  const exp = motusComponent('export', planX + PLAN_PREVIEW_DX, belowPreview(planY), {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
   const gPaths = nativeGroup('URDF + base', [urdfFile, basePl], GROUP_COLOUR.robot);
   const gTool = nativeGroup('Tool TCP + mesh', [
     tcpPt, { xml: ux.xml, node: ux.node }, tcpPl, meshPath, loadMesh, tool,
@@ -1952,13 +1986,17 @@ function graph04() {
     outRef(segCirc.node, 'Segment'),
     outRef(segSet.node, 'Segment'),
   ]);
-  const progPlan = motusComponent('progPlan', 820, 480, {
+  const progX = 820;
+  const progY = 480;
+  const progPlan = motusComponent('progPlan', progX, progY, {
     Robot: [outRef(robot.node, 'Robot')],
     Segments: [outRef(segsMerge.node, 'Result')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(820, 480, outRef(progPlan.node, 'Trajectory'));
-  const exp = motusComponent('export', 820 + PLAN_PREVIEW_DX, 680, { Trajectory: [outRef(progPlan.node, 'Trajectory')] });
+  const { scrub, preview } = previewWithScrub(progX, progY, outRef(progPlan.node, 'Trajectory'));
+  const exp = motusComponent('export', progX + PLAN_PREVIEW_DX, belowPreview(progY), {
+    Trajectory: [outRef(progPlan.node, 'Trajectory')],
+  });
 
   const gRobot = nativeGroup('Robot + start', [robot, start], GROUP_COLOUR.robot);
   const gPtp = nativeGroup('1 PTP', [ptpGoal, stateOpen, segPtp], GROUP_COLOUR.plan);
@@ -2076,48 +2114,54 @@ function graph06() {
 }
 
 /**
- * 07 — Author gripper → Tool Rd → Robot Tl → Program PTP (ToolMode Ramp open→closed) → Preview.
- * Cap=Robotiq2F85 supplies width schema/DefaultState(Open); Bd=j_left drives the authored joint.
+ * 07 — Compact L→R: boxes→gripper→Tool Rd→Robot→PTP Ramp→Preview (pinch).
+ * Opens framed on the full story (see meta.view). Cap=width schema; Bd=j_left.
  */
 function graph07() {
-  const title = nativeScribble(40, 40, '07 · URDF gripper Tool', 28);
+  const title = nativeScribble(40, -55, '07 · Gripper Tool pinch', 24);
   const note = nativePanel(
-    40,
-    80,
-    'Boxes → ULink/UJoint → Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl (ur10e_minimal). PTP Ramp Closed → scrub: fingers pinch. Wire any Rhino geo into ULink V.',
+    380,
+    -55,
+    'L→R: boxes→Assemble→Tool (Cap=schema, Bd=j_left)→Robot→PTP Ramp Closed. Scrub = pinch.',
     'Note',
-    560,
-    88,
+    420,
+    36,
   );
 
-  const xy = nativeXYPlane(40, 180);
-  const palmBox = nativeCenterBox(40, 220, outRef(xy.node, 'Plane'), [0.08, 0.06, 0.03]);
-  const leftBox = nativeCenterBox(40, 300, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
-  const rightBox = nativeCenterBox(40, 380, outRef(xy.node, 'Plane'), [0.02, 0.01, 0.06]);
+  // Tight columns — whole story fits one canvas frame.
+  const yPalm = 40;
+  const yL = 140;
+  const yR = 260;
 
-  const palm = motusComponent('urdfLink', 220, 220, {
+  const xy = nativeXYPlane(40, yPalm);
+  // Chunky boxes so pinch reads in the Rhino viewport (meters).
+  const palmBox = nativeCenterBox(40, yL, outRef(xy.node, 'Plane'), [0.12, 0.08, 0.04]);
+  const leftBox = nativeCenterBox(40, yR, outRef(xy.node, 'Plane'), [0.06, 0.025, 0.12]);
+  const rightBox = nativeCenterBox(40, yR + 110, outRef(xy.node, 'Plane'), [0.06, 0.025, 0.12]);
+
+  const palm = motusComponent('urdfLink', 170, yL, {
     Visual: [outRef(palmBox.node, 'Box')],
   }, { text: { Name: 'palm' } });
-  const left = motusComponent('urdfLink', 220, 300, {
+  const left = motusComponent('urdfLink', 170, yR, {
     Visual: [outRef(leftBox.node, 'Box')],
   }, { text: { Name: 'L' } });
-  const right = motusComponent('urdfLink', 220, 380, {
+  const right = motusComponent('urdfLink', 170, yR + 110, {
     Visual: [outRef(rightBox.node, 'Box')],
   }, { text: { Name: 'R' } });
 
-  const uz = nativeUnitZ(40, 480);
-  const leftOrigin = nativeConstructPoint(40, 540, [0, 0.035, 0]);
-  const rightOrigin = nativeConstructPoint(40, 600, [0, -0.035, 0]);
-  const leftAxis = nativeLineSdl(220, 520, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
-  const rightAxis = nativeLineSdl(220, 600, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const uz = nativeUnitZ(310, yPalm);
+  const leftOrigin = nativeConstructPoint(310, yL, [0, 0.045, 0]);
+  const rightOrigin = nativeConstructPoint(310, yR, [0, -0.045, 0]);
+  const leftAxis = nativeLineSdl(430, yL, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const rightAxis = nativeLineSdl(430, yR, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
 
-  const jLeft = motusComponent('urdfJoint', 400, 300, {
+  const jLeft = motusComponent('urdfJoint', 560, yPalm, {
     Axis: [outRef(leftAxis.node, 'Line')],
   }, {
     text: { Name: 'j_left', Type: 'Revolute', Parent: 'palm', Child: 'L' },
     numbers: { Lower: 0, Upper: 0.8 },
   });
-  const jRight = motusComponent('urdfJoint', 400, 460, {
+  const jRight = motusComponent('urdfJoint', 560, yPalm + 270, {
     Axis: [outRef(rightAxis.node, 'Line')],
   }, {
     text: {
@@ -2126,122 +2170,104 @@ function graph07() {
     numbers: { Lower: 0, Upper: 0.8, MimicMult: -1, MimicOffset: 0 },
   });
 
-  const linksMerge = nativeMerge(400, 200, [
+  const linksMerge = nativeMerge(760, yL, [
     outRef(palm.node, 'Link'),
     outRef(left.node, 'Link'),
     outRef(right.node, 'Link'),
   ]);
-  const jointsMerge = nativeMerge(560, 360, [
+  const jointsMerge = nativeMerge(760, yR, [
     outRef(jLeft.node, 'Joint'),
     outRef(jRight.node, 'Joint'),
   ]);
-  const assemble = motusComponent('urdfAssemble', 720, 240, {
+  const assemble = motusComponent('urdfAssemble', 900, yL + 20, {
     Links: [outRef(linksMerge.node, 'Result')],
     Joints: [outRef(jointsMerge.node, 'Result')],
   }, { text: { Name: 'demo_gripper', Tip: 'palm' } });
 
-  // Cap supplies Open/Closed width schema; Bd maps width → authored driver (not robotiq_* names).
-  const tool = motusComponent('tool', 900, 240, {
+  const tool = motusComponent('tool', 1060, yL, {
     Description: [outRef(assemble.node, 'Description')],
   }, { text: { Name: 'demo_gripper', Binding: 'j_left' }, toolCapabilities: 'Robotiq2F85' });
+  const stateClosed = motusComponent('toolState', 1060, yR + 40, {
+    Tool: [outRef(tool.node, 'Tool')],
+  }, { toolStatePreset: 'Closed' });
 
-  // Arm-only primitives — ur10e.urdf/.robotiq need mesh assets; minimal always previews.
-  const urdfFile = nativeFilePath(
-    720,
-    400,
-    absPath('examples/ur10e/ur10e_minimal.urdf'),
-  );
-  const robot = motusComponent('robot', 900, 400, {
+  // ur10e_minimal now ships primitive <visual>s (no DAE) so Preview shows arm + Rd gripper.
+  const armY = 520;
+  const urdfFile = nativeFilePath(900, armY, absPath('examples/ur10e/ur10e_minimal.urdf'));
+  const robot = motusComponent('robot', 1060, armY, {
     Path: [outRef(urdfFile.node, 'Path')],
     Tool: [outRef(tool.node, 'Tool')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
-
-  const start = motusComponent('joints', 1100, 280, {}, { jointValues: START_JOINTS });
-  const goal = motusComponent('joints', 1100, 400, {}, { jointValues: GOAL_JOINTS });
-  const stateClosed = motusComponent('toolState', 1100, 520, {
-    Tool: [outRef(tool.node, 'Tool')],
-  }, { toolStatePreset: 'Closed' });
-  // InitialToolState = Cap DefaultState (Open); Ramp lerps width → Closed over the PTP.
-  const segPtp = motusComponent('segment', 1280, 360, {
+  const start = motusComponent('joints', 1240, armY, {}, { jointValues: START_JOINTS });
+  const goal = motusComponent('joints', 1240, armY + 110, {}, { jointValues: GOAL_JOINTS });
+  const segPtp = motusComponent('segment', 1400, armY + 30, {
     Goal: [outRef(goal.node, 'State')],
     ToolState: [outRef(stateClosed.node, 'State')],
   }, { text: { Type: 'PTP' }, toolMode: 'Ramp' });
-  const prog = motusComponent('progPlan', 1460, 320, {
+  const progX = 1580;
+  const progY = armY + 10;
+  const prog = motusComponent('progPlan', progX, progY, {
     Robot: [outRef(robot.node, 'Robot')],
     Segments: [outRef(segPtp.node, 'Segment')],
     Start: [outRef(start.node, 'State')],
   });
-  const { scrub, preview } = previewWithScrub(1460, 320, outRef(prog.node, 'Trajectory'));
+  const { scrub, preview } = previewWithScrub(progX, progY, outRef(prog.node, 'Trajectory'));
 
-  const exportFolder = nativePanel(
-    720,
-    560,
-    absPath('examples'),
-    'Folder',
-    260,
-    40,
-  );
-  const urdfExport = motusComponent('urdfExport', 1000, 560, {
-    Description: [outRef(assemble.node, 'Description')],
-    Folder: [outRef(exportFolder.node, 'Text')],
-  }, { text: { Name: 'demo_gripper' } });
-
-  const gAuthor = nativeGroup('Box / Link / Joint', [
+  const gAuthor = nativeGroup('Author gripper', [
     { xml: xy.xml, node: xy.node },
     palmBox, leftBox, rightBox, palm, left, right,
     { xml: uz.xml, node: uz.node },
     { xml: leftOrigin.xml, node: leftOrigin.node },
     { xml: rightOrigin.xml, node: rightOrigin.node },
-    leftAxis, rightAxis,
-    jLeft, jRight,
+    leftAxis, rightAxis, jLeft, jRight, linksMerge, jointsMerge, assemble,
   ], GROUP_COLOUR.model);
-  const gTool = nativeGroup('Assemble → Tool Rd', [
-    linksMerge, jointsMerge, assemble, tool,
-  ], GROUP_COLOUR.tool);
-  const gPlan = nativeGroup('Robot Tl + Program', [
-    urdfFile, robot, start, goal, stateClosed, segPtp, prog, scrub, preview, exportFolder, urdfExport,
+  const gTool = nativeGroup('Tool Rd', [tool, stateClosed], GROUP_COLOUR.tool);
+  const gPlan = nativeGroup('Arm + Preview', [
+    urdfFile, robot, start, goal, segPtp, prog, scrub, preview,
   ], GROUP_COLOUR.preview);
 
   const objs = [
     title, note,
     { xml: xy.xml }, palmBox, leftBox, rightBox, palm, left, right,
     { xml: uz.xml }, { xml: leftOrigin.xml }, { xml: rightOrigin.xml }, leftAxis, rightAxis,
-    jLeft, jRight, linksMerge, jointsMerge, assemble, tool,
-    urdfFile, robot, start, goal, stateClosed, segPtp, prog, scrub, preview,
-    exportFolder, urdfExport,
+    jLeft, jRight, linksMerge, jointsMerge, assemble,
+    tool, stateClosed,
+    urdfFile, robot, start, goal, segPtp, prog, scrub, preview,
     gAuthor, gTool, gPlan,
   ];
   objs._meta = {
     fileName: '07_urdf_gripper_tool.ghx',
     description:
-      'ur10e_minimal + Center Box → ULink/UJoint/Assemble → Tool Rd (Cap=Robotiq2F85, Bd=j_left) → Robot Tl → Program PTP Ramp Closed → Preview (fingers pinch). Export URDF Write on Assemble D.',
+      'Boxes→ULink→UJoint→Assemble→Tool Rd (Cap schema, Bd=j_left)→ur10e_minimal→PTP Ramp Closed→Preview pinch.',
+    // Frame the full L→R story (not the default left-only Target).
+    view: { x: 1050, y: 340, zoom: 0.42 },
   };
   return buildGraph(objs);
 }
 
 function graph08() {
-  const title = nativeScribble(40, 40, '08 · Stewart TCP path', 28);
+  const title = nativeScribble(40, 20, '08 · Stewart TCP path', 28);
   const note = nativePanel(
-    40,
-    80,
-    'Sliders → Stewart → Plan TCP loop (heave + sway, ~±80 mm / ±100 mm Z) → Preview. Q = leg lengths (m). Drag Br/Pr; keep Lmin/Lmax if Status hits StrokeLimit.',
+    420,
+    20,
+    'Sliders → Stewart → Plan TCP loop → Preview. Q = leg lengths (m). Drag Br/Pr; keep Lmin/Lmax if Status hits StrokeLimit.',
     'Note',
-    560,
-    88,
+    480,
+    52,
   );
   const floatOpts = { digits: 3, interval: 0, w: 180 };
-  const br = nativeNumberSlider(40, 180, { ...floatOpts, value: 0.5, min: 0.2, max: 0.8, nick: 'Br' });
-  const pr = nativeNumberSlider(40, 220, { ...floatOpts, value: 0.3, min: 0.1, max: 0.6, nick: 'Pr' });
-  const lmin = nativeNumberSlider(40, 260, { ...floatOpts, value: 0.35, min: 0.2, max: 0.6, nick: 'Lmin' });
-  const lmax = nativeNumberSlider(40, 300, { ...floatOpts, value: 0.90, min: 0.5, max: 1.2, nick: 'Lmax' });
-  const stewart = motusComponent('stewart', 280, 220, {
+  const br = nativeNumberSlider(40, 100, { ...floatOpts, value: 0.5, min: 0.2, max: 0.8, nick: 'Br' });
+  const pr = nativeNumberSlider(40, 140, { ...floatOpts, value: 0.3, min: 0.1, max: 0.6, nick: 'Pr' });
+  const lmin = nativeNumberSlider(40, 180, { ...floatOpts, value: 0.35, min: 0.2, max: 0.6, nick: 'Lmin' });
+  const lmax = nativeNumberSlider(40, 220, { ...floatOpts, value: 0.90, min: 0.5, max: 1.2, nick: 'Lmax' });
+  const stewart = motusComponent('stewart', 280, 140, {
     BaseRadius: [outRef(br.node, 'Number')],
     PlatformRadius: [outRef(pr.node, 'Number')],
     MinStroke: [outRef(lmin.node, 'Number')],
     MaxStroke: [outRef(lmax.node, 'Number')],
   });
 
-  const uz = nativeUnitZ(520, 140);
+  const uz = nativeUnitZ(520, 100);
   // Closed TCP loop: large XY + Z heave (stroke-checked on classic Br=0.5/Pr=0.3).
   // Refined from hand-tuned GoalPts (0.2 Y / −0.1/−0.1 / Z=0.5) for a scrub-friendly return home.
   const pathPts = [
@@ -2257,19 +2283,23 @@ function graph08() {
   const planeRefs = [];
   for (let i = 0; i < pathPts.length; i++) {
     const [x, y, z] = pathPts[i];
-    const pt = nativeConstructPoint(520, 180 + i * 44, [x, y, z]);
-    const pl = nativePlane(640, 180 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    // Construct Point h≈64 — pitch 72 avoids AABB kisses.
+    const py = 160 + i * 72;
+    const pt = nativeConstructPoint(520, py, [x, y, z]);
+    const pl = nativePlane(640, py, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
     pathParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
     planeRefs.push(outRef(pl.node, 'Plane'));
   }
   const goalsMerge = nativeMerge(760, 260, planeRefs.slice(1));
-  const plan = motusComponent('plan', 900, 240, {
+  const planX = 900;
+  const planY = 200;
+  const plan = motusComponent('plan', planX, planY, {
     Robot: [outRef(stewart.node, 'Robot')],
     Start: [planeRefs[0]],
     Goal: [outRef(goalsMerge.node, 'Result')],
   });
-  const { scrub, preview } = previewWithScrub(1100, 220, outRef(plan.node, 'Trajectory'));
-  const waypoints = motusComponent('waypoints', 1100, 360, {
+  const { scrub, preview } = previewWithScrub(planX, planY, outRef(plan.node, 'Trajectory'));
+  const waypoints = motusComponent('waypoints', planX + PLAN_PREVIEW_DX, belowPreview(planY), {
     Trajectory: [outRef(plan.node, 'Trajectory')],
   });
 
@@ -2303,26 +2333,26 @@ function graph08() {
  * Logic asserted by Motus.NET Example09 + qa-smoke for N=6. N is the only structural knob.
  */
 function graphWalking({ n, label, fileName, description }) {
-  const title = nativeScribble(40, 40, label, 28);
+  const title = nativeScribble(40, 20, label, 28);
   const note = nativePanel(
-    40,
-    80,
-    'Slider N → Body → Leg → Mechanism → Walk Mech; Ground → Tn; Planes arc → gait Tr → Preview. Drag N (4–12) for hex/octo/… Green rings = planted feet.',
+    420,
+    20,
+    'N → Body → Leg → Mechanism → Walk; Ground → Tn; arc → Tr → Preview. Drag N (4–12). Green rings = planted feet.',
     'Note',
-    560,
-    88,
+    480,
+    52,
   );
-  const uz = nativeUnitZ(40, 180);
-  const nSlider = nativeNumberSlider(200, 140, { value: n, min: 4, max: 12, nick: 'N', w: 180 });
-  const groundOrigin = nativeConstructPoint(200, 200, [0.22, 0, 0]);
-  const ground = motusComponent('terrainPatch', 400, 200, {
+  const uz = nativeUnitZ(40, 100);
+  const nSlider = nativeNumberSlider(200, 100, { value: n, min: 4, max: 12, nick: 'N', w: 180 });
+  const groundOrigin = nativeConstructPoint(200, 180, [0.22, 0, 0]);
+  const ground = motusComponent('terrainPatch', 400, 180, {
     Origin: [outRef(groundOrigin.node, 'Point')],
   }, { numbers: { Amp: 0.02 } });
-  const body = motusComponent('body', 560, 140, {
+  const body = motusComponent('body', 560, 100, {
     N: [outRef(nSlider.node, 'Number')],
   });
-  const leg = motusComponent('leg', 560, 300, {});
-  const mech = motusComponent('mechanism', 700, 200, {
+  const leg = motusComponent('leg', 560, 280, {});
+  const mech = motusComponent('mechanism', 700, 180, {
     Body: [outRef(body.node, 'Body')],
     Leg: [outRef(leg.node, 'Leg')],
   });
@@ -2334,18 +2364,21 @@ function graphWalking({ n, label, fileName, description }) {
     const px = 0.22 + 0.18 * Math.cos(a);
     const py = 0.18 * Math.sin(a);
     // XY path only — Walk samples terrain height under the body.
-    const pt = nativeConstructPoint(40, 300 + i * 44, [px, py, 0]);
-    const pl = nativePlane(140, 300 + i * 44, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
+    const rowY = 300 + i * 72;
+    const pt = nativeConstructPoint(40, rowY, [px, py, 0]);
+    const pl = nativePlane(140, rowY, outRef(pt.node, 'Point'), outRef(uz.node, 'Vector'));
     arcParts.push({ xml: pt.xml, node: pt.node }, { xml: pl.xml, node: pl.node });
     planeRefs.push(outRef(pl.node, 'Plane'));
   }
   const planesMerge = nativeMerge(280, 460, planeRefs);
-  const walk = motusComponent('walk', 40, 720, {
+  // Arc rows end at 300+(ARC_N-1)*72; Walk sits clear below.
+  const walkY = 300 + ARC_N * 72 + 40;
+  const walk = motusComponent('walk', 40, walkY, {
     Mechanism: [outRef(mech.node, 'Mechanism')],
     Planes: [outRef(planesMerge.node, 'Result')],
     Terrain: [outRef(ground.node, 'Mesh')],
   }, { numbers: { Lift: 0.06 } });
-  const { scrub, preview } = previewWithScrub(560, 720, outRef(walk.node, 'Trajectory'));
+  const { scrub, preview } = previewWithScrub(560, walkY, outRef(walk.node, 'Trajectory'));
   const gModel = nativeGroup('Walking path', [
     { xml: uz.xml, node: uz.node },
     nSlider,
@@ -2412,4 +2445,38 @@ for (const buildFn of graphs) {
   console.log('wrote', meta.fileName);
 }
 
+/** Authored Bounds AABB check (live chrome can still grow — Cassis verifies after load). */
+function assertAuthoredOverlaps() {
+  const files = fs.readdirSync(outDir).filter((f) => f.endsWith('.ghx')).sort();
+  let failed = 0;
+  for (const f of files) {
+    const xml = fs.readFileSync(path.join(outDir, f), 'utf8');
+    const objs = [];
+    for (const part of xml.split(/<chunk name="Object"/).slice(1)) {
+      const nameM = part.match(/<item name="Name"[^>]*>([^<]*)<\/item>/);
+      const nickM = part.match(/<item name="NickName"[^>]*>([^<]*)<\/item>/);
+      const bM = part.match(/<item name="Bounds"[^>]*>\s*<X>([^<]*)<\/X>\s*<Y>([^<]*)<\/Y>\s*<W>([^<]*)<\/W>\s*<H>([^<]*)<\/H>/);
+      if (!nameM || !bM || nameM[1] === 'Group') continue;
+      objs.push({ name: nameM[1], nick: nickM?.[1] ?? '', x: +bM[1], y: +bM[2], w: +bM[3], h: +bM[4] });
+    }
+    const hits = [];
+    for (let i = 0; i < objs.length; i++) {
+      for (let j = i + 1; j < objs.length; j++) {
+        const a = objs[i];
+        const b = objs[j];
+        const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+        const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+        if (ix > 2 && iy > 2) hits.push(`${a.nick || a.name}×${b.nick || b.name}(${ix | 0}x${iy | 0})`);
+      }
+    }
+    if (hits.length) {
+      failed += hits.length;
+      console.error(`OVERLAP ${f}:`, hits.join(' | '));
+    }
+  }
+  if (failed) throw new Error(`authored Bounds overlaps: ${failed}`);
+  console.log('authored Bounds: no overlaps');
+}
+
+assertAuthoredOverlaps();
 console.log('Done.');

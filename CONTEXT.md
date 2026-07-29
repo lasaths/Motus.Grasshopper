@@ -23,8 +23,8 @@ Example stages stack as horizontal bands with a clear vertical gap; wires still 
 _Avoid_: overlapping columns, nested groups; one giant Moves blob with long vertical tool-state wires
 
 **Plan–Scrub–Preview**:
-Fixed relative spacing in the example generator: Scrub between Plan and Preview (not stacked above Preview). Deltas from Plan origin: Scrub (+132,+76), Preview (+373,+9). Examples set Motus Preview `SS`/`ShowStart` on, and UR10e / Motus Robot viewport preview off (`Hidden`), so only Preview draws the robot.
-_Avoid_: Scrub overlapping Plan pins; double robot preview from UR10e + Preview
+Fixed relative spacing in the example generator: Scrub between Plan and Preview (not stacked above Preview). Deltas from Plan origin: Scrub (+120,+88, w=200), Preview (+420,+9) — sized so live Play/Cap chrome does not collide with Scrub. Examples set Motus Preview `SS`/`ShowStart` on, and UR10e / Motus Robot viewport preview off (`Hidden`), so only Preview draws the robot.
+_Avoid_: Scrub overlapping Preview Bounds; double robot preview from UR10e + Preview
 
 **Scribble title**:
 A short canvas title for an example (mono font). Not a substitute for component tooltips.

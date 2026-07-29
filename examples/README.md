@@ -32,7 +32,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `04_motion_program.ghx` | PTP + LIN + CIRC + SET → Motus Program → Preview / Export |
 | `05_serial_reach.ghx` | Motus Serial Chain → Motus Reach Samples (preview only, no Plan) |
 | `06_turntable_group.ghx` | UR10e + turntable: GH fixture box → Robot Attach on turntable_link (TreeFK); TCP tracks spoke |
-| `07_urdf_gripper_tool.ghx` | Author Boxes→ULink→Tool Rd (Cap+Bd)→PTP Ramp; scrub fingers pinch |
+| `07_urdf_gripper_tool.ghx` | Author gripper → Tool Rd (Cap=width schema, Bd=j_left) → PTP Ramp pinch |
 | `08_stewart_tcp_path.ghx` | Motus Stewart → Plan TCP path (leg lengths in meters) |
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 

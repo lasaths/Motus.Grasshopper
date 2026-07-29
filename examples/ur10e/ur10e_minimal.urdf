@@ -2,25 +2,80 @@
 <!-- Minimal UR10e serial chain for Motus demos.
      Joint origins from Universal Robots default_kinematics.yaml (ur10e).
      Source: https://github.com/UniversalRobots/Universal_Robots_ROS2_Description
-     License: BSD-3-Clause (see LICENSE in this folder). -->
+     License: BSD-3-Clause (see LICENSE in this folder).
+     Visuals: simple primitives so Motus Preview has a readable arm without DAE assets. -->
 <robot name="ur10e_minimal">
-  <link name="base_link"/>
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.08"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.08"/></geometry>
+    </collision>
+  </link>
   <link name="shoulder_link">
+    <visual>
+      <origin xyz="0 0 0.09" rpy="0 0 0"/>
+      <geometry><cylinder length="0.14" radius="0.10"/></geometry>
+    </visual>
     <collision>
       <origin xyz="0 0 0.09" rpy="0 0 0"/>
       <geometry><cylinder length="0.14" radius="0.10"/></geometry>
     </collision>
   </link>
   <link name="upper_arm_link">
+    <!-- Link stretches toward elbow at y=-0.6127 -->
+    <visual>
+      <origin xyz="0 -0.306" rpy="0 0 0"/>
+      <geometry><box size="0.12 0.56 0.12"/></geometry>
+    </visual>
     <collision>
-      <origin xyz="0 0 0.28" rpy="0 0 0"/>
-      <geometry><box size="0.14 0.14 0.56"/></geometry>
+      <origin xyz="0 -0.306" rpy="0 0 0"/>
+      <geometry><box size="0.12 0.56 0.12"/></geometry>
     </collision>
   </link>
-  <link name="forearm_link"/>
-  <link name="wrist_1_link"/>
-  <link name="wrist_2_link"/>
-  <link name="tool0"/>
+  <link name="forearm_link">
+    <visual>
+      <origin xyz="0 -0.285" rpy="0 0 0"/>
+      <geometry><box size="0.10 0.52 0.10"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.285" rpy="0 0 0"/>
+      <geometry><box size="0.10 0.52 0.10"/></geometry>
+    </collision>
+  </link>
+  <link name="wrist_1_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.05"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.05"/></geometry>
+    </collision>
+  </link>
+  <link name="wrist_2_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.045"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.10" radius="0.045"/></geometry>
+    </collision>
+  </link>
+  <link name="tool0">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.06" radius="0.04"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder length="0.06" radius="0.04"/></geometry>
+    </collision>
+  </link>
   <joint name="shoulder_pan" type="revolute">
     <parent link="base_link"/><child link="shoulder_link"/>
     <origin xyz="0 0 0.1807" rpy="0 0 0"/><axis xyz="0 0 1"/>
