@@ -614,6 +614,15 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
         Fail("Cap=Robotiq2F85 must resolve Motus.NET singleton");
     if (Motus.GH.ToolCapContract.TryParseSchema("AcmeGripper", out _))
         Fail("Unknown Cap must fail parse");
+    if (!Motus.GH.ToolCapContract.TryParseSchema("Custom", out var customCaps, 0, 0.12, 0.12) ||
+        customCaps is null ||
+        customCaps.Parameters.All(p => p.Name != "width") ||
+        Math.Abs(customCaps.Parameters.First(p => p.Name == "width").Max - 0.12) > 1e-12)
+        Fail("Cap=Custom must build width schema from bounds");
+    if (Motus.GH.ToolCapContract.TryParseSchema("Custom", out _, 0.2, 0.1, 0.1))
+        Fail("Cap=Custom with Wmin>=Wmax must fail parse");
+    if (Motus.GH.ToolCapContract.Normalize("AcmeGripper") != Motus.GH.ToolCapContract.None)
+        Fail("Normalize must fail-closed unknown Cap → None");
 
     var bare = new ToolDefinition("tool", Frame.Identity);
     if (Motus.GH.ToolCapContract.TryResolveForToolState(bare, toolOrRobotWired: true, out _, out var wiredErr, out _))
@@ -630,7 +639,41 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     if (!Motus.GH.ToolCapContract.TryResolveForToolState(capped, toolOrRobotWired: true, out var okCaps, out _, out var okWarn)
         || !ReferenceEquals(okCaps, ToolCapabilities.Robotiq2F85) || okWarn is not null)
         Fail("Wired Cap=Robotiq2F85 Tool State must succeed silently");
-    Ok("Tool Cap contract: no name-sneak; wired Cap-less errors; unwired warns");
+    var customCapped = new ToolDefinition("acme", Frame.Identity, null, customCaps);
+    if (!Motus.GH.ToolCapContract.TryResolveForToolState(customCapped, toolOrRobotWired: true, out var customOk, out _, out var customWarn)
+        || customOk is null || customWarn is not null)
+        Fail("Wired Cap=Custom Tool State must succeed silently");
+    Ok("Tool Cap contract: None|Robotiq|Custom; unknown fails; unwired warns");
+}
+
+// TL-009: Mechanism URDF XML round-trip (ToolGoo.Write/Read uses UrdfWriter.ToXml/TryParse)
+{
+    var grip = RobotDescription.Assemble(
+        "grip",
+        [
+            new UrdfLink("palm", visuals: [UrdfGeometry.Box(0.08, 0.04, 0.02)]),
+            new UrdfLink("L", visuals: [UrdfGeometry.Box(0.02, 0.01, 0.04)]),
+        ],
+        [
+            new UrdfJoint("j_left", "revolute", "palm", "L", 0, 0, 0, 0, 0, 1, 0, 0.8),
+        ],
+        tipLink: "palm");
+    var xml = UrdfWriter.ToXml(grip, inlineMeshes: true);
+    if (!UrdfWriter.TryParse(xml, out var loaded, out var parseErrs) || loaded is null)
+        Fail($"Mechanism UrdfWriter round-trip failed: {string.Join("; ", parseErrs)}");
+    if (loaded.Joints.Count != 1 ||
+        !string.Equals(loaded.Joints[0].Name, "j_left", StringComparison.Ordinal))
+        Fail("Mechanism joint round-trip");
+    if (!string.Equals(loaded.TipLink, "palm", StringComparison.Ordinal))
+        Fail("Mechanism tip round-trip");
+    var binding = ToolParameterBinding.WidthBinding("j_left", 0.1, 0.8);
+    var tool = new ToolDefinition("custom_grip", Frame.Identity, null, ToolCapabilities.WidthSchema(0, 0.1, 0.1))
+    {
+        Bindings = [binding]
+    };
+    if (tool.Bindings is not { Count: 1 })
+        Fail("Custom Cap tool must keep Bindings for TL-009");
+    Ok("TL-009 Mechanism persists via UrdfWriter XML (ToolGoo path)");
 }
 
 // Wave 2: ToolParameterBinding width→driver + TreeFK mimic moves finger tip
@@ -898,7 +941,7 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     Ok("SerialKinematicTrees + TreeFK + ReachSampling (64 TCP samples)");
 }
 
-// Wave 2: Joint Table branching — Plan DOF = tip path; limits must Validate
+// Wave 2: Joint Table branching — tip path + AllDrivers promote; numerical IK Status names reason
 {
     var tree = JointTableTrees.FromRows(new[]
     {
@@ -923,15 +966,28 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         Fail("Tip-path home must Validate against tip limits (premortem AxisCount/limits tiger)");
     if (tree.DriverCount == tipLeft.Chain.Joints.Length)
         Fail("Branching tree should have more drivers than one tip path");
+
+    var allLayout = Motus.GH.Urdf.PlanDofComposer.TipThenSideBranches(
+        tree, tipLeft.JointNames, "left", excludeTipDescendants: true);
+    if (allLayout.JointNames.Count != 3)
+        Fail($"Joint Table AllDrivers layout expected 3 axes, got {allLayout.JointNames.Count}");
+    if (allLayout.TipAxisCount != 2)
+        Fail($"Joint Table AllDrivers tip count expected 2, got {allLayout.TipAxisCount}");
+    if (!string.Equals(allLayout.JointNames[0], tipLeft.JointNames[0], StringComparison.OrdinalIgnoreCase) ||
+        !string.Equals(allLayout.JointNames[1], tipLeft.JointNames[1], StringComparison.OrdinalIgnoreCase))
+        Fail("AllDrivers must keep tip joints first");
+    if (!allLayout.JointNames.Any(n => string.Equals(n, "j2", StringComparison.OrdinalIgnoreCase)))
+        Fail("AllDrivers must include side-branch driver j2");
+
     var mob = new MobilityModel.HolonomicSE2(1, 2, Math.PI / 2);
     if (Math.Abs(mob.BaseFrame.X - 1) > 1e-9 || Math.Abs(mob.BaseFrame.Y - 2) > 1e-9)
         Fail("HolonomicSE2 base frame XY");
     var rail = SerialKinematicTrees.FromLengths(new[] { 1.0, 0.3, 0.3, 0.2, 0.15, 0.1, 0.08 }, rail: true);
     var tip = rail.ExtractSerialTip("base_link", "tool0");
-    var limits = new List<JointLimit>(rail.DriverCount);
-    for (var i = 0; i < rail.DriverCount; i++)
+    var limits = new List<JointLimit>(tip.Chain.Joints.Length);
+    foreach (var name in tip.JointNames)
     {
-        var j = rail.Joints[rail.DriverJointIndices[i]];
+        var j = rail.Joints.First(jj => string.Equals(jj.Name, name, StringComparison.OrdinalIgnoreCase));
         limits.Add(new JointLimit(j.Lower, j.Upper, Math.PI, Math.PI * 2));
     }
     var preset = new RobotPreset
@@ -946,7 +1002,18 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
     };
     if (KinematicsResolver.CreateInverseKinematics(preset, tip.Chain) is not NumericalInverseKinematics)
         Fail("Rail 7-DOF must use numerical IK, not UR analytic");
-    Ok("Wave 2 JointTable tip-path Validate + Mobility SE2 + rail numerical IK");
+    var railRobot = new RobotModel(preset);
+    var far = new CartesianPose(new Frame(50, 0, 0));
+    var reach = new CartesianGoalSolver().TryReach(
+        railRobot, far, CartesianGoalSolver.EnumerateDefaultSeeds(new JointState(new double[preset.AxisCount]), railRobot), tip.Chain);
+    if (reach.Success)
+        Fail("Far rail goal should fail IK");
+    if (!reach.Errors.Any(e =>
+            e.Contains("IK NoConvergence", StringComparison.Ordinal) ||
+            e.Contains("IK SingularJacobian", StringComparison.Ordinal) ||
+            e.Contains("IK InvalidInput", StringComparison.Ordinal)))
+        Fail($"Numerical IK Status must name reason, got: {string.Join("; ", reach.Errors)}");
+    Ok("Wave 2 JointTable tip-path + AllDrivers layout + Mobility SE2 + rail IK Status");
 }
 
 // Legged (Family=legged): tip-path plan + TreeDriverHome fill + gait (HI-005/006)

@@ -289,9 +289,9 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
                 }
                 else if (toolGoo.Value.Bindings is { Count: > 0 })
                 {
-                    // TL-009: Mechanism is live-wire only — internalized Tool keeps Cap/Bindings but drops Rd.
+                    // TL-009 fallback: Cap/Bindings without Mechanism (pre-0.15 Internalise or failed reload).
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                        "Tool has Bindings but no live Description (Rd) — re-wire Motus Tool→Tl; internalized Tool drops the mechanism.");
+                        "Tool has Bindings but no Description (Rd) — re-wire Motus Tool→Tl or re-Internalise Tool (Mechanism persists via URDF XML).");
                 }
             }
 

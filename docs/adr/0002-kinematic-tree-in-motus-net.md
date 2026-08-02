@@ -57,8 +57,9 @@ URDF load and GH **Motus Serial Chain** both build the **same** Motus.NET `Kinem
 
 ### Branching vs Plan (Wave 2)
 
-- Full `KinematicTree` may branch; **Motus Plan / Joint State** use `ExtractSerialTip` along the Tip link path.
-- `AxisCount` and `JointLimits` must match tip-path length (not `tree.DriverCount`). Side-branch drivers are TreeFK/preview-only until tree planning exists.
+- Full `KinematicTree` may branch; default **Motus Plan / Joint State** use `ExtractSerialTip` along the Tip link path.
+- `AxisCount` and `JointLimits` must match the active Plan DOF (tip path, or tip + side branches when AllDrivers).
+- Side-branch drivers are TreeFK/preview-only unless **AllDrivers** is enabled on **Motus Robot** or **Motus Joint Table** (shared `PlanDofComposer` tip-first layout; tip-descendant tool knuckles stay off Plan).
 
 ### Out of scope
 
@@ -74,6 +75,10 @@ URDF load and GH **Motus Serial Chain** both build the **same** Motus.NET `Kinem
 - Wave 1 GH assemble must target Motus.NET tree construction; perf budgets constrain scrub/preview and reach UX.
 - Gate 0 is an API freeze **intent** for Motus.NET; Grasshopper Wave 0 does not implement Motus.NET kinematics.
 - Mobility / SE(2) / climbing remain documented extension points until a later wave.
+
+### Amendment: AllDrivers Plan DOF (Motus Robot + Joint Table)
+
+Optional **AllDrivers** raises Plan `AxisCount` / `JointNames` to tip-path joints first, then non-tip side-branch drivers (excluding tip descendants). Plane/LIN still tip-IK with branches held; joint goals move side branches. Motus.NET planners already key off `AxisCount > tipN` — no new planner stack.
 
 ### Amendment: typed Link/Joint GH goo (structural authoring)
 

@@ -3,13 +3,15 @@ using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Data;
 using Motus.GH.Rhino;
+using Motus.GH.Urdf;
 using Rhino.Geometry;
 
 namespace Motus.GH.Components;
 
 /// <summary>
 /// Wave 2: one Joint Table → Motus.NET tree (branching OK). Not Link×N spaghetti.
-/// Plan/Joint State use the <b>tip path</b> only; full tree stays on goo for TreeFK preview.
+/// Plan/Joint State use the tip path by default; optional AllDrivers promotes side branches
+/// (same tip-first layout as Motus Robot AllDrivers).
 /// </summary>
 public sealed class MotusJointTableComponent : RobotSourceComponentBase
 {
@@ -17,7 +19,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         : base(
             "Motus Joint Table",
             "JointTbl",
-            "Build a Motus robot from a joint table (parent/child/type/origin). Plan uses tip path; side branches are TreeFK preview only.",
+            "Build a Motus robot from a joint table (parent/child/type/origin). Plan uses tip path; optional AllDrivers promotes side branches.",
             "tree-structure")
     {
     }
@@ -38,9 +40,16 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddPlaneParameter("Base", "B", "Optional base frame (ignored when BaseSE2 wired)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Home", "Q", "Optional home q along tip path (Plan/Joint State order)", GH_ParamAccess.list);
+        p.AddNumberParameter("Home", "Q", "Optional home q along Plan DOF order (tip first; + side branches when AllDrivers)", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("BaseSE2", "SE2", "Optional holonomic base goal X, Y, Yaw(rad) — also used as preview base frame", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter(
+            "AllDrivers",
+            "All",
+            "When true, Plan/Joint State = tip path + side-branch drivers (same layout as Motus Robot AllDrivers). Tip-descendant tools stay off Plan. Default tip path only.",
+            GH_ParamAccess.item,
+            false);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -77,6 +86,8 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
         da.GetDataList(9, home);
         var baseSe2 = new List<double>();
         da.GetDataList(10, baseSe2);
+        var allDrivers = false;
+        da.GetData(11, ref allDrivers);
 
         var n = parents.Count;
         if (children.Count != n || types.Count != n || ox.Count != n)
@@ -109,19 +120,41 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             tipLink = tipLink.Trim();
 
             var tip = tree.ExtractSerialTip(root, tipLink);
-            // Plan contract: AxisCount + limits must match tip-path actuated joints only.
-            var limits = LimitsAlongTip(tree, tip.JointNames);
-            if (limits.Count != tip.Chain.Joints.Length)
+            IReadOnlyList<JointLimit> limits;
+            IReadOnlyList<string>? jointNames = null;
+            int axisCount;
+            string sourceNote;
+
+            if (allDrivers && tree.DriverCount > tip.Chain.Joints.Length)
             {
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                    $"Tip path joint count mismatch ({limits.Count} vs {tip.Chain.Joints.Length}).");
-                return;
+                // Joint Table has no tip-mounted tool filter by default — still exclude tip descendants
+                // so a later grafted tool stays off Plan (parity with Motus Robot AllDrivers).
+                var layout = PlanDofComposer.TipThenSideBranches(
+                    tree, tip.JointNames, tipLink, excludeTipDescendants: true);
+                limits = layout.Limits;
+                jointNames = layout.JointNames;
+                axisCount = layout.JointNames.Count;
+                sourceNote = "Motus Joint Table; tip + side-branch drivers";
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    $"AllDrivers: Plan has {axisCount} axes (tip {layout.TipAxisCount} + side branches). Plane/LIN = tip IK (branches held); joint goals move side branches.");
+            }
+            else
+            {
+                limits = LimitsAlongTip(tree, tip.JointNames);
+                axisCount = tip.Chain.Joints.Length;
+                sourceNote = "Motus Joint Table";
+                if (tree.DriverCount != tip.Chain.Joints.Length)
+                {
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                        $"Tree has {tree.DriverCount} drivers; Plan/Joint State use tip path '{tipLink}' ({tip.Chain.Joints.Length} axes). Side branches are TreeFK preview only (enable AllDrivers to promote).");
+                }
             }
 
-            if (tree.DriverCount != tip.Chain.Joints.Length)
+            if (limits.Count != axisCount)
             {
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                    $"Tree has {tree.DriverCount} drivers; Plan/Joint State use tip path '{tipLink}' ({tip.Chain.Joints.Length} axes). Side branches are TreeFK preview only.");
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                    $"Plan DOF joint count mismatch ({limits.Count} vs {axisCount}).");
+                return;
             }
 
             var preset = new RobotPreset
@@ -129,16 +162,18 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
                 Manufacturer = RobotManufacturer.Unknown,
                 ModelName = "joint_table",
                 Family = "serial",
-                AxisCount = tip.Chain.Joints.Length,
+                AxisCount = axisCount,
                 JointLimits = limits,
                 BaseFrame = BaseFrame.Identity,
                 ToolFrame = tip.TipToolOffset is { } off
                     ? new ToolFrame(off, "tool")
                     : ToolFrame.Identity,
-                SourceNote = "Motus Joint Table",
+                SourceNote = sourceNote,
             };
 
-            var model = new RobotModel(preset);
+            var model = jointNames is null
+                ? new RobotModel(preset)
+                : new RobotModel(preset, collisionModel: null, jointNames);
             var goo = new RobotModelGoo(model)
             {
                 Chain = tip.Chain,
@@ -173,7 +208,19 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             if (tree.DriverCount > tip.Chain.Joints.Length)
             {
                 var fullQ = new double[tree.DriverCount];
-                if (home.Count > 0)
+                if (home.Count > 0 && jointNames is not null)
+                {
+                    var byName = new Dictionary<string, double>(jointNames.Count, StringComparer.OrdinalIgnoreCase);
+                    for (var i = 0; i < jointNames.Count && i < home.Count; i++)
+                        byName[jointNames[i]] = home[i];
+                    for (var di = 0; di < tree.DriverCount; di++)
+                    {
+                        var jName = tree.Joints[tree.DriverJointIndices[di]].Name;
+                        if (byName.TryGetValue(jName, out var v))
+                            fullQ[di] = v;
+                    }
+                }
+                else if (home.Count > 0)
                 {
                     var byName = new Dictionary<string, double>(tip.JointNames.Count, StringComparer.OrdinalIgnoreCase);
                     for (var i = 0; i < tip.JointNames.Count && i < home.Count; i++)

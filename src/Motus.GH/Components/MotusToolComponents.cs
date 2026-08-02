@@ -41,7 +41,7 @@ public sealed class MotusToolComponent : MotusComponentBase
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Next: Tl->Motus Robot Tool Tl",
-        "Note: Cap dropdown = schema (None|Robotiq2F85); Bd maps width→driver when Rd wired",
+        "Note: Cap dropdown = schema (None|Robotiq2F85|Custom); Bd maps width→driver when Rd wired",
         "Wire: optional Motus Load Mesh to Geometry G (legacy Cap+STL)",
         "Wire: optional Motus Urdf Assemble Rd to Description Rd (actuated mechanism)",
     ];
@@ -86,8 +86,29 @@ public sealed class MotusToolComponent : MotusComponentBase
         p.AddTextParameter(
             "Binding",
             "Bd",
-            "Driver joint for Cap width when Rd wired (default robotiq_left_knuckle for Cap=Robotiq2F85)",
+            "Driver joint for Cap width when Rd wired (default robotiq_left_knuckle for Cap=Robotiq2F85; required for Cap=Custom)",
             GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter(
+            "WidthMin",
+            "Wmin",
+            "Cap=Custom jaw width min (m)",
+            GH_ParamAccess.item,
+            0);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter(
+            "WidthMax",
+            "Wmax",
+            "Cap=Custom jaw width max / open (m)",
+            GH_ParamAccess.item,
+            0.085);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter(
+            "ClosedDriver",
+            "Cd",
+            "Cap=Custom closed driver value (rad or m) at width=Wmin; default 0.8",
+            GH_ParamAccess.item,
+            ToolParameterBinding.Robotiq2F85ClosedDriverRadians);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -160,6 +181,9 @@ public sealed class MotusToolComponent : MotusComponentBase
         var tcp = Plane.WorldXY;
         var geomPlane = Plane.WorldXY;
         var bindingJoint = "";
+        var widthMin = 0.0;
+        var widthMax = 0.085;
+        var closedDriver = ToolParameterBinding.Robotiq2F85ClosedDriverRadians;
         IGH_GeometricGoo? geo = null;
         RobotDescriptionGoo? descriptionGoo = null;
 
@@ -170,17 +194,21 @@ public sealed class MotusToolComponent : MotusComponentBase
         da.GetData(3, ref geomPlane);
         da.GetData(4, ref descriptionGoo);
         da.GetData(5, ref bindingJoint);
+        da.GetData(6, ref widthMin);
+        da.GetData(7, ref widthMax);
+        da.GetData(8, ref closedDriver);
 
         var mechanism = descriptionGoo?.Value;
+        var capNorm = ToolCapContract.Normalize(_cap);
 
-        if (!ToolCapContract.TryParseSchema(_cap, out var caps))
+        if (!ToolCapContract.TryParseSchema(_cap, out var caps, widthMin, widthMax, widthMax))
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                "Cap must be None or Robotiq2F85 (parameter schema for Tool State / export).");
+                "Cap must be None, Robotiq2F85, or Custom with finite Wmin<Wmax (parameter schema for Tool State / export).");
             return;
         }
 
-        Message = ToolCapContract.Normalize(_cap);
+        Message = capNorm;
 
         Frame tcpFrame;
         if (tcpWired && tcp.IsValid)
@@ -229,7 +257,9 @@ public sealed class MotusToolComponent : MotusComponentBase
             }
         }
 
-        if (!TryResolveBindings(mechanism, caps, bindingJoint, out var bindings, out var bindingError))
+        if (!TryResolveBindings(
+                mechanism, caps, capNorm, bindingJoint, widthMax, closedDriver,
+                out var bindings, out var bindingError))
         {
             _previewMeshes = [];
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, bindingError!);
@@ -247,9 +277,6 @@ public sealed class MotusToolComponent : MotusComponentBase
         _previewMeshes = geometry is null
             ? []
             : CollisionViewportPreview.MeshesFor(geometry);
-        if (mechanism is not null)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "Description (Rd) is live-wire only — Internalise on Tool drops the mechanism; keep Rd→Tool→Robot Tl.");
         da.SetData(0, new ToolGoo(tool) { Mechanism = mechanism });
     }
 
@@ -284,13 +311,26 @@ public sealed class MotusToolComponent : MotusComponentBase
     private static bool TryResolveBindings(
         RobotDescription? mechanism,
         ToolCapabilities? caps,
+        string capNorm,
         string? bindingJoint,
+        double openWidthMeters,
+        double closedDriverValue,
         out IReadOnlyList<ToolDriverBinding>? bindings,
         out string? error)
     {
         bindings = null;
         error = null;
         if (mechanism is null) return true;
+
+        if (capNorm == ToolCapContract.None)
+        {
+            if (!string.IsNullOrWhiteSpace(bindingJoint))
+            {
+                error = "Cap=None cannot use Binding (Bd) — set Cap to Robotiq2F85 or Custom.";
+                return false;
+            }
+            return true;
+        }
 
         if (!string.IsNullOrWhiteSpace(bindingJoint))
         {
@@ -301,15 +341,35 @@ public sealed class MotusToolComponent : MotusComponentBase
                 return false;
             }
 
-            bindings =
-            [
-                new ToolDriverBinding(
-                    Parameter: "width",
-                    DriverJoint: joint,
-                    OpenValue: ToolParameterBinding.Robotiq2F85OpenWidthMeters,
-                    ClosedDriverValue: ToolParameterBinding.Robotiq2F85ClosedDriverRadians)
-            ];
+            var open = openWidthMeters;
+            if (ReferenceEquals(caps, ToolCapabilities.Robotiq2F85))
+                open = ToolParameterBinding.Robotiq2F85OpenWidthMeters;
+            else if (caps?.Parameters.FirstOrDefault(p =>
+                         p.Name.Equals("width", StringComparison.Ordinal)) is { } widthParam)
+                open = widthParam.Max;
+
+            if (!(open > 1e-12) || double.IsNaN(closedDriverValue) || double.IsInfinity(closedDriverValue))
+            {
+                error = "Cap width open/closed values must be finite; open width must be > 0.";
+                return false;
+            }
+
+            // Prefer mechanism joint upper as closed when Cap=Custom and Cd left at Robotiq default.
+            var closed = closedDriverValue;
+            if (capNorm == ToolCapContract.Custom &&
+                Math.Abs(closedDriverValue - ToolParameterBinding.Robotiq2F85ClosedDriverRadians) < 1e-12 &&
+                TryDriverUpper(mechanism, joint, out var upper) &&
+                Math.Abs(upper) > 1e-9)
+                closed = upper;
+
+            bindings = [ToolParameterBinding.WidthBinding(joint, open, closed)];
             return true;
+        }
+
+        if (capNorm == ToolCapContract.Custom)
+        {
+            error = "Cap=Custom with Description requires Binding (Bd) naming the width driver joint.";
+            return false;
         }
 
         if (!ReferenceEquals(caps, ToolCapabilities.Robotiq2F85))
@@ -327,6 +387,21 @@ public sealed class MotusToolComponent : MotusComponentBase
 
         bindings = ToolCapabilities.Robotiq2F85DefaultBindings;
         return true;
+    }
+
+    private static bool TryDriverUpper(RobotDescription mechanism, string jointName, out double upper)
+    {
+        upper = 0;
+        foreach (var j in mechanism.Joints)
+        {
+            if (j.IsActuated && j.MimicJoint is null &&
+                string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase))
+            {
+                upper = j.Upper;
+                return true;
+            }
+        }
+        return false;
     }
 
     private static bool MechanismHasDriver(RobotDescription mechanism, string jointName)
