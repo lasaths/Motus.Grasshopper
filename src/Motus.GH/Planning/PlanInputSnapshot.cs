@@ -28,6 +28,10 @@ internal sealed class PlanInputSnapshot
     public SerialJointChain? Chain { get; init; }
     public KinematicTree? Tree { get; init; }
     public StewartPlatform? Stewart { get; init; }
+    public LeggedMechanism? Mechanism { get; init; }
+    public double HipStanceRadians { get; init; } = LeggedGait.DefaultHipStanceRadians;
+    public double FemurStanceRadians { get; init; } = LeggedGait.DefaultFemurStanceRadians;
+    public double TibiaStanceRadians { get; init; } = LeggedGait.DefaultTibiaStanceRadians;
     public RobotCollisionModel? PreviewGeometry { get; init; }
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
@@ -127,6 +131,10 @@ internal sealed class PlanInputSnapshot
             Chain = robotGoo.Chain,
             Tree = robotGoo.Tree,
             Stewart = robotGoo.Stewart,
+            Mechanism = robotGoo.Mechanism,
+            HipStanceRadians = robotGoo.HipStanceRadians,
+            FemurStanceRadians = robotGoo.FemurStanceRadians,
+            TibiaStanceRadians = robotGoo.TibiaStanceRadians,
             PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
             PreviewMeshColors = robotGoo.PreviewMeshColors,
             BaseFrameOverride = robotGoo.BaseFrameOverride,

@@ -192,6 +192,10 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 PreviewHome = previewHome,
                 TreeDriverHome = treeDriverHome,
                 PreviewGeometry = desc is not null ? MechanismPreviewGeometry.Build(desc) : null,
+                Mechanism = mechanism,
+                HipStanceRadians = hs,
+                FemurStanceRadians = fs,
+                TibiaStanceRadians = ts,
             };
 
             TrajectoryGoo? trajGoo = null;

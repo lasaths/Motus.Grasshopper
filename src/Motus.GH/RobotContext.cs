@@ -16,6 +16,10 @@ public readonly struct RobotContext
     public Color?[]? PreviewMeshColors { get; }
     public KinematicTree? Tree { get; }
     public StewartPlatform? Stewart { get; }
+    public LeggedMechanism? Mechanism { get; }
+    public double HipStanceRadians { get; }
+    public double FemurStanceRadians { get; }
+    public double TibiaStanceRadians { get; }
     public JointState? TreeDriverHome { get; }
     public MobilityModel.HolonomicSE2? MobilityGoal { get; }
 
@@ -30,7 +34,11 @@ public readonly struct RobotContext
         KinematicTree? tree = null,
         StewartPlatform? stewart = null,
         JointState? treeDriverHome = null,
-        MobilityModel.HolonomicSE2? mobilityGoal = null)
+        MobilityModel.HolonomicSE2? mobilityGoal = null,
+        LeggedMechanism? mechanism = null,
+        double hipStanceRadians = LeggedGait.DefaultHipStanceRadians,
+        double femurStanceRadians = LeggedGait.DefaultFemurStanceRadians,
+        double tibiaStanceRadians = LeggedGait.DefaultTibiaStanceRadians)
     {
         Model = model;
         EffectiveModel = effectiveModel;
@@ -41,12 +49,19 @@ public readonly struct RobotContext
         PreviewMeshColors = previewMeshColors;
         Tree = tree;
         Stewart = stewart;
+        Mechanism = mechanism;
+        HipStanceRadians = hipStanceRadians;
+        FemurStanceRadians = femurStanceRadians;
+        TibiaStanceRadians = tibiaStanceRadians;
         TreeDriverHome = treeDriverHome;
         MobilityGoal = mobilityGoal;
     }
 
     public bool IsStewart =>
         Stewart is not null || Units.IsStewart(EffectiveModel.Preset);
+
+    public bool IsLegged =>
+        Mechanism is not null || Units.IsLegged(EffectiveModel.Preset);
 
     public static RobotContext FromGoo(RobotModelGoo goo)
     {
@@ -64,6 +79,10 @@ public readonly struct RobotContext
             goo.Tree,
             goo.Stewart,
             goo.TreeDriverHome,
-            goo.MobilityGoal);
+            goo.MobilityGoal,
+            goo.Mechanism,
+            goo.HipStanceRadians,
+            goo.FemurStanceRadians,
+            goo.TibiaStanceRadians);
     }
 }

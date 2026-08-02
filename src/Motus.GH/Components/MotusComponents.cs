@@ -706,11 +706,20 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
         }
         else if (legged)
         {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                tipPathOnly && treeDrivers > axisCount
-                    ? $"Family=legged tip-path: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
-                    : $"Family=legged: Q values are joint angles in radians (not Stewart meters) — do not wire full-driver gait to UR MoveJ.");
+            if (ctx.Mechanism is not null && !tipPathOnly && axisCount == (ctx.Mechanism?.DriverCount ?? axisCount))
+            {
+                AddRuntimeMessage(
+                    GH_RuntimeMessageLevel.Warning,
+                    $"Family=legged full-driver gait: Q has {axisCount} joint(s) in radians (PlanBodyPath/Walk) — not UR MoveJ.");
+            }
+            else
+            {
+                AddRuntimeMessage(
+                    GH_RuntimeMessageLevel.Warning,
+                    tipPathOnly && treeDrivers > axisCount
+                        ? $"Family=legged tip-path: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
+                        : $"Family=legged: Q values are joint angles in radians (not Stewart meters) — do not wire full-driver gait to UR MoveJ.");
+            }
         }
         else if (tipPathOnly && treeDrivers > axisCount)
         {

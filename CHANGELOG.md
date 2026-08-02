@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.0 — Legged Plan body-path gait
+
+Aligned with **Motus.NET 0.14.0**.
+
+### Added
+
+- **Motus Plan** synthesizes Family=legged full-driver gait when Walk `Rb` carries `LeggedMechanism` and Goal is ≥2 planes (origins = body path). Uses `LeggedGait.PlanBodyPath` (PathFollow, Walk defaults, hard SSM). Tip-path joint goals and single-plane TCP LIN unchanged.
+- Walk always attaches Mechanism + stance angles on emitted `Rb`.
+- Status honesty: body-path ≠ TCP LIN; Q full-driver radians ≠ UR MoveJ; mixed plane+joint / no-Mechanism plane goals fail named.
+
+### Motus.NET pin
+
+`MotusNetVersion` = **0.14.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). CI UseLocal until NuGet publishes 0.14.0.
+
 ## 0.13.2 — UR+DKP AllDrivers ceilings
 
 Aligned with **Motus.NET 0.13.2**.

@@ -14,6 +14,12 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
     public KinematicTree? Tree { get; set; }
     /// <summary>When set, robot is a Stewart/Gough platform (<c>Family=stewart</c>).</summary>
     public StewartPlatform? Stewart { get; set; }
+    /// <summary>When set, Family=legged Walk/Plan can synthesize full-driver gait (Stewart-parallel handle).</summary>
+    public LeggedMechanism? Mechanism { get; set; }
+    /// <summary>Stance angles (rad) for PlanBodyPath / Walk gait — live on goo, not on <see cref="LeggedMechanism"/>.</summary>
+    public double HipStanceRadians { get; set; } = LeggedGait.DefaultHipStanceRadians;
+    public double FemurStanceRadians { get; set; } = LeggedGait.DefaultFemurStanceRadians;
+    public double TibiaStanceRadians { get; set; } = LeggedGait.DefaultTibiaStanceRadians;
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }

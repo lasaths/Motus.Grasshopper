@@ -38,7 +38,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _showRrtSettings;
 
     public MotusPlanComponent()
-        : base("Motus Plan", "Quick", "Quick planner: plane goals = TCP LIN, joint goals = joint-linear or RRT with collision. Click Plan or enable Auto Plan. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.", "Plan", "flow-arrow")
+        : base("Motus Plan", "Quick", "Quick planner: plane goals = TCP LIN (serial/Stewart) or body-path gait (Family=legged + Mechanism, ≥2 planes); joint goals = joint-linear or RRT with collision. Click Plan or enable Auto Plan. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.", "Plan", "flow-arrow")
     {
         _worker = new PlanWorker(this);
         BaseWorker = _worker;
@@ -72,7 +72,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot model from Motus UR10e or Motus Robot", GH_ParamAccess.item);
-        p.AddGenericParameter("Goal", "G", "Planes (TCP LIN) or Joint States; list = visit order", GH_ParamAccess.list);
+        p.AddGenericParameter("Goal", "G", "Planes (TCP LIN; Family=legged+Mechanism ≥2 = body-path gait origins) or Joint States; list = visit order", GH_ParamAccess.list);
         p.AddGenericParameter("Start", "St0", "Start as Plane (IK) or Joint State (defaults to home/zeros)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("Step", "St", "Plane goals only: TCP LIN step size (m)", GH_ParamAccess.item, DefaultLinStepMeters);
@@ -274,16 +274,27 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         }
 
         GhExtract.RemarkIfDefaultStart(this, snapshot.UsedDefaultStart);
+        var leggedBodyPath = snapshot.Context.Mechanism is not null
+            && goals.Count >= 2
+            && goals.All(g => g.plane is not null && g.joints is null)
+            && (Units.IsLegged(snapshot.Context.EffectiveModel.Preset)
+                || Units.IsLegged(snapshot.Context.Model.Preset)
+                || snapshot.Context.IsLegged);
         if (goals.Any(g => g.plane is not null))
+        {
             AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Remark,
-                "Plane goals use TCP LIN. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.");
+                leggedBodyPath
+                    ? "Family=legged: ≥2 plane goals = body-path gait (origins, m; orientation ignored) — not TCP LIN."
+                    : "Plane goals use TCP LIN. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.");
+        }
 
         var fingerprint = snapshot.Fingerprint;
         var planningContext = snapshot.PlanningContext;
         var rrtSettings = snapshot.RrtSettings;
 
         // Immediate reachability for plane goals — do not wait for Plan.
+        // Skips tip TCP IK for legged body-path (≥2 planes + Mechanism).
         var reachErrors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, goals);
         if (reachErrors.Count > 0)
         {

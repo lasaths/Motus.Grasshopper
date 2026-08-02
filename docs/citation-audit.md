@@ -1,6 +1,6 @@
 # Citation audit (P8)
 
-Motus.NET method provenance snapshot. Canonical: upstream [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md) · [`REFERENCES.bib`](https://github.com/lasaths/Motus.NET/blob/master/docs/REFERENCES.bib) · local [motus-net/METHODS.md](motus-net/METHODS.md). Pin: NuGet **0.13.2**.
+Motus.NET method provenance snapshot. Canonical: upstream [`docs/METHODS.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/METHODS.md) · [`REFERENCES.bib`](https://github.com/lasaths/Motus.NET/blob/master/docs/REFERENCES.bib) · local [motus-net/METHODS.md](motus-net/METHODS.md). Pin: NuGet **0.14.0**.
 
 | Area | Primary | DOI | SOTA alts (documented, not required) |
 |------|---------|-----|--------------------------------------|

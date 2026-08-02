@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.13.2** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.14.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|
@@ -103,4 +103,5 @@ Also check in Rhino:
 - `06_turntable_group`: UR beside 1-DOF turntable; GH Center Box → Motus Robot Attach on `turntable_link` (TreeFK); AllDrivers multi-waypoint TCP tracks spoke
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
+- Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Three.js stick viz via `Motus.NET/tools/legged-viewer`
