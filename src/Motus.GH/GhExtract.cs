@@ -668,6 +668,33 @@ internal static class GhExtract
             return errors;
         }
 
+        // Family=legged body-path (≥2 planes + Mechanism): origins only — skip tip TCP IK.
+        var isLegged = Units.IsLegged(session.Preset) || Units.IsLegged(ctx.Model.Preset) || ctx.Mechanism is not null;
+        if (isLegged)
+        {
+            var planeCount = 0;
+            for (var i = 0; i < goals.Count; i++)
+            {
+                if (goals[i].plane is not { } plane)
+                    continue;
+                planeCount++;
+                var o = plane.Origin;
+                if (!double.IsFinite(o.X) || !double.IsFinite(o.Y) || !double.IsFinite(o.Z))
+                    errors.Add($"Goal[{i}]: plane origin NaN/Inf (m).");
+            }
+
+            if (ctx.Mechanism is not null && planeCount >= 2 && goals.All(g => g.joints is null))
+                return errors; // PlanExecutor synthesizes gait; no tip TCP reach check.
+
+            if (ctx.Mechanism is null && planeCount > 0)
+            {
+                errors.Add(
+                    "Legged plane goals need Mechanism handle (Motus Mechanism → Walk → Rb).");
+                return errors;
+            }
+            // Single plane / tip path: fall through to tip TCP IK when Chain supports it.
+        }
+
         if (!KinematicsResolver.SupportsModel(session.Preset, ctx.Chain))
         {
             errors.Add($"No kinematics profile for '{session.Preset.ModelName}'.");

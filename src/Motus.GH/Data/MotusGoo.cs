@@ -117,6 +117,10 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public SerialJointChain? Chain { get; set; }
     public KinematicTree? Tree { get; set; }
     public StewartPlatform? Stewart { get; set; }
+    public LeggedMechanism? Mechanism { get; set; }
+    public double HipStanceRadians { get; set; } = LeggedGait.DefaultHipStanceRadians;
+    public double FemurStanceRadians { get; set; } = LeggedGait.DefaultFemurStanceRadians;
+    public double TibiaStanceRadians { get; set; } = LeggedGait.DefaultTibiaStanceRadians;
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
@@ -142,7 +146,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
         // Tree required so Robotiq tip-descendant meshes pose via TreeFK (not stuck at base).
         return new RobotContext(
             model, session, Chain, session.Preset.BaseFrame, session.Preset.ToolFrame,
-            preview, PreviewMeshColors, Tree, Stewart, TreeDriverHome, MobilityGoal);
+            preview, PreviewMeshColors, Tree, Stewart, TreeDriverHome, MobilityGoal,
+            Mechanism, HipStanceRadians, FemurStanceRadians, TibiaStanceRadians);
     }
 
     internal static RobotModel ApplyTool(RobotModel model, ToolDefinition? tool, Frame? baseOverride)

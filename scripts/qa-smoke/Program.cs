@@ -1032,6 +1032,22 @@ Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
         Fail("FillTreeDriverQ should fail when TreeDriverHome missing for tip-path trajectory");
     Ok("Walking hex tip-path plan + TreeDriverHome fill keeps side legs at home");
 
+    // Motus Plan gait synthesis API (PlanBodyPath) — full-driver, not tip-path.
+    var bodyPath = new[] { new Vec3(0, 0, 0), new Vec3(0.35, 0, 0), new Vec3(0.5, 0.1, 0) };
+    var planBody = LeggedGait.PlanBodyPath(hex, bodyPath);
+    if (!planBody.Success)
+        Fail($"PlanBodyPath: {string.Join("; ", planBody.Errors)}");
+    if (planBody.Trajectory is null || planBody.Trajectory.Robot.Preset.AxisCount != 18)
+        Fail($"PlanBodyPath expected AxisCount=18, got {planBody.Trajectory?.Robot.Preset.AxisCount}");
+    if (!Units.IsLegged(planBody.Trajectory.Robot.Preset))
+        Fail("PlanBodyPath trajectory must be Family=legged");
+    if (!planBody.Warnings.Any(w => w.Contains("not TCP LIN", StringComparison.OrdinalIgnoreCase)))
+        Fail("PlanBodyPath should warn body-path ≠ TCP LIN");
+    // Tip-path joint-linear must stay 3-DOF after PlanBodyPath exists.
+    if (hexPlan.Trajectory!.Robot.Preset.AxisCount != 3)
+        Fail("Tip-path joint plan regression: AxisCount must remain 3");
+    Ok("PlanBodyPath hex gait AxisCount==DriverCount==18; tip-path joint plan still 3");
+
     var hexDesc = Motus.GH.Components.WalkingHexShared.BuildDescription(hex);
     var previewGeom = MechanismPreviewGeometry.Build(hexDesc);
     if (previewGeom is null)

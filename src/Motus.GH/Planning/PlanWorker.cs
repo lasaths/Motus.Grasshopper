@@ -35,12 +35,19 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public SerialJointChain? Chain { get; private set; }
     public KinematicTree? Tree { get; private set; }
     public StewartPlatform? Stewart { get; private set; }
+    public LeggedMechanism? Mechanism { get; private set; }
+    public double HipStanceRadians { get; private set; } = LeggedGait.DefaultHipStanceRadians;
+    public double FemurStanceRadians { get; private set; } = LeggedGait.DefaultFemurStanceRadians;
+    public double TibiaStanceRadians { get; private set; } = LeggedGait.DefaultTibiaStanceRadians;
     public RobotCollisionModel? PreviewGeometry { get; private set; }
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
     public MobilityModel.HolonomicSE2? MobilityGoal { get; private set; }
     public ToolDefinition? ToolSnapshot { get; private set; }
     public JointState? TreeDriverHome { get; private set; }
+    /// <summary>Set when PlanBodyPath synthesized a full-driver gait (clears tip Chain / TreeDriverHome on goo).</summary>
+    public bool LeggedGaitSynthesized { get; private set; }
+    public IReadOnlyList<Frame>? LeggedBasePath { get; private set; }
 
     public PlanExecutionResult? Result { get; private set; }
     public List<string> RuntimeRemarks { get; } = [];
@@ -77,12 +84,18 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         Chain = snap.Chain;
         Tree = snap.Tree;
         Stewart = snap.Stewart;
+        Mechanism = snap.Mechanism;
+        HipStanceRadians = snap.HipStanceRadians;
+        FemurStanceRadians = snap.FemurStanceRadians;
+        TibiaStanceRadians = snap.TibiaStanceRadians;
         PreviewGeometry = snap.PreviewGeometry;
         PreviewMeshColors = snap.PreviewMeshColors;
         BaseFrameOverride = snap.BaseFrameOverride;
         MobilityGoal = snap.MobilityGoal;
         ToolSnapshot = snap.ToolSnapshot;
         TreeDriverHome = snap.TreeDriverHome;
+        LeggedGaitSynthesized = false;
+        LeggedBasePath = null;
         _inputsReady = true;
     }
 
@@ -163,6 +176,8 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
             Report(0);
             var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings);
             Result = PlanExecutor.Execute(request, CancellationToken, Report, Timings);
+            LeggedGaitSynthesized = Result.LeggedGaitSynthesized;
+            LeggedBasePath = Result.LeggedBasePath;
             Report(1);
 
             if (Result.Cancelled)
@@ -184,6 +199,13 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
                     RuntimeRemarks.Add("TCP-LIN failed; joint-space fallback used — TCP path is not straight.");
                     break;
                 }
+            }
+
+            if (LeggedGaitSynthesized)
+            {
+                RuntimeRemarks.Add(
+                    $"Legged body-path ({Goals.Count} planes): gait synthesis, not TCP LIN; " +
+                    "Start/Step unused; flat Z=0; Q full-driver radians — not UR MoveJ; SSM hard-fail.");
             }
 
             RuntimeRemarks.Add(Timings.FormatSummary());
@@ -246,11 +268,16 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     private TrajectoryGoo TrajectoryFrom(Trajectory trajectory, IReadOnlyList<PlanningMessage>? diagnostics = null)
     {
         var robot = trajectory.Robot;
+        var gait = LeggedGaitSynthesized;
         return new TrajectoryGoo(trajectory)
         {
-            Chain = Chain,
+            Chain = gait ? null : Chain,
             Tree = Tree,
             Stewart = Stewart,
+            Mechanism = Mechanism,
+            HipStanceRadians = HipStanceRadians,
+            FemurStanceRadians = FemurStanceRadians,
+            TibiaStanceRadians = TibiaStanceRadians,
             PreviewGeometry = PreviewGeometry ?? robot.CollisionModel,
             PreviewMeshColors = PreviewMeshColors,
             BaseFrameOverride = BaseFrameOverride,
@@ -258,13 +285,23 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
             ToolSnapshot = ToolSnapshot,
             ToolCapabilitiesSnapshot = ToolSnapshot?.Capabilities,
             DiagnosticsSnapshot = diagnostics,
-            TreeDriverHome = TreeDriverHome,
+            TreeDriverHome = gait ? null : TreeDriverHome,
+            BasePath = gait ? LeggedBasePath : null,
             ProvenanceSnapshot = BuildProvenance()
         };
     }
 
     private PlannerProvenance BuildProvenance()
     {
+        if (LeggedGaitSynthesized)
+        {
+            return new PlannerProvenance
+            {
+                PlannerId = "legged-gait/PlanBodyPath",
+                RandomSeed = null
+            };
+        }
+
         // Match PlanInputSnapshot / PlanExecutor: mobility joint goals also use sampling.
         var needsSampling = GhExtract.GoalsNeedSamplingPlanner(Goals, PlanningContext)
             || (MobilityGoal is not null && Goals.Any(g => g.joints is not null));

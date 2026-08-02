@@ -40,6 +40,10 @@ ADR 0004 delivered N×3R preview gait behind Motus Hex / WalkHex. Users need arb
 - Build GH with `-UseLocal` until Motus.NET with these types is on `master` and `MotusNetVersion` is bumped.
 - Example 09 rebuilt without Hex. Family=legged handoff unchanged (radians, not UR MoveJ).
 
+## Amendment: Motus Plan body-path gait (0.14)
+
+Motus Plan synthesizes full-driver gait when `RobotModelGoo` carries `LeggedMechanism` (Walk always attaches it) and Goal is an all-plane list (≥2). Plane **origins** are the body path (m); orientation ignored; yaw from path tangent. Defaults match Walk (`Spd/St/Lf` via `LeggedGait.Default*`); body pose `PathFollow`; flat Z=0 (no Terrain pin on Plan). API: `LeggedGait.PlanBodyPath` → `TryBuild` → `ValidateForPlan` (**hard SSM** — Walk may still soft-warn + emit `Tr`). Tip-path joint goals and a single plane remain tip LIN/RRT. Walk stays the rich gait UI (Path/Terrain/Speed/Step/Lift/Pose).
+
 ## Out of scope
 
-Bretl–Lall wrench LP, Motus Plan gait synthesis, friction/climbing, FABRIK cosmetics, articulated torso DOF.
+Bretl–Lall wrench LP, friction/climbing, FABRIK cosmetics, articulated torso DOF, Plan Terrain/Speed pins.

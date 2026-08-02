@@ -26,6 +26,9 @@ internal sealed class PlanExecutionResult
     public Trajectory? ChainedTrajectory { get; init; }
     public List<Trajectory> SegmentTrajectories { get; init; } = [];
     public bool Cancelled { get; init; }
+    /// <summary>True when Family=legged PlanBodyPath synthesized a full-driver gait.</summary>
+    public bool LeggedGaitSynthesized { get; init; }
+    public IReadOnlyList<Frame>? LeggedBasePath { get; init; }
 }
 
 internal static class PlanExecutor
@@ -71,6 +74,10 @@ internal static class PlanExecutor
             if (timings is not null)
                 timings.CheckerBuildMs = checkerSw.ElapsedMilliseconds;
         }
+
+        // Family=legged body-path gait: one-shot over all plane goals (not per-plane TCP LIN).
+        if (TryPlanLeggedBodyPath(request, sharedChecker, cancellationToken, timings, out var leggedExec))
+            return leggedExec!;
 
         for (var goalIndex = 0; goalIndex < request.Goals.Count; goalIndex++)
         {
@@ -539,4 +546,141 @@ internal static class PlanExecutor
         if (!warnings.Any(w => string.Equals(w, warning, StringComparison.Ordinal)))
             warnings.Add(warning);
     }
+
+    /// <summary>
+    /// Family=legged one-shot body-path gait. Returns true when this request was handled
+    /// (success or named fail). Returns false to fall through to tip LIN / joint / RRT.
+    /// </summary>
+    private static bool TryPlanLeggedBodyPath(
+        PlanRequest request,
+        ICollisionChecker? sharedChecker,
+        CancellationToken cancellationToken,
+        PlanPhaseTimings? timings,
+        out PlanExecutionResult? exec)
+    {
+        exec = null;
+        var ctx = request.Context;
+        var isLegged = Units.IsLegged(ctx.EffectiveModel.Preset)
+            || Units.IsLegged(ctx.Model.Preset)
+            || ctx.Mechanism is not null;
+        if (!isLegged)
+            return false;
+
+        var goals = request.Goals;
+        if (goals.Count == 0)
+            return false;
+
+        var anyPlane = false;
+        var anyJoint = false;
+        for (var i = 0; i < goals.Count; i++)
+        {
+            if (goals[i].plane is not null) anyPlane = true;
+            if (goals[i].joints is not null) anyJoint = true;
+        }
+
+        // Joint-only tip path — leave to existing planners.
+        if (!anyPlane)
+            return false;
+
+        if (ctx.Mechanism is null)
+        {
+            exec = FailedLegged(
+                "Legged plane goals need Mechanism handle (Motus Mechanism → Walk → Rb). " +
+                "Do not interpret planes as tip TCP LIN without Mechanism.");
+            return true;
+        }
+
+        if (anyJoint && anyPlane)
+        {
+            exec = FailedLegged(
+                "Legged Plan rejects mixed plane+joint goals. " +
+                "Use all planes (≥2) for body-path gait, or joints / one plane for tip-path.");
+            return true;
+        }
+
+        // Single plane → tip foot TCP LIN (unchanged).
+        if (goals.Count < 2)
+            return false;
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            exec = new PlanExecutionResult { Cancelled = true };
+            return true;
+        }
+
+        var pathXy = new List<Vec3>(goals.Count);
+        for (var i = 0; i < goals.Count; i++)
+        {
+            var plane = goals[i].plane!.Value;
+            var o = plane.Origin;
+            if (!double.IsFinite(o.X) || !double.IsFinite(o.Y) || !double.IsFinite(o.Z))
+            {
+                exec = FailedLegged($"Goal[{i}]: plane origin NaN/Inf (m).");
+                return true;
+            }
+
+            pathXy.Add(new Vec3(o.X, o.Y, 0));
+        }
+
+        var mechanism = ctx.Mechanism;
+        var bodyPose = new PathFollowBodyPose(clearanceMeters: mechanism.NominalBodyClearance);
+        var options = BuildPlanningOptions(request, MaxJointStep, sharedChecker);
+
+        var plannerSw = Stopwatch.StartNew();
+        var plan = LeggedGait.PlanBodyPath(
+            mechanism,
+            pathXy,
+            out var gait,
+            model: null,
+            speed: LeggedGait.DefaultSpeedMetersPerSecond,
+            stepLength: LeggedGait.DefaultStepLengthMeters,
+            stepHeight: LeggedGait.DefaultStepHeightMeters,
+            hipStance: ctx.HipStanceRadians,
+            femurStance: ctx.FemurStanceRadians,
+            tibiaStance: ctx.TibiaStanceRadians,
+            bodyPose: bodyPose,
+            terrain: null,
+            options: options);
+        if (timings is not null)
+        {
+            timings.PlannerMs += plannerSw.ElapsedMilliseconds;
+            timings.GoalCount = goals.Count;
+        }
+
+        if (!plan.Success || plan.Trajectory is null)
+        {
+            exec = new PlanExecutionResult { Results = [plan] };
+            return true;
+        }
+
+        var warnings = plan.Warnings.ToList();
+        warnings.Insert(0,
+            $"Legged body-path ({goals.Count} planes): origins only (m); orientation ignored; yaw from path. " +
+            "Start/Step unused. Flat Z=0 (no Terrain on Plan). SSM hard-fail.");
+        var succeeded = PlanningResult.Succeeded(plan.Trajectory, warnings);
+
+        exec = new PlanExecutionResult
+        {
+            Results = [succeeded],
+            ChainedTrajectory = plan.Trajectory,
+            LeggedGaitSynthesized = true,
+            LeggedBasePath = gait?.BasePath
+        };
+        return true;
+    }
+
+    private static PlanExecutionResult FailedLegged(string message) =>
+        new()
+        {
+            Results =
+            [
+                PlanningResult.Failed(new[]
+                {
+                    new PlanningMessage(
+                        PlanningMessageCodes.InvalidInput,
+                        message,
+                        PlanningMessageSeverity.Error)
+                })
+            ]
+        };
 }
