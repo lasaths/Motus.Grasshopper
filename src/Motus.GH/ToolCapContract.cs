@@ -10,9 +10,13 @@ public static class ToolCapContract
 {
     public const string None = "None";
     public const string Robotiq2F85 = "Robotiq2F85";
+    public const string Custom = "Custom";
 
-    public static readonly string[] Schemas = [None, Robotiq2F85];
+    public static readonly string[] Schemas = [None, Robotiq2F85, Custom];
 
+    /// <summary>
+    /// Normalize Cap for UI/persistence. Known aliases map; unknown → <see cref="None"/> (fail-closed).
+    /// </summary>
     public static string Normalize(string? raw)
     {
         var t = (raw ?? None).Trim();
@@ -24,19 +28,52 @@ public static class ToolCapContract
             t.Equals("Robotiq", StringComparison.OrdinalIgnoreCase) ||
             t.Equals("2F85", StringComparison.OrdinalIgnoreCase))
             return Robotiq2F85;
-        return t.Trim();
+        if (t.Equals(Custom, StringComparison.OrdinalIgnoreCase))
+            return Custom;
+        return None;
     }
 
-    /// <summary>Parse Cap schema string. False when value is not None/Robotiq2F85.</summary>
-    public static bool TryParseSchema(string? raw, out ToolCapabilities? caps)
+    /// <summary>
+    /// Parse Cap schema string. False when value is not None/Robotiq2F85/Custom.
+    /// Cap=<see cref="Custom"/> requires finite width bounds (max &gt; min).
+    /// </summary>
+    public static bool TryParseSchema(
+        string? raw,
+        out ToolCapabilities? caps,
+        double widthMinMeters = 0,
+        double widthMaxMeters = 0.085,
+        double widthDefaultMeters = 0.085)
     {
         caps = null;
-        var n = Normalize(raw);
-        if (n == None) return true;
-        if (n == Robotiq2F85)
+        var t = (raw ?? None).Trim();
+        if (string.IsNullOrWhiteSpace(t) ||
+            t.Equals(None, StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("Off", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (t.Equals(Robotiq2F85, StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("Robotiq", StringComparison.OrdinalIgnoreCase) ||
+            t.Equals("2F85", StringComparison.OrdinalIgnoreCase))
         {
             caps = ToolCapabilities.Robotiq2F85;
             return true;
+        }
+
+        if (t.Equals(Custom, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!(widthMaxMeters > widthMinMeters) ||
+                double.IsNaN(widthMinMeters) || double.IsInfinity(widthMinMeters) ||
+                double.IsNaN(widthMaxMeters) || double.IsInfinity(widthMaxMeters) ||
+                double.IsNaN(widthDefaultMeters) || double.IsInfinity(widthDefaultMeters))
+                return false;
+            try
+            {
+                caps = ToolCapabilities.WidthSchema(widthMinMeters, widthMaxMeters, widthDefaultMeters);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         return false;
@@ -70,8 +107,8 @@ public static class ToolCapContract
 
         caps = null!;
         error = tool is null
-            ? "Wired Robot has no Tool with Cap — attach a Motus Tool with Cap=Robotiq2F85, or use a robot that ships capabilities."
-            : "Wired tool has no Cap — set Motus Tool Cap to Robotiq2F85 (parameter schema for Tool State / export; not ToolMode).";
+            ? "Wired Robot has no Tool with Cap — attach a Motus Tool with Cap=Robotiq2F85 or Custom, or use a robot that ships capabilities."
+            : "Wired tool has no Cap — set Motus Tool Cap to Robotiq2F85 or Custom (parameter schema for Tool State / export; not ToolMode).";
         return false;
     }
 }

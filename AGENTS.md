@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.14.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.15.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
 
 | Package | Role |
 |---------|------|
@@ -98,7 +98,7 @@ Also check in Rhino:
 - Preview meshes + Scrub/Play handoff
 - Waypoints `Q` tree wires into UR Write MoveJ without GH transpose (serial only)
 - Motus Stewart → Plan TCP plane list → Preview scrub; Waypoints warns meters ≠ MoveJ; drag Br/Pr sliders on `08_stewart_tcp_path`
-- Joint Table: Tip path Plan works; branching shows warning that side branches are preview-only
+- Joint Table: Tip path Plan works; branching warns preview-only unless AllDrivers; AllDrivers tip+side Plan DOF
 - Serial Chain + Reach + Robotiq scrub (TreeFK + ToolParameterBinding)
 - `06_turntable_group`: UR beside 1-DOF turntable; GH Center Box → Motus Robot Attach on `turntable_link` (TreeFK); AllDrivers multi-waypoint TCP tracks spoke
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
