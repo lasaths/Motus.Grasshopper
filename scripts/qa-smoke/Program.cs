@@ -879,11 +879,31 @@ if (robotiqVerts.Any(v => v.Any(double.IsNaN) || v.Any(double.IsInfinity)))
     Fail("Robotiq merged STL must have finite vertex coordinates (re-run fetch-ur10e-assets.mjs)");
 var robotiqGeom = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, robotiqVerts, robotiqIndices);
 var robotiqTcp = new Frame(0, 0, 0.1633, 0.7071067811865476, 0, 0.7071067811865476, 0);
-var robotiqTool = new ToolDefinition("robotiq_2f85", robotiqTcp, robotiqGeom, ToolCapabilities.Robotiq2F85);
+var robotiqTool = new ToolDefinition("robotiq_2f85", robotiqTcp, robotiqGeom, ToolCapabilities.Robotiq2F85)
+{
+    GeometryInFlangeFrame = true
+};
 var robotiqSession = urRobot.WithTool(robotiqTool);
 if (robotiqSession.CollisionModel?.ToolGeometry?.MeshVertices is not { Count: > 0 })
     Fail("Robotiq tool mesh should merge into session collision model");
 Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
+
+{
+    var rqCol = ur10eRobotiq.ToModel().WithTool(robotiqTool);
+    if (rqCol.CollisionModel?.ToolGeometry is null)
+        Fail("UR10e+Robotiq WithTool should attach gripper hull");
+    var colCache = KinematicsPreview.PreviewMeshCache.TryCreate(
+        rqCol, rqCol.CollisionModel!, ur10eRobotiq.Chain,
+        toolCapabilities: ToolCapabilities.Robotiq2F85,
+        tree: ur10eRobotiq.Tree,
+        armJointNames: rqCol.JointNames);
+    if (colCache is null)
+        Fail("Collision preview cache should build for UR10e+Robotiq");
+    var colMeshes = colCache.MeshesFor(start);
+    if (colMeshes.Count <= rqCol.CollisionModel!.Links.Count)
+        Fail("Collision preview should include Robotiq tool hull mesh");
+    Ok("UR10e+Robotiq collision preview includes gripper hull");
+}
 
 // Cartesian: home -> FK plane of GOAL_JOINTS (matches examples/01_quick_plan.ghx TCP Pose branch)
 {

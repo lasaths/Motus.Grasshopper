@@ -121,7 +121,7 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     public override void DrawViewportMeshes(IGH_PreviewArgs args)
     {
         if (Locked) return;
-        RobotViewportPreview.DrawMeshes(args, _previewMeshes);
+        RobotViewportPreview.DrawMeshes(args, _previewMeshes, ghost: _showCollisionPreview);
         if (_showCollisionPreview)
             RobotViewportPreview.DrawCollisionMeshes(args, _collisionPreviewMeshes);
     }

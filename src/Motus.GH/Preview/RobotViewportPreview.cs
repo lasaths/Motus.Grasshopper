@@ -1,7 +1,6 @@
 using Grasshopper.Kernel;
 using Motus.Core;
 using Motus.GH.Data;
-using Motus.GH.Resources;
 using Motus.GH.Rhino;
 using Motus.GH.Urdf;
 using Rhino.Display;
@@ -15,15 +14,21 @@ internal static class RobotViewportPreview
   // White ghost for robot-source components; Motus Preview keeps its own emerald styling.
   private static readonly Color MeshColor = Color.FromArgb(180, 255, 255, 255);
   private static readonly Color WireColor = Color.FromArgb(200, 255, 255, 255);
+  // Under collision overlay so the red hull reads against the visual.
+  private static readonly Color GhostMeshColor = Color.FromArgb(70, 255, 255, 255);
   // ponytail: lazy — DisplayMaterial static ctors during GHA type-scan can NRE before Rhino display is ready
   private static DisplayMaterial? _meshMaterial;
+  private static DisplayMaterial? _ghostMeshMaterial;
   private static DisplayMaterial MeshMaterial => _meshMaterial ??= new(MeshColor) { Transparency = 0.55 };
+  private static DisplayMaterial GhostMeshMaterial =>
+      _ghostMeshMaterial ??= new(GhostMeshColor) { Transparency = 0.82 };
 
-  // Planning collision hull — peach tint, more transparent than URDF visual preview.
-  private static readonly Color CollisionMeshColor = Color.FromArgb(88, MotusPalette.Peach);
+  // Planning hull vs visual: dusty red, opaque enough that peach-on-white no longer vanishes.
+  private static readonly Color CollisionMeshColor = Color.FromArgb(165, 196, 78, 72);
+  private static readonly Color CollisionMeshWireColor = Color.FromArgb(200, 176, 52, 48);
   private static DisplayMaterial? _collisionMeshMaterial;
   private static DisplayMaterial CollisionMeshMaterial =>
-      _collisionMeshMaterial ??= new(CollisionMeshColor) { Transparency = 0.82 };
+      _collisionMeshMaterial ??= new(CollisionMeshColor) { Transparency = 0.38 };
 
   public static void Build(
     RobotModelGoo goo,
@@ -70,11 +75,11 @@ internal static class RobotViewportPreview
     goo.UrdfSourcePath ??= sourcePath;
     var home = goo.PreviewHome ?? HomePoseLookup.HomeOrZeros(goo.Value, sourcePath);
     var ctx = RobotContext.FromGoo(goo);
-    var geometry = ctx.EffectiveModel.CollisionModel;
+    var geometry = PlanningCollisionGeometry(ctx, goo.Tool);
     if (geometry is null) return [];
 
     if (KinematicsPreview.PreviewMeshCache.TryCreate(
-            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool,
+            ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities,
             tree: goo.Tree, armJointNames: goo.Value?.JointNames, toolBindings: goo.Tool?.Bindings,
             treeDriverHome: goo.TreeDriverHome) is { } cache)
       return cache.MeshesFor(home);
@@ -84,11 +89,30 @@ internal static class RobotViewportPreview
       .ToList();
   }
 
+  /// <summary>
+  /// URDF collision is arm links only (Robotiq visual DAE has no collision tag).
+  /// Plan uses the bundled tool hull — keep that on the preview model.
+  /// </summary>
+  internal static RobotCollisionModel? PlanningCollisionGeometry(RobotContext ctx, ToolDefinition? tool)
+  {
+    var geometry = ctx.EffectiveModel.CollisionModel;
+    if (geometry?.ToolGeometry is not null || tool?.Geometry is null)
+      return geometry;
+    return new RobotCollisionModel(
+        geometry?.Links ?? [],
+        tool.Geometry,
+        tool.GeometryInFlangeFrame,
+        tool.GeometryAttachOffset);
+  }
+
   public static void DrawCollisionMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes)
   {
     if (meshes.Count == 0) return;
     foreach (var mesh in meshes)
+    {
       args.Display.DrawMeshShaded(mesh, CollisionMeshMaterial);
+      args.Display.DrawMeshWires(mesh, CollisionMeshWireColor, 1);
+    }
   }
 
   public static BoundingBox ComputeBounds(IReadOnlyList<Mesh> meshes, IReadOnlyList<Line> wires)
@@ -104,11 +128,12 @@ internal static class RobotViewportPreview
     return bb.IsValid ? bb : BoundingBox.Unset;
   }
 
-  public static void DrawMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes)
+  public static void DrawMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes, bool ghost = false)
   {
     if (meshes.Count == 0) return;
+    var material = ghost ? GhostMeshMaterial : MeshMaterial;
     foreach (var mesh in meshes)
-      args.Display.DrawMeshShaded(mesh, MeshMaterial);
+      args.Display.DrawMeshShaded(mesh, material);
   }
 
   public static void DrawWires(IGH_PreviewArgs args, IReadOnlyList<Line> wires, bool draw)

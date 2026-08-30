@@ -623,7 +623,7 @@ public static class KinematicsPreview
 
             if (_toolMesh is not null && _fk is not null)
             {
-                // Fallback only when no URDF gripper links exist (planning hull viewport).
+                // Planning hull (Robotiq is a merged STL, not per-finger URDF collision).
                 var toolM = ToolCollisionPlacement.WorldMatrix(
                     _fk, tipQ, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
                 var toolXform = ToRhinoTransform(toolM);
