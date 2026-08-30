@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.15.0 — Custom tool / kinematics close-out
+
+Aligned with **Motus.NET 0.15.0**.
+
+### Added
+
+- Motus Tool Cap=`Custom` with Wmin/Wmax/Cd pins; Cap-agnostic width→driver bindings.
+- Motus Joint Table **AllDrivers** pin (shared `PlanDofComposer` with Motus Robot).
+- ToolGoo persists Cap/Bindings/Mechanism via Motus.NET `UrdfWriter` inline XML (TL-009).
+
+### Changed
+
+- Numerical IK Plan Status names `NoConvergence` / `SingularJacobian` / `InvalidInput`; ADR 0002 AllDrivers amendment.
+
+### Motus.NET pin
+
+`MotusNetVersion` = **0.15.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). CI UseLocal until NuGet publishes 0.15.0.
+
 ## 0.14.0 — Legged Plan body-path gait
 
 Aligned with **Motus.NET 0.14.0**.

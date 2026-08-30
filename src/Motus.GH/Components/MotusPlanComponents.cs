@@ -28,6 +28,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _run;
     private bool _autoPlan;
     private string? _lastPlannedFingerprint;
+    private string? _lastReachFingerprint;
+    private List<string> _lastReachErrors = [];
     private int _debounceGen;
     private bool _planningPending;
     private string? _activeWorkerFingerprint;
@@ -209,59 +211,6 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
             return;
         }
 
-        var robotIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Robot);
-        var goalIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Goal);
-        var stepIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Step);
-        var collisionIdx = MotusPlanInputs.IndexOf(this, MotusPlanInputs.Collision);
-
-        if (robotIdx < 0 || !GhExtract.TryRobotGoo(da, robotIdx, out _))
-        {
-            InvalidateCachedPlan();
-            return;
-        }
-
-        if (goalIdx < 0)
-        {
-            InvalidateCachedPlan();
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Provide at least one valid Plane or Joint State goal.");
-            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix goal input errors.");
-            return;
-        }
-
-        if (!GhExtract.TryGoals(da, goalIdx, out var goals, out var goalErrors))
-        {
-            InvalidateCachedPlan();
-            foreach (var error in goalErrors)
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
-            if (goals.Count == 0)
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Provide at least one valid Plane or Joint State goal.");
-            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix goal input errors.");
-            return;
-        }
-
-        var stepInput = DefaultLinStepMeters;
-        if (stepIdx >= 0 && da.GetData(stepIdx, ref stepInput))
-        {
-            if (stepInput <= 0)
-            {
-                InvalidateCachedPlan();
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
-                EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Step input (must be positive).");
-                return;
-            }
-        }
-
-        var collision = GhExtract.ParseCollisionInput(da, collisionIdx);
-        if (collision.Error is not null)
-        {
-            InvalidateCachedPlan();
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
-            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Collision input errors.");
-            return;
-        }
-        else if (collision.Warning is not null)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
-
         if (!PlanInputSnapshot.TryCollect(da, this, out var snapshot, out var collectError) || snapshot is null)
         {
             InvalidateCachedPlan();
@@ -273,7 +222,19 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
             return;
         }
 
+        if (snapshot.LinStepMeters <= 0)
+        {
+            InvalidateCachedPlan();
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
+            EmitOutputs(da, GhExtract.PlanStatusKind.Manual, emitCache: false, statusOverride: "Fix Step input (must be positive).");
+            return;
+        }
+
+        if (snapshot.CollisionWarning is not null)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, snapshot.CollisionWarning);
+
         GhExtract.RemarkIfDefaultStart(this, snapshot.UsedDefaultStart);
+        var goals = snapshot.Goals;
         var leggedBodyPath = snapshot.Context.Mechanism is not null
             && goals.Count >= 2
             && goals.All(g => g.plane is not null && g.joints is null)
@@ -295,7 +256,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
         // Immediate reachability for plane goals — do not wait for Plan.
         // Skips tip TCP IK for legged body-path (≥2 planes + Mechanism).
-        var reachErrors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, goals);
+        var reachErrors = ReachErrorsFor(snapshot);
         if (reachErrors.Count > 0)
         {
             _run = false;
@@ -471,6 +432,17 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         _run = true;
         _planningPending = false;
         RequestSolutionRefresh();
+    }
+
+    private List<string> ReachErrorsFor(PlanInputSnapshot snapshot)
+    {
+        if (_lastReachFingerprint == snapshot.Fingerprint)
+            return _lastReachErrors;
+
+        var errors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, snapshot.Goals);
+        _lastReachFingerprint = snapshot.Fingerprint;
+        _lastReachErrors = errors;
+        return errors;
     }
 
     private void InvalidateCachedPlan()

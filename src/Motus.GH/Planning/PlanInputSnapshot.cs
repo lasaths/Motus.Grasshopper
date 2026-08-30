@@ -22,6 +22,7 @@ internal sealed class PlanInputSnapshot
     public double LinStepMeters { get; init; }
     public RrtPlanSettings RrtSettings { get; init; } = RrtPlanSettings.Defaults;
     public bool CollisionInputWired { get; init; }
+    public string? CollisionWarning { get; init; }
     public string Fingerprint { get; init; } = string.Empty;
     public bool IsAutoPlan { get; init; }
 
@@ -66,8 +67,13 @@ internal sealed class PlanInputSnapshot
         robotGoo.EnsureBundledTool();
         var context = RobotContext.FromGoo(robotGoo);
 
-        if (!GhExtract.TryGoals(da, goalIdx, out var goals, out _))
+        if (!GhExtract.TryGoals(da, goalIdx, out var goals, out var goalErrors))
+        {
+            error = goalErrors.Count > 0
+                ? string.Join(" | ", goalErrors)
+                : "Provide at least one valid Plane or Joint State goal.";
             return false;
+        }
 
         for (var gi = 0; gi < goals.Count; gi++)
         {
@@ -86,7 +92,10 @@ internal sealed class PlanInputSnapshot
 
         var collisionParse = GhExtract.ParseCollisionInput(da, collisionIdx);
         if (collisionParse.Error is not null)
+        {
+            error = collisionParse.Error;
             return false;
+        }
 
         var planningContext = GhExtract.BuildPlanningContext(
             context.EffectiveModel,
@@ -126,6 +135,7 @@ internal sealed class PlanInputSnapshot
             LinStepMeters = linStep,
             RrtSettings = rrtSettings,
             CollisionInputWired = collisionParse.Wired,
+            CollisionWarning = collisionParse.Warning,
             Fingerprint = fingerprint,
             IsAutoPlan = owner.AutoPlanEnabled,
             Chain = robotGoo.Chain,

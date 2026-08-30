@@ -115,43 +115,8 @@ internal static class UrdfRobotLoad
             return urdf.ToModel();
 
         var tipNames = urdf.JointNames;
-        var tipSet = new HashSet<string>(tipNames, StringComparer.OrdinalIgnoreCase);
-        var tipLinkIdx = tree.IndexOfLink(string.IsNullOrWhiteSpace(tipLink) ? "tool0" : tipLink);
-
-        var names = new List<string>(tree.DriverCount);
-        var limits = new List<JointLimit>(tree.DriverCount);
-
-        void AddDriver(KinematicJoint j)
-        {
-            names.Add(j.Name);
-            var vel = j.Velocity ?? Math.PI;
-            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
-        }
-
-        foreach (var tipName in tipNames)
-        {
-            for (var di = 0; di < tree.DriverCount; di++)
-            {
-                var j = tree.Joints[tree.DriverJointIndices[di]];
-                if (string.Equals(j.Name, tipName, StringComparison.OrdinalIgnoreCase))
-                {
-                    AddDriver(j);
-                    break;
-                }
-            }
-        }
-
-        for (var di = 0; di < tree.DriverCount; di++)
-        {
-            var j = tree.Joints[tree.DriverJointIndices[di]];
-            if (tipSet.Contains(j.Name))
-                continue;
-            if (LinkIsDescendantOf(tree, j.ChildLinkIndex, tipLinkIdx))
-                continue;
-            AddDriver(j);
-        }
-
-        if (names.Count == tipNames.Count)
+        var layout = PlanDofComposer.TipThenSideBranches(tree, tipNames, tipLink, excludeTipDescendants: true);
+        if (layout.JointNames.Count == tipNames.Count)
             return urdf.ToModel();
 
         var tip = urdf.Preset;
@@ -160,8 +125,8 @@ internal static class UrdfRobotLoad
             Manufacturer = tip.Manufacturer,
             ModelName = tip.ModelName,
             Family = tip.Family,
-            AxisCount = names.Count,
-            JointLimits = limits,
+            AxisCount = layout.JointNames.Count,
+            JointLimits = layout.Limits,
             ReachMeters = tip.ReachMeters,
             PayloadKg = tip.PayloadKg,
             BaseFrame = tip.BaseFrame,
@@ -172,28 +137,7 @@ internal static class UrdfRobotLoad
                 : $"{tip.SourceNote}; tip + side-branch drivers",
             Disclaimer = tip.Disclaimer
         };
-        return new RobotModel(preset, urdf.CollisionModel, names);
-    }
-
-    private static bool LinkIsDescendantOf(KinematicTree tree, int linkIdx, int ancestorIdx)
-    {
-        if (linkIdx == ancestorIdx)
-            return true;
-        var byChild = new Dictionary<int, int>(tree.Joints.Count);
-        foreach (var j in tree.Joints)
-            byChild[j.ChildLinkIndex] = j.ParentLinkIndex;
-
-        var guard = 0;
-        var cur = linkIdx;
-        while (byChild.TryGetValue(cur, out var parent))
-        {
-            if (parent == ancestorIdx)
-                return true;
-            if (++guard > 256)
-                break;
-            cur = parent;
-        }
-        return false;
+        return new RobotModel(preset, urdf.CollisionModel, layout.JointNames);
     }
 
     private static RobotModelGoo CreateGoo(CachedRobot cached)

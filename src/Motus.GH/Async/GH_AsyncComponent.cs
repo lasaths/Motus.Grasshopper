@@ -456,6 +456,8 @@ public abstract class GH_AsyncComponent : GH_Component
                 return;
         }
 
+        if (string.IsNullOrEmpty(Message))
+            return;
         Message = string.Empty;
         OnDisplayExpired(true);
     }
