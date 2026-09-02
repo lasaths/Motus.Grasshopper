@@ -14,6 +14,7 @@ using Motus.GH.Rhino;
 using Rhino;
 using Rhino.Display;
 using Rhino.Geometry;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -21,7 +22,7 @@ namespace Motus.GH.Components;
 
 public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariableParameterComponent
 {
-    private const int CustomColorsParamIndex = 3;
+    private const int CustomColorsParamIndex = 4;
     private const int CoreOutputCount = 5;
 
     private static readonly Color PathColor = Color.FromArgb(180, 255, 255, 255);
@@ -52,6 +53,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Circle> _contactCircles = [];
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
+    private List<Mesh> _obstacleMeshes = new();
+    private CollisionScene? _collisionScene;
     private Plane _previewTcp = Plane.Unset;
     private bool _showTcp;
     private KinematicsPreview.PreviewMeshCache? _meshCache;
@@ -78,6 +81,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         p.AddParameter(new Param_MotusTrajectory(), "Trajectory", "Tr", "Motus trajectory from Motus Plan (list concatenates sequential goals)", GH_ParamAccess.list);
         p.AddBooleanParameter("ShowStart", "SS", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
         p.AddNumberParameter("Position", "P", "Optional normalized playback position 0–1 (Motus Scrub); pauses Play when changed", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddParameter(new Param_MotusCollisionScene(), "Scene", "Sc", "Optional collision scene — attach-aware obstacle preview when trajectory carries AttachSpans", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -180,6 +185,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 bb.Union(_previewTcp.Origin);
             foreach (var c in _contactCircles)
                 bb.Union(c.BoundingBox);
+            foreach (var mesh in _obstacleMeshes)
+                bb.Union(mesh.GetBoundingBox(false));
             return bb.IsValid ? bb : BoundingBox.Unset;
         }
     }
@@ -190,6 +197,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         DrawColoredMeshes(args, _currentMeshes, isStartGhost: false);
         if (_showStart)
             DrawColoredMeshes(args, _startMeshes, isStartGhost: true);
+        CollisionViewportPreview.DrawMeshes(args, _obstacleMeshes);
     }
 
     public override void DrawViewportWires(IGH_PreviewArgs args)
@@ -458,6 +466,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 var ctxEnd = _trajGoo.Context();
                 RefreshContactCircles(ctxEnd, state, dynamicBase);
                 UpdatePreviewTcp(ctxEnd, state, dynamicBase);
+                RefreshObstacleMeshes(ctxEnd, state, duration);
             }
             SyncScrubSlider(_position, expireDownstream: false);
             ExpirePreview(true);
@@ -475,7 +484,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 _currentMeshes = stewartPrev.Meshes.ToList();
                 _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
                 if (_trajGoo is not null)
-                    UpdatePreviewTcp(_trajGoo.Context(), state, dynamicBase);
+                {
+                    var ctxSt = _trajGoo.Context();
+                    UpdatePreviewTcp(ctxSt, state, dynamicBase);
+                    RefreshObstacleMeshes(ctxSt, state, elapsed);
+                }
                 SyncScrubSlider(_position, expireDownstream: false);
                 ExpirePreview(true);
                 OnDisplayExpired(false);
@@ -496,6 +509,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         var ctxPlay = _trajGoo!.Context();
         RefreshContactCircles(ctxPlay, state, dynamicBase);
         UpdatePreviewTcp(ctxPlay, state, dynamicBase);
+        RefreshObstacleMeshes(ctxPlay, state, elapsed);
         SyncScrubSlider(_position, expireDownstream: false);
         ExpirePreview(true);
         OnDisplayExpired(false);
@@ -589,6 +603,14 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
         _trajectory = t;
         _trajGoo = trajGoo;
+        _collisionScene = null;
+        if (Params.Input.Count > 3)
+        {
+            CollisionSceneGoo? sceneGoo = null;
+            if (da.GetData(3, ref sceneGoo) && sceneGoo?.Value is { } scene)
+                _collisionScene = scene;
+        }
+
         if (t.Points.Count == 0)
         {
             _currentMeshes = [];
@@ -700,6 +722,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         RefreshContactCircles(ctx, state, dynamicBase);
         UpdatePreviewTcp(ctx, state, dynamicBase);
+        RefreshObstacleMeshes(ctx, state, timeSeconds);
 
         if (_playing)
         {
@@ -735,6 +758,67 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 da.SetData(widthOut, toolState?.GetValueOrDefault("width"));
         }
         ExpirePreview(true);
+    }
+
+    private void RefreshObstacleMeshes(RobotContext ctx, JointState state, double timeSeconds)
+    {
+        _obstacleMeshes.Clear();
+        var previewTraj = _trajectory is null || _previewPoints.Count == 0
+            ? null
+            : PreviewTrajectory();
+
+        AttachPreviewSpan? activeSpan = null;
+        if (_trajGoo?.AttachSpans is { Count: > 0 } spans)
+        {
+            foreach (var span in spans)
+            {
+                if (timeSeconds >= span.StartSeconds - 1e-9 && timeSeconds <= span.EndSeconds + 1e-9)
+                {
+                    activeSpan = span;
+                    break;
+                }
+            }
+        }
+
+        var hidden = new HashSet<string>(StringComparer.Ordinal);
+        if (activeSpan is not null)
+        {
+            foreach (var body in activeSpan.Bodies)
+            {
+                if (body.SourceSceneObjectName is { } sourceName)
+                    hidden.Add(sourceName);
+
+                if (KinematicsPreview.AttachedBodyMesh(
+                        body, state, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
+                        ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions) is { } mesh)
+                    _obstacleMeshes.Add(mesh);
+            }
+        }
+        else if (previewTraj is not null && _trajGoo?.AttachSpans is { Count: > 0 } endedSpans)
+        {
+            // Post-detach: keep workpiece at release pose (carry end FK), not the scene pick pose.
+            foreach (var span in endedSpans)
+            {
+                if (timeSeconds <= span.EndSeconds + 1e-9) continue;
+                var releaseState = TrajectorySampler.AtTime(previewTraj, span.EndSeconds, out _);
+                foreach (var body in span.Bodies)
+                {
+                    if (body.SourceSceneObjectName is { } sourceName)
+                        hidden.Add(sourceName);
+
+                    if (KinematicsPreview.AttachedBodyMesh(
+                            body, releaseState, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
+                            ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions) is { } mesh)
+                        _obstacleMeshes.Add(mesh);
+                }
+            }
+        }
+
+        if (_collisionScene is not null)
+        {
+            foreach (var mesh in KinematicsPreview.SceneMeshesExcept(_collisionScene, hidden))
+                _obstacleMeshes.Add(mesh);
+        }
     }
 
     private void RefreshContactCircles(RobotContext ctx, JointState state, Frame? dynamicBase)
@@ -900,8 +984,15 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
         }
         if (_trajGoo is not null)
-            RefreshContactCircles(_trajGoo.Context(), state, dynamicBase);
+        {
+            var ctx = _trajGoo.Context();
+            RefreshContactCircles(ctx, state, dynamicBase);
+            UpdatePreviewTcp(ctx, state, dynamicBase);
+            RefreshObstacleMeshes(ctx, state, elapsed);
+        }
         ExpirePreview(true);
+        OnDisplayExpired(false);
+        RhinoDoc.ActiveDoc?.Views.Redraw();
         return true;
     }
 

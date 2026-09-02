@@ -79,8 +79,10 @@ public sealed class MotusMotionSegmentComponent : MotusComponentBase, IGH_Variab
         base.AddedToDocument(doc);
         doc.ScheduleSolution(1, _ =>
         {
-            _motionType = PeekType();
-            SyncTypePin(_motionType);
+            if (Params.Input[0].SourceCount > 0)
+                _motionType = PeekType();
+            else
+                SyncTypePin(_motionType);
             // Keep canvas Bounds/Pivot from Read — recreating attributes here zeros pivots.
             SyncPinsForType(_motionType, force: true, recreateAttributes: false);
             RestoreCanvasPivot();
@@ -715,6 +717,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Wire: Motus Robot Rb; Motus Move Seg list in program order",
+        "Wire: optional Prior Tr0 from previous Program Tr for pick-place chains (start joints + tool state)",
         "Next: Tr->Motus Preview / Motus Waypoints",
         "Note: click Plan or enable Auto Plan",
     ];
@@ -756,6 +759,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         p.AddGenericParameter("Group", "Gr", "Optional planning group (locks non-group joints)", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
         p.AddGenericParameter("Attach", "A", "Optional attached bodies list", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddParameter(new Param_MotusTrajectory(), "Prior", "Tr0", "Optional prior trajectory — last point supplies start joints and initial tool state when St0 is unwired", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -814,6 +819,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 _autoPlanAttempted = true;
                 ScheduleDebouncedPlan();
             }
+            else if (_autoPlan && !Locked && _cached is { Success: false })
+                ScheduleDebouncedPlan();
 
             if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
             da.SetData(1, _cached is null
@@ -848,6 +855,21 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         }
 
         var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out var usedDefaultStart);
+        EndEffectorState? initialToolState = toolCaps?.DefaultState();
+        TrajectoryGoo? priorGoo = null;
+        if (da.GetData(6, ref priorGoo) && priorGoo?.Value is { Points.Count: > 0 } priorTraj)
+        {
+            var priorEnd = priorTraj.Points[^1];
+            if (usedDefaultStart)
+            {
+                start = priorEnd.JointState;
+                usedDefaultStart = false;
+            }
+
+            if (priorEnd.ToolState is not null)
+                initialToolState = priorEnd.ToolState;
+        }
+
         GhExtract.RemarkIfDefaultStart(this, usedDefaultStart);
 
         var collision = GhExtract.ParseCollisionInput(da, 3);
@@ -873,7 +895,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         var request = new MotionProgramRequest(ctx.EffectiveModel, start, segments, opts)
         {
-            InitialToolState = toolCaps?.DefaultState(),
+            InitialToolState = initialToolState,
             ToolCapabilities = toolCaps,
             SessionTool = robotGoo.Tool
         };
@@ -881,6 +903,20 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         if (_cached.Success && _cached.Trajectory is not null)
         {
+            IReadOnlyList<AttachPreviewSpan>? attachSpans = null;
+            if (planningContext.Attached is { Count: > 0 } attached)
+            {
+                attachSpans =
+                [
+                    new AttachPreviewSpan
+                    {
+                        StartSeconds = 0,
+                        EndSeconds = _cached.Trajectory.Points[^1].TimeSeconds,
+                        Bodies = attached
+                    }
+                ];
+            }
+
             _cachedGoo = new TrajectoryGoo(_cached.Trajectory)
             {
                 Chain = robotGoo.Chain,
@@ -895,7 +931,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 ProvenanceSnapshot = new PlannerProvenance
                 {
                     PlannerId = "industrial-motion-program"
-                }
+                },
+                AttachSpans = attachSpans
             };
             da.SetData(0, _cachedGoo);
         }

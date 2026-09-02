@@ -852,6 +852,113 @@ public static class KinematicsPreview
         }
     }
 
+    /// <summary>TCP world matrix for attach preview — serial FK, else TreeFK at tip link (URDF).</summary>
+    public static bool TryComputeTcpTransformMatrix(
+        RobotModel model,
+        JointState state,
+        SerialJointChain? chain,
+        BaseFrame baseFrame,
+        ToolFrame toolFrame,
+        KinematicTree? tree,
+        IReadOnlyList<string>? armJointNames,
+        IReadOnlyList<double>? treeDriverHome,
+        out double[] tcpM)
+    {
+        var tipN = chain?.Joints.Length ?? model.Preset.AxisCount;
+        var tipQ = TipJointPositions(state.Positions, tipN);
+
+        if (TryFk(model, chain) is { } fk)
+        {
+            tcpM = fk.ComputeTcpTransform(tipQ, baseFrame.Frame, toolFrame.Frame);
+            return true;
+        }
+
+        if (chain is not null)
+        {
+            try
+            {
+                var serialFk = KinematicsResolver.CreateFkSolver(model.Preset, chain);
+                tcpM = serialFk.ComputeTcpTransform(tipQ, baseFrame.Frame, toolFrame.Frame);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                // fall through to TreeFK
+            }
+        }
+
+        if (tree is null)
+        {
+            tcpM = null!;
+            return false;
+        }
+
+        var driverQ = new double[tree.DriverCount];
+        if (TryFillTreeDriverQ(tree, state.Positions, armJointNames ?? model.JointNames, treeDriverHome, driverQ.AsSpan()) is not null)
+        {
+            tcpM = null!;
+            return false;
+        }
+
+        var treeMats = new double[tree.Links.Count][];
+        for (var i = 0; i < treeMats.Length; i++)
+            treeMats[i] = new double[16];
+        new TreeForwardKinematics(tree).ComputeLinkTransformsInto(driverQ, treeMats);
+
+        var linkIdx = ResolveTipLinkIndex(tree);
+        if (linkIdx < 0)
+        {
+            tcpM = null!;
+            return false;
+        }
+
+        var baseM = Transforms.FromFrame(baseFrame.Frame);
+        var flangeM = Transforms.Multiply(baseM, treeMats[linkIdx]);
+        tcpM = Transforms.Multiply(flangeM, Transforms.FromFrame(toolFrame.Frame));
+        return true;
+    }
+
+    private static int ResolveTipLinkIndex(KinematicTree tree)
+    {
+        foreach (var name in new[] { "tool0", "ee_link", "tcp", "flange" })
+        {
+            try { return tree.IndexOfLink(name); }
+            catch { /* try next */ }
+        }
+
+        return tree.Links.Count > 0 ? tree.Links.Count - 1 : -1;
+    }
+
+    public static Mesh? AttachedBodyMesh(
+        AttachedBody body,
+        JointState state,
+        RobotModel model,
+        SerialJointChain? chain,
+        BaseFrame baseFrame,
+        ToolFrame toolFrame,
+        KinematicTree? tree = null,
+        IReadOnlyList<string>? armJointNames = null,
+        IReadOnlyList<double>? treeDriverHome = null)
+    {
+        if (!TryComputeTcpTransformMatrix(
+                model, state, chain, baseFrame, toolFrame, tree, armJointNames, treeDriverHome, out var tcpM))
+            return null;
+
+        var localM = Transforms.Multiply(tcpM, Transforms.FromFrame(body.TcpLocalPose));
+        var worldObj = TransformCollision(body.Geometry, localM);
+        return CollisionObjectMesh(worldObj);
+    }
+
+    public static IEnumerable<Mesh> SceneMeshesExcept(CollisionScene scene, IReadOnlyCollection<string> hiddenNames)
+    {
+        foreach (var obj in scene.Objects)
+        {
+            if (hiddenNames.Contains(obj.Name)) continue;
+            if (CollisionObjectMesh(obj) is { } mesh)
+                yield return mesh;
+        }
+    }
+
     private static Mesh? ToRhinoMesh(CollisionObject obj)
     {
         switch (obj.Shape)

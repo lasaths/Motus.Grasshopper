@@ -1,5 +1,6 @@
 using Grasshopper.Kernel;
 using Motus.Core;
+using Motus.Geometry;
 using Motus.GH;
 using Motus.GH.Data;
 using Motus.GH.Rhino;
@@ -82,7 +83,9 @@ public sealed class MotusAttachBodyComponent : MotusComponentBase
         p.AddGenericParameter("Object", "O", "Collision object geometry to attach", GH_ParamAccess.item);
         p.AddTextParameter("Name", "N", "Attached body name", GH_ParamAccess.item, "attached");
         p[p.ParamCount - 1].Optional = true;
-        p.AddPlaneParameter("TcpLocal", "P", "TCP-local pose of attached geometry", GH_ParamAccess.item, Plane.WorldXY);
+        p.AddPlaneParameter("GraspTcp", "G", "Optional TCP plane at grasp — auto TcpLocal from Object pose (preferred)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddPlaneParameter("TcpLocal", "P", "Manual TCP-local pose when GraspTcp unwired", GH_ParamAccess.item, Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("SourceName", "Src", "Optional scene object name to hide while attached", GH_ParamAccess.item, "");
         p[p.ParamCount - 1].Optional = true;
@@ -101,22 +104,64 @@ public sealed class MotusAttachBodyComponent : MotusComponentBase
         }
 
         var name = "attached";
+        var graspTcp = Plane.Unset;
         var tcp = Plane.WorldXY;
         var sourceName = "";
         da.GetData(1, ref name);
-        da.GetData(2, ref tcp);
-        da.GetData(3, ref sourceName);
+        da.GetData(2, ref graspTcp);
+        da.GetData(3, ref tcp);
+        da.GetData(4, ref sourceName);
 
         if (string.IsNullOrWhiteSpace(name))
             name = objGoo.Value.Name;
 
+        var geometry = AttachBodyGeometry.WithIdentityPose(objGoo.Value);
+        Frame tcpLocal;
+        if (graspTcp.IsValid)
+        {
+            tcpLocal = AttachBodyGeometry.TcpLocalFromGrasp(
+                FrameConversion.FromPlane(graspTcp),
+                objGoo.Value.Pose);
+        }
+        else
+        {
+            tcpLocal = FrameConversion.FromPlane(tcp);
+            if (tcp.IsValid && Math.Abs(tcp.OriginX) + Math.Abs(tcp.OriginY) + Math.Abs(tcp.OriginZ) > 1e-6
+                && tcp.Origin.DistanceTo(Point3d.Origin) > 1e-6)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    "TcpLocal looks like a world-space plane — wire GraspTcp (pick TCP) for auto offset.");
+            }
+        }
+
         var attached = new AttachedBody(
             name,
-            FrameConversion.FromPlane(tcp),
-            objGoo.Value,
+            tcpLocal,
+            geometry,
             string.IsNullOrWhiteSpace(sourceName) ? null : sourceName);
         da.SetData(0, new AttachedBodyGoo(attached));
     }
 
     public override Guid ComponentGuid => new("0c464ac8-0e1d-4c7a-9c8c-0a21f1046314");
+}
+
+internal static class AttachBodyGeometry
+{
+    internal static CollisionObject WithIdentityPose(CollisionObject source) =>
+        source.Shape switch
+        {
+            CollisionShape.Box => CollisionObject.Box(source.Name, Frame.Identity, source.ExtentX, source.ExtentY, source.ExtentZ),
+            CollisionShape.Sphere => CollisionObject.Sphere(source.Name, Frame.Identity, source.ExtentX),
+            CollisionShape.Capsule => CollisionObject.Capsule(source.Name, Frame.Identity, source.ExtentX, source.ExtentY),
+            CollisionShape.Mesh when source.MeshVertices is not null && source.MeshIndices is not null =>
+                CollisionObject.Mesh(source.Name, Frame.Identity, source.MeshVertices, source.MeshIndices),
+            _ => source
+        };
+
+    internal static Frame TcpLocalFromGrasp(Frame tcpAtGrasp, Frame boxWorld)
+    {
+        var invTcp = Transforms.Inverse(Transforms.FromFrame(tcpAtGrasp));
+        var localM = Transforms.Multiply(invTcp, Transforms.FromFrame(boxWorld));
+        return Transforms.ToFrame(localM);
+    }
 }

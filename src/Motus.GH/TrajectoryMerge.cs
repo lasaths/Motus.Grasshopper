@@ -75,13 +75,28 @@ internal static class TrajectoryMerge
     {
         var first = goos[0];
         var points = new List<TrajectoryPoint>();
+        var mergedSpans = new List<AttachPreviewSpan>();
         var timeOffset = 0.0;
 
         for (var i = 0; i < goos.Count; i++)
         {
+            var segmentStart = timeOffset;
             var traj = goos[i].Value!;
             if (traj.Points.Count == 0)
                 continue;
+
+            if (goos[i].AttachSpans is { Count: > 0 } spans)
+            {
+                foreach (var span in spans)
+                {
+                    mergedSpans.Add(new AttachPreviewSpan
+                    {
+                        StartSeconds = segmentStart + span.StartSeconds,
+                        EndSeconds = segmentStart + span.EndSeconds,
+                        Bodies = span.Bodies
+                    });
+                }
+            }
 
             var startIndex = 0;
             if (i > 0 && points.Count > 0)
@@ -125,7 +140,8 @@ internal static class TrajectoryMerge
             ProvenanceSnapshot = first.ProvenanceSnapshot,
             TreeDriverHome = first.TreeDriverHome,
             BasePath = first.BasePath,
-            TerrainSampler = first.TerrainSampler
+            TerrainSampler = first.TerrainSampler,
+            AttachSpans = mergedSpans.Count > 0 ? mergedSpans : null
         };
     }
 

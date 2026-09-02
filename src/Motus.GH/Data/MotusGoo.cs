@@ -305,6 +305,14 @@ public sealed class BodyPoseSolverGoo : MotusGooBase<IBodyPoseSolver>
     public override string ToString() => Value?.MethodId ?? "Pose";
 }
 
+/// <summary>Time window + bodies for Motus Preview attach visualization (from Program plans with Attach).</summary>
+public sealed class AttachPreviewSpan
+{
+    public double StartSeconds { get; init; }
+    public double EndSeconds { get; init; }
+    public IReadOnlyList<AttachedBody> Bodies { get; init; } = [];
+}
+
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
@@ -327,6 +335,8 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public IReadOnlyList<Frame>? BasePath { get; set; }
     /// <summary>Optional ground height sampler (m) for Family=legged contact rings.</summary>
     public LeggedGait.TerrainHeight? TerrainSampler { get; set; }
+    /// <summary>Carry-segment attach windows (merged when trajectories concatenate).</summary>
+    public IReadOnlyList<AttachPreviewSpan>? AttachSpans { get; set; }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }

@@ -17,6 +17,7 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | Animate | **Motus Preview** (+ optional **Scrub**) |
 | Controller handoff | **Motus Waypoints** `Q` (joint MoveJ). JSON/CSV → **Motus Export** |
 | PTP/LIN/CIRC program | **Motus Move** → **Motus Program** |
+| Pick-and-place (attach + SET) | 3× **Motus Program** + **Motus Attach Body** on carry only → **Motus Preview** `Tr` list — see `examples/10_pick_place.ghx` |
 | Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
 
 ```
