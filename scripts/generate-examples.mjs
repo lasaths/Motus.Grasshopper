@@ -24,6 +24,10 @@ const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
 /** UR10e home for example 10 pick-and-place (rad). */
 const PICK_PLACE_HOME = [0, -1.5708, 1.5708, 0, 1.5708, 0];
+/** Side-grasp: box half-X + clearance along +world X (TCP −Z points −X). */
+const PICK_TCP_OFFSET_X = 0.06;
+/** Table under pick+place: top ~13 mm below box bottom so carry LIN stays free. */
+const PICK_PLACE_TABLE = [0.8264, 0.1991, 0.55];
 /** Walking hex right-middle tip leg: hip, femur, tibia (rad) at default stance. */
 const HEX_TIP_START = [-0.1309, 0.5236, -0.5236];
 const HEX_TIP_GOAL = [-0.1309, 0.6109, -0.5236];
@@ -2717,7 +2721,7 @@ function graph09() {
 /** 10 — pick-and-place: 3× Program + Tr0 chain + Attach on carry (Cassis-authored layout, generated). */
 function graph10() {
   const title = nativeScribble(40, 36, '10  Pick & place', 28);
-  const note = nativePanel(600, 18, 'Approach → carry (Attach) → retract. Tr0 chains Programs. SET jaws ≠ Attach payload.', 'Note', 420, 40);
+  const note = nativePanel(600, 18, 'Approach → carry (Attach) → retract. Table stays in ColScene; Attach hides workpiece only. SET jaws ≠ Attach payload.', 'Note', 520, 40);
 
   const robot = ur10eRobot(40, 80);
   const home = motusComponent('joints', 400, 220, {}, { jointValues: PICK_PLACE_HOME });
@@ -2732,16 +2736,28 @@ function graph10() {
   const colBox = motusComponent('colBox', 200, 200, {
     Plane: [outRef(boxPl.node, 'Plane')],
   }, { text: { Name: 'workpiece' }, numbers: { HalfX: 0.03, HalfY: 0.03, HalfZ: 0.03 }, hidden: true });
-  const scene = motusComponent('colScene', 360, 200, {
-    Objects: [outRef(colBox.node, 'Object')],
+  const tablePt = nativeConstructPoint(40, 160, PICK_PLACE_TABLE);
+  const tablePl = nativePlane(180, 160, tablePt.node.outputs[0], uz.node.outputs[0]);
+  const colTable = motusComponent('colBox', 40, 80, {
+    Plane: [outRef(tablePl.node, 'Plane')],
+  }, { text: { Name: 'table' }, numbers: { HalfX: 0.22, HalfY: 0.16, HalfZ: 0.02 }, hidden: true });
+  const obstacles = nativeMerge(320, 160, [
+    outRef(colBox.node, 'Object'),
+    outRef(colTable.node, 'Object'),
+  ]);
+  const scene = motusComponent('colScene', 420, 160, {
+    Objects: [outRef(obstacles.node, 'Result')],
   }, { hidden: true });
-  const attach = motusComponent('attach', 520, 200, {
-    Object: [outRef(colBox.node, 'Object')],
-    GraspTcp: [outRef(tcp.node, 'Plane')],
-  }, { text: { Name: 'workpiece', SourceName: 'workpiece' } });
-
+  const deBox = nativeDeconstructPlane(200, 320, outRef(boxPl.node, 'Plane'));
   const deplane = nativeDeconstructPlane(480, 360, outRef(tcp.node, 'Plane'));
   const ux = nativeUnitX(480, 460);
+  const pickApproach = nativeVectorAmplitude(240, 320, ux.node.outputs[0], PICK_TCP_OFFSET_X);
+  const pickPt = nativeMoveTranslate(300, 320, outRef(deBox.node, 'Origin'), outRef(pickApproach.node, 'Vector'));
+  const pickPl = nativeConstructPlaneAxes(380, 320, outRef(pickPt.node, 'Geometry'), outRef(deplane.node, 'X-Axis'), outRef(deplane.node, 'Y-Axis'));
+  const attach = motusComponent('attach', 520, 200, {
+    Object: [outRef(colBox.node, 'Object')],
+    GraspTcp: [outRef(pickPl.node, 'Plane')],
+  }, { text: { Name: 'workpiece', SourceName: 'workpiece' } });
   const uy = nativeUnitY(480, 490);
   const uzLift = nativeUnitZ(480, 520);
   const ampX = nativeVectorAmplitude(540, 390, ux.node.outputs[0], -0.05);
@@ -2761,7 +2777,7 @@ function graph10() {
   }, { toolStatePreset: 'Custom', numbers: { Width: 0.06 } });
 
   const segApproachLin = motusComponent('segment', 691, 302, {
-    Goal: [outRef(tcp.node, 'Plane')],
+    Goal: [outRef(pickPl.node, 'Plane')],
   }, { text: { Type: 'LIN' } });
   const segApproachSet = motusComponent('segment', 700, 400, {
     ToolState: [outRef(tsClosed.node, 'State')],
@@ -2818,8 +2834,9 @@ function graph10() {
   });
 
   const gRobot = nativeGroup('Robot + home TCP', [robot, home, tcp], GROUP_COLOUR.robot);
-  const gCol = nativeGroup('Workpiece + Attach', [
-    { xml: uz.xml, node: uz.node }, boxPt, boxPl, colBox, scene, attach,
+  const gCol = nativeGroup('Workpiece + table + Attach', [
+    { xml: uz.xml, node: uz.node }, boxPt, boxPl, deBox, pickApproach, pickPt, pickPl,
+    colBox, tablePt, tablePl, colTable, obstacles, scene, attach,
   ], GROUP_COLOUR.collision);
   const gGoals = nativeGroup('Place/retract offsets', [
     deplane, ux, uy, uzLift, ampX, ampY, ampZ, moveX, movePlace, moveRetract, plPlace, plRetract,
@@ -2831,7 +2848,8 @@ function graph10() {
 
   const objs = [
     title, note, robot, home, tcp,
-    { xml: uz.xml }, { xml: boxPt.xml }, { xml: boxPl.xml }, colBox, scene, attach,
+    { xml: uz.xml }, { xml: boxPt.xml }, { xml: boxPl.xml }, deBox, pickApproach, pickPt, pickPl,
+    colBox, { xml: tablePt.xml }, { xml: tablePl.xml }, colTable, obstacles, scene, attach,
     deplane, { xml: ux.xml }, { xml: uy.xml }, { xml: uzLift.xml }, ampX, ampY, ampZ,
     moveX, movePlace, moveRetract, plPlace, plRetract,
     tsOpen, tsClosed,
@@ -2842,7 +2860,7 @@ function graph10() {
   ];
   objs._meta = {
     fileName: '10_pick_place.ghx',
-    description: 'UR10e pick-and-place: 3× Motus Program (approach / carry+Attach / retract) with Tr0 chaining → Preview. Auto Plan on.',
+    description: 'UR10e pick-and-place: 3× Motus Program (approach / carry+Attach / retract) + table in ColScene. Attach hides workpiece only. Auto Plan on.',
   };
   return buildGraph(objs);
 }

@@ -28,7 +28,7 @@ src/Motus.GH/
   Data/ Params/   # TrajectoryGoo, Param_Motus*
   Preview/ UI/    # Scrub, ButtonAttributes, FK preview
   Resources/icons/# Phosphor duotone PNGs (embedded)
-examples/         # 01–09 via generate-examples.mjs; 10_pick_place.ghx Cassis-authored (patch Move MotionType after save)
+examples/         # 01–10 via generate-examples.mjs (10 with --only=10)
 scripts/          # build helpers, qa-smoke, validate-ghx
 ```
 
@@ -103,6 +103,6 @@ Also check in Rhino:
 - `06_turntable_group`: UR beside 1-DOF turntable; GH Center Box → Motus Robot Attach on `turntable_link` (TreeFK); AllDrivers multi-waypoint TCP tracks spoke
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
-- `10_pick_place`: UR10e + box + 3× Program (approach / carry+Attach / retract); SET jaws ≠ Attach payload; Cassis-authored (not in `generate-examples.mjs`)
+- `10_pick_place`: UR10e + box + table ColScene + 3× Program (approach / carry+Attach / retract); SET jaws ≠ Attach payload; generated via `generate-examples.mjs --only=10`
 - Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract
