@@ -17,7 +17,7 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | Animate | **Motus Preview** (+ optional **Scrub**) |
 | Controller handoff | **Motus Waypoints** `Q` (joint MoveJ). JSON/CSV → **Motus Export** |
 | PTP/LIN/CIRC program | **Motus Move** → **Motus Program** |
-| Pick-and-place (attach + SET) | 3× **Motus Program** + **Motus Attach Body** on carry only; table stays in **ColScene** → **Motus Preview** `Tr` list — see `examples/10_pick_place.ghx` |
+| Pick-and-place / destack | **C# layout script** → **Motus Collision Boxes** + **Motus Pick Place** → one **Motus Program** (Attach/Detach mid-program); plan **ColScene** = table only — see `examples/10_pick_place.ghx` |
 | Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
 
 ```
@@ -192,6 +192,7 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 |-----------|------|
 | Motus RRT Settings | `11d59b15-ffe2-488e-83b8-52eddf772025` |
 | Motus Move | `7c4e9a2f-1b3d-4e8a-9f6c-2d8b5a7e9c31` |
+| Motus Pick Place | `b5c6d7e8-f9a0-4123-c456-789abcdef012` |
 | Motus Program | `8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42` |
 
 `Motus Move` uses **on-component** Type (± ToolMode) dropdowns (Arup-style attributes — not a floating GH Value List). Pins morph to the active type:
@@ -208,7 +209,9 @@ Wire **Motus Preview** `Collision` to the same scene to highlight TCP segments t
 
 Exported trajectories include optional `toolState` per waypoint and `toolCapabilities` in JSON (see `examples/04_motion_program.ghx`).
 
-`Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present.
+`Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present. Mid-program **Attach** / **Detach** segments (from **Motus Pick Place**) mutate the planning scene and stamp per-cycle `AttachSpans` on the trajectory for Preview.
+
+**Motus Pick Place** expands Grasp / Place / Objects lists into LIN → SET close → Attach → lift → place → SET open → lift → Detach cycles (`PickPlaceCycle` in Motus.NET). Wire `Seg` into **Motus Program**. Open/Close are jaw widths in meters (example 10: open `0.085`, close `0.04` = brick short side). Do not use Preset Closed `0` for pinch-through. SET jaws ≠ Attach payload.
 
 `Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Robotiq finger meshes follow URDF/PickNik joint kinematics from jaw width (not a flattened scale).
 
@@ -220,6 +223,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 |-----------|-------|
 | Motus Collision Sphere | Center point + radius (m) |
 | Motus Collision Box | Plane + half extents (m) |
+| Motus Collision Boxes | Plane list + half extents + name prefix → object list (`b00`…) |
 | Motus Collision Plane | Infinite half-space floor/wall; **+Z free**. Default **Offset** 2 mm sinks the plane. Scene auto-ignores proximal `link:-1..1` vs planes (robot+floor at origin). |
 | Motus Collision Mesh | Mesh or Brep obstacle (meters); plane bakes world pose into vertices |
 | Motus Collision Scene | Merge collision objects; optional **Srdf** path for allowed pairs (`link:N` or obstacle names). Outputs scene plus optional SRDF groups/end-effector map. |

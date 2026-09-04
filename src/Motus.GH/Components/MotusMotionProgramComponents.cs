@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
@@ -703,8 +704,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     private TrajectoryGoo? _cachedGoo;
     private bool _run;
     private bool _autoPlan;
-    private bool _autoPlanAttempted;
     private int _debounceGen;
+    private string? _lastPlannedFingerprint;
 
     public MotusProgramPlanComponent()
         : base(
@@ -786,7 +787,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         {
             _cached = null;
             _cachedGoo = null;
-            _autoPlanAttempted = false;
+            _lastPlannedFingerprint = null;
         }
 
         ExpireSolution(true);
@@ -804,6 +805,19 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         });
     }
 
+    private static string ProgramFingerprint(
+        IReadOnlyList<MotionSegment> segments,
+        JointState start,
+        CollisionScene? scene)
+    {
+        var parts = segments.Select(s => s.ToString() ?? "")
+            .Append(string.Join(",", start.Positions.Select(q => q.ToString("R"))))
+            .Append(scene is null
+                ? ""
+                : string.Join(";", scene.Objects.Select(o => $"{o.Name}:{o.ContentHash}")));
+        return string.Join("|", parts);
+    }
+
     protected override void SolveInstance(IGH_DataAccess da)
     {
         if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo)) return;
@@ -811,16 +825,16 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         if (!_run)
         {
-            // First open / empty cache: schedule once (segments are new objects each solve).
-            if (_autoPlan && !Locked && !_autoPlanAttempted && _cached is null &&
+            if (_autoPlan && !Locked &&
                 GhExtract.TryMotionSegments(da, 1, out var pending, out _) &&
                 pending.Count > 0)
             {
-                _autoPlanAttempted = true;
-                ScheduleDebouncedPlan();
+                var startPeek = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
+                var scenePeek = GhExtract.ParseCollisionInput(da, 3).Scene;
+                var fp = ProgramFingerprint(pending, startPeek, scenePeek);
+                if (fp != _lastPlannedFingerprint || _cached is null || _cached is { Success: false })
+                    ScheduleDebouncedPlan();
             }
-            else if (_autoPlan && !Locked && _cached is { Success: false })
-                ScheduleDebouncedPlan();
 
             if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
             da.SetData(1, _cached is null
@@ -900,12 +914,26 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             SessionTool = robotGoo.Tool
         };
         _cached = new IndustrialMotionPlanner(ctx.EffectiveModel.Preset, ctx.Chain).Plan(request);
+        _lastPlannedFingerprint = ProgramFingerprint(segments, start, collision.Scene);
 
         if (_cached.Success && _cached.Trajectory is not null)
         {
             IReadOnlyList<AttachPreviewSpan>? attachSpans = null;
-            if (planningContext.Attached is { Count: > 0 } attached)
+            if (_cached.AttachSpans is { Count: > 0 } planned)
             {
+                attachSpans = planned
+                    .Select(s => new AttachPreviewSpan
+                    {
+                        StartSeconds = s.StartSeconds,
+                        EndSeconds = s.EndSeconds,
+                        Bodies = s.Bodies,
+                        ReleaseWorldPose = s.ReleaseWorldPose
+                    })
+                    .ToList();
+            }
+            else if (planningContext.Attached is { Count: > 0 } attached)
+            {
+                // Legacy Program Attach pin: whole trajectory window.
                 attachSpans =
                 [
                     new AttachPreviewSpan

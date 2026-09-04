@@ -22,12 +22,14 @@ const absPath = (...parts) => path.resolve(repoRoot, ...parts);
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
-/** UR10e home for example 10 pick-and-place (rad). */
-const PICK_PLACE_HOME = [0, -1.5708, 1.5708, 0, 1.5708, 0];
-/** Side-grasp: box half-X + clearance along +world X (TCP −Z points −X). */
-const PICK_TCP_OFFSET_X = 0.06;
-/** Table under pick+place: top ~13 mm below box bottom so carry LIN stays free. */
-const PICK_PLACE_TABLE = [0.8264, 0.1991, 0.55];
+/** UR10e+Robotiq Z-down home for example 10 (rad). Motus approach = world −Z at +X near tower. */
+const PICK_PLACE_HOME = [0, -Math.PI / 2, Math.PI / 2, -Math.PI / 2, Math.PI / 2, 0];
+/** Table top under bricks = 0.48 m; ColBox HalfZ=0.02 → center Z = 0.46. */
+const PICK_PLACE_TABLE = [0.70, -0.20, 0.46];
+/** Tower footprint center (bottom brick Z = 0.48 + HalfZ). */
+const PICK_PLACE_TOWER = [0.70, 0.0, 0.48];
+/** First place-column XY (same Z base as tower). */
+const PICK_PLACE_COLUMNS = [0.70, -0.25, 0.48];
 /** Walking hex right-middle tip leg: hip, femur, tibia (rad) at default stance. */
 const HEX_TIP_START = [-0.1309, 0.5236, -0.5236];
 const HEX_TIP_GOAL = [-0.1309, 0.6109, -0.5236];
@@ -240,6 +242,26 @@ const MOTUS = {
       { name: 'Name', nick: 'N', desc: 'Obstacle name', optional: false, text: 'table' },
     ],
     outputs: [{ name: 'Object', nick: 'O', desc: 'Collision object' }] },
+  colBoxes: { guid: 'a4b5c6d7-e8f9-4012-b345-6789abcdef01', name: 'Motus Collision Boxes', nick: 'Boxes', w: 74, h: 104,
+    inputs: [
+      { name: 'Planes', nick: 'P', desc: 'Box centers; plane XYZ = box XYZ', optional: false, access: 1 },
+      { name: 'HalfX', nick: 'X', desc: 'Half extent X (m)', optional: false, number: 0.04 },
+      { name: 'HalfY', nick: 'Y', desc: 'Half extent Y (m)', optional: false, number: 0.02 },
+      { name: 'HalfZ', nick: 'Z', desc: 'Half extent Z (m)', optional: false, number: 0.01 },
+      { name: 'Prefix', nick: 'N', desc: 'Name prefix → N00, N01, …', optional: false, text: 'b' },
+    ],
+    outputs: [{ name: 'Objects', nick: 'O', desc: 'Collision objects', access: 1 }] },
+  pickPlace: { guid: 'b5c6d7e8-f9a0-4123-c456-789abcdef012', name: 'Motus Pick Place', nick: 'PickPlace', w: 74, h: 144,
+    inputs: [
+      { name: 'Grasp', nick: 'G', desc: 'Grasp TCP planes (visit order)', optional: false, access: 1 },
+      { name: 'Place', nick: 'Pl', desc: 'Place TCP planes', optional: false, access: 1 },
+      { name: 'Objects', nick: 'O', desc: 'Collision objects to attach', optional: false, access: 1 },
+      { name: 'Approach', nick: 'Az', desc: 'Hover height world +Z (m)', optional: false, number: 0.08 },
+      { name: 'Open', nick: 'Wopen', desc: 'Open jaw width (m)', optional: false, number: 0.085 },
+      { name: 'Close', nick: 'Wclose', desc: 'Close jaw width (m)', optional: false, number: 0.04 },
+      { name: 'Step', nick: 'St', desc: 'LIN step (m)', optional: true, number: 0.005 },
+    ],
+    outputs: [{ name: 'Segments', nick: 'Seg', desc: 'Motion segments for Motus Program', access: 1 }] },
   colMesh: { guid: 'f4d5e6f7-a8b9-4012-d345-6789abcdef01', name: 'Motus Collision Mesh', nick: 'ColMesh', w: 74, h: 54,
     inputs: [
       { name: 'Geometry', nick: 'G', desc: 'Triangle mesh or Brep obstacle', optional: false },
@@ -2493,12 +2515,12 @@ function graph07() {
   const tool = motusComponent('tool', 1060, yL, {
     Description: [outRef(assemble.node, 'Description')],
   }, { text: { Name: 'demo_gripper', Binding: 'j_left' }, toolCapabilities: 'Robotiq2F85' });
-  const stateClosed = motusComponent('toolState', 1060, yR + 40, {
+  const stateClosed = motusComponent('toolState', 1060, yR + 160, {
     Tool: [outRef(tool.node, 'Tool')],
   }, { toolStatePreset: 'Closed' });
 
   // ur10e_minimal now ships primitive <visual>s (no DAE) so Preview shows arm + Rd gripper.
-  const armY = 520;
+  const armY = 540;
   const urdfFile = nativeFilePath(900, armY, absPath('examples/ur10e/ur10e_minimal.urdf'));
   const robot = motusComponent('robot', 1060, armY, {
     Path: [outRef(urdfFile.node, 'Path')],
@@ -2718,154 +2740,16 @@ function graph09() {
   });
 }
 
-/** 10 — pick-and-place: 3× Program + Tr0 chain + Attach on carry (Cassis-authored layout, generated). */
+/** 10 — tower destack: C# layout script + Boxes + Pick Place → one Program (20 cycles).
+ * Authored/saved from Cassis (C# Script component); do not overwrite via --only=10. */
 function graph10() {
-  const title = nativeScribble(40, 36, '10  Pick & place', 28);
-  const note = nativePanel(600, 18, 'Approach → carry (Attach) → retract. Table stays in ColScene; Attach hides workpiece only. SET jaws ≠ Attach payload.', 'Note', 520, 40);
-
-  const robot = ur10eRobot(40, 80);
-  const home = motusComponent('joints', 400, 220, {}, { jointValues: PICK_PLACE_HOME });
-  const tcp = motusComponent('tcpPose', 400, 300, {
-    Robot: [outRef(robot.node, 'Robot')],
-    State: [outRef(home.node, 'State')],
-  });
-
-  const uz = nativeUnitZ(40, 200);
-  const boxPt = nativeConstructPoint(160, 240, [0.8514, 0.1741, 0.6136]);
-  const boxPl = nativePlane(320, 240, boxPt.node.outputs[0], uz.node.outputs[0]);
-  const colBox = motusComponent('colBox', 200, 200, {
-    Plane: [outRef(boxPl.node, 'Plane')],
-  }, { text: { Name: 'workpiece' }, numbers: { HalfX: 0.03, HalfY: 0.03, HalfZ: 0.03 }, hidden: true });
-  const tablePt = nativeConstructPoint(40, 160, PICK_PLACE_TABLE);
-  const tablePl = nativePlane(180, 160, tablePt.node.outputs[0], uz.node.outputs[0]);
-  const colTable = motusComponent('colBox', 40, 80, {
-    Plane: [outRef(tablePl.node, 'Plane')],
-  }, { text: { Name: 'table' }, numbers: { HalfX: 0.22, HalfY: 0.16, HalfZ: 0.02 }, hidden: true });
-  const obstacles = nativeMerge(320, 160, [
-    outRef(colBox.node, 'Object'),
-    outRef(colTable.node, 'Object'),
-  ]);
-  const scene = motusComponent('colScene', 420, 160, {
-    Objects: [outRef(obstacles.node, 'Result')],
-  }, { hidden: true });
-  const deBox = nativeDeconstructPlane(200, 320, outRef(boxPl.node, 'Plane'));
-  const deplane = nativeDeconstructPlane(480, 360, outRef(tcp.node, 'Plane'));
-  const ux = nativeUnitX(480, 460);
-  const pickApproach = nativeVectorAmplitude(240, 320, ux.node.outputs[0], PICK_TCP_OFFSET_X);
-  const pickPt = nativeMoveTranslate(300, 320, outRef(deBox.node, 'Origin'), outRef(pickApproach.node, 'Vector'));
-  const pickPl = nativeConstructPlaneAxes(380, 320, outRef(pickPt.node, 'Geometry'), outRef(deplane.node, 'X-Axis'), outRef(deplane.node, 'Y-Axis'));
-  const attach = motusComponent('attach', 520, 200, {
-    Object: [outRef(colBox.node, 'Object')],
-    GraspTcp: [outRef(pickPl.node, 'Plane')],
-  }, { text: { Name: 'workpiece', SourceName: 'workpiece' } });
-  const uy = nativeUnitY(480, 490);
-  const uzLift = nativeUnitZ(480, 520);
-  const ampX = nativeVectorAmplitude(540, 390, ux.node.outputs[0], -0.05);
-  const ampY = nativeVectorAmplitude(540, 430, uy.node.outputs[0], 0.05);
-  const ampZ = nativeVectorAmplitude(540, 490, uzLift.node.outputs[0], 0.1);
-  const moveX = nativeMoveTranslate(600, 420, outRef(deplane.node, 'Origin'), outRef(ampX.node, 'Vector'));
-  const movePlace = nativeMoveTranslate(660, 420, outRef(moveX.node, 'Geometry'), outRef(ampY.node, 'Vector'));
-  const moveRetract = nativeMoveTranslate(720, 420, outRef(movePlace.node, 'Geometry'), outRef(ampZ.node, 'Vector'));
-  const plPlace = nativeConstructPlaneAxes(560, 440, outRef(movePlace.node, 'Geometry'), outRef(deplane.node, 'X-Axis'), outRef(deplane.node, 'Y-Axis'));
-  const plRetract = nativeConstructPlaneAxes(560, 540, outRef(moveRetract.node, 'Geometry'), outRef(deplane.node, 'X-Axis'), outRef(deplane.node, 'Y-Axis'));
-
-  const tsOpen = motusComponent('toolState', 520, 340, {
-    Tool: [outRef(robot.node, 'Robot')],
-  }, { toolStatePreset: 'Open' });
-  const tsClosed = motusComponent('toolState', 520, 386, {
-    Tool: [outRef(robot.node, 'Robot')],
-  }, { toolStatePreset: 'Custom', numbers: { Width: 0.06 } });
-
-  const segApproachLin = motusComponent('segment', 691, 302, {
-    Goal: [outRef(pickPl.node, 'Plane')],
-  }, { text: { Type: 'LIN' } });
-  const segApproachSet = motusComponent('segment', 700, 400, {
-    ToolState: [outRef(tsClosed.node, 'State')],
-  }, { text: { Type: 'SET' } });
-  const mergeApproach = nativeMerge(811, 312, [
-    outRef(segApproachLin.node, 'Segment'),
-    outRef(segApproachSet.node, 'Segment'),
-  ]);
-  const progApproach = motusComponent('progPlan', 900, 300, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Segments: [outRef(mergeApproach.node, 'Result')],
-    Collision: [outRef(scene.node, 'Scene')],
-  });
-
-  const segCarrySetClose = motusComponent('segment', 700, 445, {
-    ToolState: [outRef(tsClosed.node, 'State')],
-  }, { text: { Type: 'SET' } });
-  const segCarryLin = motusComponent('segment', 700, 500, {
-    Goal: [outRef(plPlace.node, 'Plane')],
-  }, { text: { Type: 'LIN' } });
-  const segCarrySetOpen = motusComponent('segment', 700, 555, {
-    ToolState: [outRef(tsOpen.node, 'State')],
-  }, { text: { Type: 'SET' } });
-  const mergeCarry = nativeMerge(811, 492, [
-    outRef(segCarrySetClose.node, 'Segment'),
-    outRef(segCarryLin.node, 'Segment'),
-    outRef(segCarrySetOpen.node, 'Segment'),
-  ]);
-  const progCarry = motusComponent('progPlan', 1045, 445, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Segments: [outRef(mergeCarry.node, 'Result')],
-    Collision: [outRef(scene.node, 'Scene')],
-    Attach: [outRef(attach.node, 'Attach')],
-    Prior: [outRef(progApproach.node, 'Trajectory')],
-  });
-
-  const segRetract = motusComponent('segment', 700, 680, {
-    Goal: [outRef(plRetract.node, 'Plane')],
-  }, { text: { Type: 'LIN' } });
-  const progRetract = motusComponent('progPlan', 900, 660, {
-    Robot: [outRef(robot.node, 'Robot')],
-    Segments: [outRef(segRetract.node, 'Segment')],
-    Collision: [outRef(scene.node, 'Scene')],
-    Prior: [outRef(progCarry.node, 'Trajectory')],
-  });
-
-  const trMerge = nativeMerge(1155, 357, [
-    outRef(progApproach.node, 'Trajectory'),
-    outRef(progCarry.node, 'Trajectory'),
-    outRef(progRetract.node, 'Trajectory'),
-  ]);
-  const { scrub, preview } = previewWithScrub(1155, 357, outRef(trMerge.node, 'Result'), {
-    inputs: { Scene: [outRef(scene.node, 'Scene')] },
-  });
-
-  const gRobot = nativeGroup('Robot + home TCP', [robot, home, tcp], GROUP_COLOUR.robot);
-  const gCol = nativeGroup('Workpiece + table + Attach', [
-    { xml: uz.xml, node: uz.node }, boxPt, boxPl, deBox, pickApproach, pickPt, pickPl,
-    colBox, tablePt, tablePl, colTable, obstacles, scene, attach,
-  ], GROUP_COLOUR.collision);
-  const gGoals = nativeGroup('Place/retract offsets', [
-    deplane, ux, uy, uzLift, ampX, ampY, ampZ, moveX, movePlace, moveRetract, plPlace, plRetract,
-  ], GROUP_COLOUR.plan);
-  const gApproach = nativeGroup('Approach Program', [tsClosed, segApproachLin, segApproachSet, mergeApproach, progApproach], GROUP_COLOUR.program);
-  const gCarry = nativeGroup('Carry Program', [tsOpen, segCarrySetClose, segCarryLin, segCarrySetOpen, mergeCarry, progCarry], GROUP_COLOUR.program);
-  const gRetract = nativeGroup('Retract Program', [segRetract, progRetract], GROUP_COLOUR.program);
-  const gPreview = nativeGroup('Preview', [trMerge, scrub, preview], GROUP_COLOUR.preview);
-
-  const objs = [
-    title, note, robot, home, tcp,
-    { xml: uz.xml }, { xml: boxPt.xml }, { xml: boxPl.xml }, deBox, pickApproach, pickPt, pickPl,
-    colBox, { xml: tablePt.xml }, { xml: tablePl.xml }, colTable, obstacles, scene, attach,
-    deplane, { xml: ux.xml }, { xml: uy.xml }, { xml: uzLift.xml }, ampX, ampY, ampZ,
-    moveX, movePlace, moveRetract, plPlace, plRetract,
-    tsOpen, tsClosed,
-    segApproachLin, segApproachSet, mergeApproach, progApproach,
-    segCarrySetClose, segCarryLin, segCarrySetOpen, mergeCarry, progCarry,
-    segRetract, progRetract, trMerge, scrub, preview,
-    gRobot, gCol, gGoals, gApproach, gCarry, gRetract, gPreview,
-  ];
-  objs._meta = {
-    fileName: '10_pick_place.ghx',
-    description: 'UR10e pick-and-place: 3× Motus Program (approach / carry+Attach / retract) + table in ColScene. Attach hides workpiece only. Auto Plan on.',
-  };
-  return buildGraph(objs);
+  throw new Error(
+    'examples/10_pick_place.ghx is Cassis-authored (C# tower layout). Save from Rhino; do not regenerate with --only=10.',
+  );
 }
 
 const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09];
+// graph10 (10_pick_place.ghx) is Cassis-authored — not in default regen list.
 const legacy = [
   '01_basic_planning.ghx',
   '02_collision_planning.ghx',
@@ -2891,7 +2775,10 @@ for (const name of legacy) {
 
 const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const onlyGraph = onlyArg?.slice('--only='.length);
-const onlyBuilders = { 10: graph10 };
+const onlyBuilders = {
+  1: graph01, 2: graph02, 3: graph03, 4: graph04, 5: graph05,
+  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10,
+};
 
 const buildList = onlyGraph
   ? (() => {

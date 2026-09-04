@@ -949,6 +949,13 @@ public static class KinematicsPreview
         return CollisionObjectMesh(worldObj);
     }
 
+    /// <summary>Obstacle mesh at an explicit world pose (Detach release preview).</summary>
+    public static Mesh? CollisionObjectAtWorldPose(CollisionObject geometry, Frame worldPose)
+    {
+        var worldObj = TransformCollision(geometry, Transforms.FromFrame(worldPose));
+        return CollisionObjectMesh(worldObj);
+    }
+
     public static IEnumerable<Mesh> SceneMeshesExcept(CollisionScene scene, IReadOnlyCollection<string> hiddenNames)
     {
         foreach (var obj in scene.Objects)

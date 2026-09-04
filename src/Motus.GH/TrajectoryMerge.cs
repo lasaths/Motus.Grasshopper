@@ -93,7 +93,8 @@ internal static class TrajectoryMerge
                     {
                         StartSeconds = segmentStart + span.StartSeconds,
                         EndSeconds = segmentStart + span.EndSeconds,
-                        Bodies = span.Bodies
+                        Bodies = span.Bodies,
+                        ReleaseWorldPose = span.ReleaseWorldPose
                     });
                 }
             }

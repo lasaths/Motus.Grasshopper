@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.16.0 — Tower destack / pick-place cycles
+
+Aligned with **Motus.NET 0.16.0**.
+
+### Added
+
+- **Motus Collision Boxes** — plane list → named box objects.
+- **Motus Pick Place** — grasp/place/object lists → LIN/SET/Attach/Detach segments (`PickPlaceCycle`).
+- **Motus Program** stamps per-cycle `AttachSpans` from planner attach/detach windows.
+- Example **10** tower layout is a **C# Script** on the canvas (not a Motus component).
+
+### Fixed
+
+- Preview keeps placed bricks at Detach `ReleaseWorldPose` while the next cycle is attached.
+- Motus Program Auto Plan replans when segment/start/scene fingerprint changes.
+
+### Motus.NET pin
+
+`MotusNetVersion` = **0.16.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)).
+
 ## 0.15.0 — Custom tool / kinematics close-out
 
 Aligned with **Motus.NET 0.15.0**.

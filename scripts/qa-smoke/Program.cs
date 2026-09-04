@@ -120,6 +120,21 @@ var ur10eRobotiq = UrdfRobotLoader.Load(ur10eRobotiqPath, new UrdfLoadOptions { 
 if (ur10eRobotiq.ToModel().Preset.AxisCount != 6) Fail("UR10e+Robotiq URDF should have 6 axes");
 Ok("URDF load (ur10e_robotiq) produces robot model");
 
+// Example 10 Z-down home: Motus approach ≈ world −Z so LIN keeps gripper vertical.
+{
+    var rq = ur10eRobotiq.ToModel();
+    var rqFk = KinematicsResolver.CreateFkSolver(rq.Preset, ur10eRobotiq.Chain);
+    var zDown = new JointState(new[] { 0.0, -Math.PI / 2, Math.PI / 2, -Math.PI / 2, Math.PI / 2, 0.0 });
+    var tcp = rqFk.ComputeTcp(zDown, rq.Preset.BaseFrame, rq.Preset.ToolFrame).Tcp;
+    var m = Transforms.FromFrame(tcp);
+    var ax = m[0]; var ay = m[4]; var az = m[8];
+    if (Math.Abs(ax) > 0.15 || Math.Abs(ay) > 0.15 || az > -0.9)
+        Fail($"Example10 Z-down home approach expected ≈(0,0,-1), got ({ax:F3},{ay:F3},{az:F3})");
+    if (tcp.X < 0.4)
+        Fail($"Example10 Z-down home should reach +X workspace, got X={tcp.X:F3}");
+    Ok("Example10 Z-down home FK (approach world −Z, +X reach)");
+}
+
 // Preview: URDF material colour parsing (KR210-style white materials)
 {
     const string snippet = """
@@ -458,6 +473,12 @@ try
             Fail($"Stewart plate roundtrip orientation drift at sample {i}: {oriErr:F4} rad");
     }
     Ok("FrameConversion ToPlanePlate/FromPlanePlate roundtrip within tolerance");
+
+    var worldXY = Plane.WorldXY;
+    var plateM = Transforms.FromFrame(FrameConversion.FromPlanePlate(worldXY));
+    if (Math.Abs(plateM[2]) > 1e-9 || Math.Abs(plateM[6]) > 1e-9 || Math.Abs(plateM[10] - 1) > 1e-9)
+        Fail("FromPlanePlate(WorldXY) Motus Z must be world Z — ColBox HalfZ is thickness");
+    Ok("ColBox plate mapping: WorldXY HalfZ is world-Z thickness");
 }
 catch (DllNotFoundException)
 {

@@ -1,6 +1,6 @@
 # P8 Regression Matrix
 
-Short checklist for close-open-dev GH wiring against Motus.NET 0.15.0.
+Short checklist for close-open-dev GH wiring against Motus.NET 0.16.0.
 
 - [ ] Build GH with local Motus.NET: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true --nologo`.
 - [ ] Serial UR10e quick plan: plane LIN, joint-linear, and joint goal + collision RRT still succeed.

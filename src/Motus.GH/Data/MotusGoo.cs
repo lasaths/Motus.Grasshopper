@@ -311,6 +311,8 @@ public sealed class AttachPreviewSpan
     public double StartSeconds { get; init; }
     public double EndSeconds { get; init; }
     public IReadOnlyList<AttachedBody> Bodies { get; init; } = [];
+    /// <summary>World pose after Detach — preferred for post-carry obstacle preview.</summary>
+    public Frame? ReleaseWorldPose { get; init; }
 }
 
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
@@ -406,6 +408,8 @@ public sealed class MotionSegmentGoo : MotusGooBase<MotionSegment>
         CircSegment circ => $"CIRC samples={circ.ArcSamples} blend={circ.BlendRadiusMeters:F3}m",
         SetToolStateSegment set => $"SET dur={set.DurationSeconds:F2}s",
         WaitSegment wait => $"WAIT dur={wait.DurationSeconds:F2}s",
+        AttachSegment att => $"ATTACH {att.Name}",
+        DetachSegment det => $"DETACH {det.Name}",
         _ => "Segment"
     };
 }

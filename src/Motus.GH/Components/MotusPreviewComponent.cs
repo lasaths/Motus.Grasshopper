@@ -606,9 +606,19 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _collisionScene = null;
         if (Params.Input.Count > 3)
         {
-            CollisionSceneGoo? sceneGoo = null;
-            if (da.GetData(3, ref sceneGoo) && sceneGoo?.Value is { } scene)
-                _collisionScene = scene;
+            var sceneGoos = new List<CollisionSceneGoo>();
+            if (da.GetDataList(3, sceneGoos) && sceneGoos.Count > 0)
+            {
+                // Merge if multiple scenes are wired (common mistake: plan+preview ColScenes).
+                var objs = new List<CollisionObject>();
+                foreach (var goo in sceneGoos)
+                {
+                    if (goo?.Value is null) continue;
+                    objs.AddRange(goo.Value.Objects);
+                }
+
+                _collisionScene = objs.Count > 0 ? new CollisionScene(objs) : null;
+            }
         }
 
         if (t.Points.Count == 0)
@@ -781,10 +791,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         var hidden = new HashSet<string>(StringComparer.Ordinal);
+        var activeBodyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (activeSpan is not null)
         {
             foreach (var body in activeSpan.Bodies)
             {
+                activeBodyNames.Add(body.Name);
                 if (body.SourceSceneObjectName is { } sourceName)
                     hidden.Add(sourceName);
 
@@ -794,21 +806,32 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                     _obstacleMeshes.Add(mesh);
             }
         }
-        else if (previewTraj is not null && _trajGoo?.AttachSpans is { Count: > 0 } endedSpans)
+
+        // Always draw already-detached workpieces at ReleaseWorldPose — including while the
+        // next brick is attached (else branch alone made placed bricks vanish mid-cycle).
+        if (previewTraj is not null && _trajGoo?.AttachSpans is { Count: > 0 } endedSpans)
         {
-            // Post-detach: keep workpiece at release pose (carry end FK), not the scene pick pose.
             foreach (var span in endedSpans)
             {
                 if (timeSeconds <= span.EndSeconds + 1e-9) continue;
-                var releaseState = TrajectorySampler.AtTime(previewTraj, span.EndSeconds, out _);
                 foreach (var body in span.Bodies)
                 {
+                    if (activeBodyNames.Contains(body.Name)) continue;
                     if (body.SourceSceneObjectName is { } sourceName)
                         hidden.Add(sourceName);
 
-                    if (KinematicsPreview.AttachedBodyMesh(
+                    Mesh? mesh = null;
+                    if (span.ReleaseWorldPose is { } release)
+                        mesh = KinematicsPreview.CollisionObjectAtWorldPose(body.Geometry, release);
+                    else
+                    {
+                        var releaseState = TrajectorySampler.AtTime(previewTraj, span.EndSeconds, out _);
+                        mesh = KinematicsPreview.AttachedBodyMesh(
                             body, releaseState, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
-                            ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions) is { } mesh)
+                            ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions);
+                    }
+
+                    if (mesh is not null)
                         _obstacleMeshes.Add(mesh);
                 }
             }

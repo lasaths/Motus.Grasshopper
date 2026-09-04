@@ -170,7 +170,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddPlaneParameter("Plane", "P", "Box center/orientation", GH_ParamAccess.item, Plane.WorldXY);
+        p.AddPlaneParameter("Plane", "P", "Box center; plane XYZ = box XYZ (WorldXY + HalfZ = thickness)", GH_ParamAccess.item, Plane.WorldXY);
         p.AddNumberParameter("HalfX", "X", "Half extent X", GH_ParamAccess.item, 0.1);
         p.AddNumberParameter("HalfY", "Y", "Half extent Y", GH_ParamAccess.item, 0.1);
         p.AddNumberParameter("HalfZ", "Z", "Half extent Z", GH_ParamAccess.item, 0.1);
@@ -185,7 +185,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
         if (!da.GetData(0, ref pl) || !da.GetData(1, ref hx) || !da.GetData(2, ref hy) || !da.GetData(3, ref hz)) return;
         da.GetData(4, ref name);
         name = CollisionNameUtil.Resolve(this, 4, name, "box");
-        var obj = CollisionObject.Box(name, FrameConversion.FromPlane(pl), hx, hy, hz);
+        var obj = CollisionObject.Box(name, FrameConversion.FromPlanePlate(pl), hx, hy, hz);
         var key = $"{pl.OriginX:R},{pl.OriginY:R},{pl.OriginZ:R}|{hx:R},{hy:R},{hz:R}|{name}|{obj.ContentHash}";
         if (_previewKey != key)
         {
