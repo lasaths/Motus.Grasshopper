@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
@@ -11,6 +13,7 @@ using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.UI;
 using Motus.GH.Rhino;
+using Rhino;
 using Rhino.Geometry;
 
 namespace Motus.GH.Components;
@@ -704,6 +707,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     private TrajectoryGoo? _cachedGoo;
     private bool _run;
     private bool _autoPlan;
+    private bool _planning;
     private int _debounceGen;
     private string? _lastPlannedFingerprint;
 
@@ -726,8 +730,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(
             this,
-            () => _autoPlan ? "Replan" : "Plan",
-            () => _autoPlan,
+            () => _planning ? "Planning…" : _autoPlan ? "Replan" : "Plan",
+            () => _autoPlan || _planning,
             RequestRun);
 
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
@@ -774,8 +778,9 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     private void RequestRun()
     {
+        if (_planning) return;
         _run = true;
-        ExpireSolution(true);
+        DeferExpire();
     }
 
     private void AutoPlanMenuClick(object? sender, EventArgs e)
@@ -790,7 +795,17 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             _lastPlannedFingerprint = null;
         }
 
-        ExpireSolution(true);
+        DeferExpire();
+    }
+
+    private void DeferExpire()
+    {
+        // ExpireSolution(true) from MouseUp / dispatch re-enters NewSolution and abort()s Rhino on macOS.
+        var doc = OnPingDocument();
+        if (doc is not null)
+            doc.ScheduleSolution(1, _ => ExpireSolution(false));
+        else
+            ExpireSolution(false);
     }
 
     private void ScheduleDebouncedPlan()
@@ -799,7 +814,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         if (OnPingDocument() is not GH_Document doc) return;
         doc.ScheduleSolution(AutoPlanDebounceMs, _ =>
         {
-            if (gen != _debounceGen || Locked || !_autoPlan) return;
+            if (gen != _debounceGen || Locked || !_autoPlan || _planning) return;
             _run = true;
             ExpireSolution(false);
         });
@@ -810,13 +825,28 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         JointState start,
         CollisionScene? scene)
     {
-        var parts = segments.Select(s => s.ToString() ?? "")
+        var parts = segments.Select(SegmentFingerprint)
             .Append(string.Join(",", start.Positions.Select(q => q.ToString("R"))))
             .Append(scene is null
                 ? ""
                 : string.Join(";", scene.Objects.Select(o => $"{o.Name}:{o.ContentHash}")));
         return string.Join("|", parts);
     }
+
+    private static string FrameFp(Frame f) =>
+        $"{f.X:R},{f.Y:R},{f.Z:R},{f.Qw:R},{f.Qx:R},{f.Qy:R},{f.Qz:R}";
+
+    private static string SegmentFingerprint(MotionSegment s) => s switch
+    {
+        LinSegment lin => $"LIN:{lin.StepMeters:R}:{lin.BlendRadiusMeters:R}:{FrameFp(lin.Goal.Tcp)}",
+        CircSegment circ => $"CIRC:{circ.ArcSamples}:{circ.BlendRadiusMeters:R}:{FrameFp(circ.Via.Tcp)}:{FrameFp(circ.Goal.Tcp)}",
+        PtpSegment ptp => $"PTP:{ptp.BlendRadiusMeters:R}:{string.Join(",", ptp.Goal.Positions.Select(q => q.ToString("R")))}",
+        SetToolStateSegment set => $"SET:{set.DurationSeconds:R}:{string.Join(",", set.State.Values.Select(kv => $"{kv.Key}={kv.Value:R}"))}",
+        WaitSegment w => $"WAIT:{w.DurationSeconds:R}",
+        AttachSegment a => $"ATTACH:{a.Name}:{FrameFp(a.TcpLocal)}",
+        DetachSegment d => $"DETACH:{d.Name}:{FrameFp(d.WorldPose)}",
+        _ => s.GetType().Name
+    };
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -825,15 +855,25 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         if (!_run)
         {
-            if (_autoPlan && !Locked &&
-                GhExtract.TryMotionSegments(da, 1, out var pending, out _) &&
-                pending.Count > 0)
+            if (GhExtract.TryMotionSegments(da, 1, out var pending, out _) && pending.Count > 0)
             {
-                var startPeek = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
-                var scenePeek = GhExtract.ParseCollisionInput(da, 3).Scene;
-                var fp = ProgramFingerprint(pending, startPeek, scenePeek);
-                if (fp != _lastPlannedFingerprint || _cached is null || _cached is { Success: false })
+                var pendingFp = ProgramFingerprint(
+                    pending,
+                    GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _),
+                    GhExtract.ParseCollisionInput(da, 3).Scene);
+                var stale = pendingFp != _lastPlannedFingerprint;
+                if (stale && _autoPlan && !_planning && !Locked)
                     ScheduleDebouncedPlan();
+                if (stale || _planning)
+                {
+                    AddRuntimeMessage(
+                        GH_RuntimeMessageLevel.Warning,
+                        _planning
+                            ? "Replanning — previous Trajectory is not current."
+                            : "Inputs changed — click Plan (or enable Auto Plan).");
+                    da.SetData(1, _planning || _autoPlan ? "Planning…" : "Inputs changed — click Plan.");
+                    return;
+                }
             }
 
             if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
@@ -841,6 +881,13 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 ? (_autoPlan ? "Auto Plan pending…" : "Press Plan to compute.")
                 : GhExtract.BuildProgramStatusMessage(_cached, true));
             if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
+            return;
+        }
+
+        if (_planning)
+        {
+            da.SetData(1, "Planning…");
+            _run = false;
             return;
         }
 
@@ -855,10 +902,15 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             return;
         }
 
+        var startForFp = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
+        var sceneForFp = GhExtract.ParseCollisionInput(da, 3).Scene;
+        var fp = ProgramFingerprint(segments, startForFp, sceneForFp);
+
         var toolCaps = robotGoo.Tool?.Capabilities;
         var toolStateErrors = MotionProgramValidation.ValidateToolStates(segments, toolCaps).ToList();
         if (toolStateErrors.Count > 0)
         {
+            _lastPlannedFingerprint = fp;
             _cached = null;
             _cachedGoo = null;
             foreach (var err in toolStateErrors)
@@ -889,6 +941,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         var collision = GhExtract.ParseCollisionInput(da, 3);
         if (collision.Error is not null)
         {
+            _lastPlannedFingerprint = fp;
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
             _cached = null;
             _cachedGoo = null;
@@ -901,6 +954,24 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
         var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached, ctx);
+        if (checker is not null && collision.Scene is not null)
+        {
+            var startHit = PlanningCollision.ValidateEndpoints(
+                start, start, collision.Scene, checker,
+                includeAttachedBodies: planningContext.Attached is { Count: > 0 });
+            if (startHit is not null)
+            {
+                _lastPlannedFingerprint = fp;
+                _cached = startHit;
+                _cachedGoo = null;
+                da.SetData(1, GhExtract.BuildProgramStatusMessage(startHit, false));
+                da.SetDataList(2, GhExtract.BuildProgramWarnings(startHit));
+                foreach (var err in startHit.Errors)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
+                return;
+            }
+        }
+
         var opts = planningContext.ToPlanningOptions(new PlanningOptions
         {
             MaxJointStepRadians = MaxJointStep,
@@ -913,60 +984,101 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             ToolCapabilities = toolCaps,
             SessionTool = robotGoo.Tool
         };
-        _cached = new IndustrialMotionPlanner(ctx.EffectiveModel.Preset, ctx.Chain).Plan(request);
-        _lastPlannedFingerprint = ProgramFingerprint(segments, start, collision.Scene);
 
-        if (_cached.Success && _cached.Trajectory is not null)
+        var preset = ctx.EffectiveModel.Preset;
+        var chain = ctx.Chain;
+        var attached = planningContext.Attached;
+        var robotSnap = robotGoo;
+        var capsSnap = toolCaps;
+        var fpSnap = fp;
+        _planning = true;
+        Message = "Planning…";
+        OnDisplayExpired(false);
+
+        Task.Run(() =>
         {
-            IReadOnlyList<AttachPreviewSpan>? attachSpans = null;
-            if (_cached.AttachSpans is { Count: > 0 } planned)
+            PlanningResult? result = null;
+            string? error = null;
+            try
             {
-                attachSpans = planned
-                    .Select(s => new AttachPreviewSpan
-                    {
-                        StartSeconds = s.StartSeconds,
-                        EndSeconds = s.EndSeconds,
-                        Bodies = s.Bodies,
-                        ReleaseWorldPose = s.ReleaseWorldPose
-                    })
-                    .ToList();
+                result = new IndustrialMotionPlanner(preset, chain).Plan(request);
             }
-            else if (planningContext.Attached is { Count: > 0 } attached)
+            catch (Exception ex)
             {
-                // Legacy Program Attach pin: whole trajectory window.
-                attachSpans =
-                [
-                    new AttachPreviewSpan
-                    {
-                        StartSeconds = 0,
-                        EndSeconds = _cached.Trajectory.Points[^1].TimeSeconds,
-                        Bodies = attached
-                    }
-                ];
+                error = ex.Message;
             }
 
-            _cachedGoo = new TrajectoryGoo(_cached.Trajectory)
+            RhinoApp.InvokeOnUiThread((Action)(() =>
             {
-                Chain = robotGoo.Chain,
-                Tree = robotGoo.Tree,
-                TreeDriverHome = robotGoo.TreeDriverHome,
-                PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
-                PreviewMeshColors = robotGoo.PreviewMeshColors,
-                BaseFrameOverride = robotGoo.BaseFrameOverride,
-                ToolSnapshot = robotGoo.Tool,
-                ToolCapabilitiesSnapshot = toolCaps,
-                DiagnosticsSnapshot = _cached.Messages,
-                ProvenanceSnapshot = new PlannerProvenance
+                _cached = error is not null
+                    ? PlanningResult.Failed(new[] { error })
+                    : result;
+                _cachedGoo = BuildProgramGoo(_cached, robotSnap, capsSnap, attached);
+                _lastPlannedFingerprint = fpSnap;
+                _planning = false;
+                Message = string.Empty;
+                if (OnPingDocument() is GH_Document d)
+                    d.ScheduleSolution(1, _ => ExpireSolution(false));
+            }));
+        });
+
+        if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
+        da.SetData(1, "Planning…");
+        if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
+    }
+
+    private static TrajectoryGoo? BuildProgramGoo(
+        PlanningResult? cached,
+        RobotModelGoo robotGoo,
+        ToolCapabilities? toolCaps,
+        IReadOnlyList<AttachedBody>? attached)
+    {
+        if (cached is not { Success: true, Trajectory: not null })
+            return null;
+
+        IReadOnlyList<AttachPreviewSpan>? attachSpans = null;
+        if (cached.AttachSpans is { Count: > 0 } planned)
+        {
+            attachSpans = planned
+                .Select(s => new AttachPreviewSpan
                 {
-                    PlannerId = "industrial-motion-program"
-                },
-                AttachSpans = attachSpans
-            };
-            da.SetData(0, _cachedGoo);
+                    StartSeconds = s.StartSeconds,
+                    EndSeconds = s.EndSeconds,
+                    Bodies = s.Bodies,
+                    ReleaseWorldPose = s.ReleaseWorldPose
+                })
+                .ToList();
+        }
+        else if (attached is { Count: > 0 })
+        {
+            attachSpans =
+            [
+                new AttachPreviewSpan
+                {
+                    StartSeconds = 0,
+                    EndSeconds = cached.Trajectory.Points[^1].TimeSeconds,
+                    Bodies = attached
+                }
+            ];
         }
 
-        da.SetData(1, GhExtract.BuildProgramStatusMessage(_cached, false));
-        da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
+        return new TrajectoryGoo(cached.Trajectory)
+        {
+            Chain = robotGoo.Chain,
+            Tree = robotGoo.Tree,
+            TreeDriverHome = robotGoo.TreeDriverHome,
+            PreviewGeometry = robotGoo.EffectivePreviewGeometry(),
+            PreviewMeshColors = robotGoo.PreviewMeshColors,
+            BaseFrameOverride = robotGoo.BaseFrameOverride,
+            ToolSnapshot = robotGoo.Tool,
+            ToolCapabilitiesSnapshot = toolCaps,
+            DiagnosticsSnapshot = cached.Messages,
+            ProvenanceSnapshot = new PlannerProvenance
+            {
+                PlannerId = "industrial-motion-program"
+            },
+            AttachSpans = attachSpans
+        };
     }
 
     public override Guid ComponentGuid => new("8d5f0b3e-2c4e-4f9b-0a7d-3e9c6b8f0d42");

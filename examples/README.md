@@ -1,6 +1,6 @@
 # Example Grasshopper Definitions
 
-**Never hand-edit `examples/*.ghx`.** Change `scripts/generate-examples.mjs`, then regenerate. Hand-edited files go stale after GUID/pin/component changes.
+**Never hand-edit generated `examples/*.ghx`.** Change `scripts/generate-examples.mjs`, then regenerate. Exception: `10_pick_place.ghx` is Cassis-authored (C# tower layout); do not regenerate with `--only=10`.
 
 ```bash
 node scripts/generate-examples.mjs
@@ -35,7 +35,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `07_urdf_gripper_tool.ghx` | Author gripper → Tool Rd (Cap=width schema, Bd=j_left) → PTP Ramp pinch |
 | `08_stewart_tcp_path.ghx` | Motus Stewart → Plan TCP path (leg lengths in meters) |
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
-| `10_pick_place.ghx` | UR10e pick-and-place: 3× Program + Attach on carry; table stays in ColScene |
+| `10_pick_place.ghx` | UR10e destack: C# layout (5×4 tower → 5 columns × 4) + Collision Boxes + Pick Place → one Program; plan ColScene = table only |
 
 ## Component coverage (01–06 core)
 

@@ -82,7 +82,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         p.AddBooleanParameter("ShowStart", "SS", "Also preview the trajectory start pose as a ghost", GH_ParamAccess.item, false);
         p.AddNumberParameter("Position", "P", "Optional normalized playback position 0–1 (Motus Scrub); pauses Play when changed", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
-        p.AddParameter(new Param_MotusCollisionScene(), "Scene", "Sc", "Optional collision scene — attach-aware obstacle preview when trajectory carries AttachSpans", GH_ParamAccess.item);
+        p.AddParameter(new Param_MotusCollisionScene(), "Scene", "Sc", "Optional collision scene — attach-aware obstacle preview when trajectory carries AttachSpans", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -99,6 +99,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         base.AddedToDocument(doc);
         TrajectoryMerge.EnsureListAccess(this, 0);
+        TrajectoryMerge.EnsureListAccess(this, 3);
         EnsureCustomColorsParam();
         EnsureDebugOutputs();
     }
@@ -606,6 +607,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _collisionScene = null;
         if (Params.Input.Count > 3)
         {
+            TrajectoryMerge.EnsureListAccess(this, 3);
             var sceneGoos = new List<CollisionSceneGoo>();
             if (da.GetDataList(3, sceneGoos) && sceneGoos.Count > 0)
             {

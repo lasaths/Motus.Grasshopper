@@ -12,4 +12,5 @@ Short checklist for close-open-dev GH wiring against Motus.NET 0.16.0.
 - [ ] Motus Walk: Path/Planes gait emits `Tr` for Preview/Export/Waypoints; `LeggedGait.ValidateForPlan` hard failures surface as errors and soft provenance/SSM messages remain remarks.
 - [ ] Motus Plan legged: Walk `Rb` (Mechanism) + ≥2 planes → full-driver gait `Tr` (`PlanBodyPath`, hard SSM, not TCP LIN); tip joint / 1-plane LIN unchanged; mixed plane+joint fails named.
 - [ ] Export: family warnings mirror Waypoints; `Retime` remains bool and optional `Retimer` defaults to `TotgLite`.
+- [ ] Example 10: Pick Place → one Program Auto Plan; SET 0.085/0.04; Preview holds Detach poses between cycles; plan ColScene = table only.
 - [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect any pin or pin-description changes.

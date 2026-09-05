@@ -22,8 +22,8 @@ const absPath = (...parts) => path.resolve(repoRoot, ...parts);
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
 const START_JOINTS = [0, -1.2, 1.2, -1.6, -1.5708, 0];
 const MOTION_START = [0, -0.5, 1.0, -1.0, 0.0, 0.0];
-/** UR10e+Robotiq Z-down home for example 10 (rad). Motus approach = world −Z at +X near tower. */
-const PICK_PLACE_HOME = [0, -Math.PI / 2, Math.PI / 2, -Math.PI / 2, Math.PI / 2, 0];
+/** UR10e+Robotiq fingers-down home for example 10 (rad). Rhino TCP Z = world +Z → Motus X = +Z → fingers world −Z. */
+const PICK_PLACE_HOME = [0, -77 * Math.PI / 180, 0, -31 * Math.PI / 180, -77 * Math.PI / 180, 0];
 /** Table top under bricks = 0.48 m; ColBox HalfZ=0.02 → center Z = 0.46. */
 const PICK_PLACE_TABLE = [0.70, -0.20, 0.46];
 /** Tower footprint center (bottom brick Z = 0.48 + HalfZ). */

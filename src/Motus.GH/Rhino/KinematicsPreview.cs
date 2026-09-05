@@ -366,7 +366,7 @@ public static class KinematicsPreview
     }
 
     /// <summary>Cache link-local meshes; per-frame cost is transform only (TreeFK Into when tree present).</summary>
-    public sealed class PreviewMeshCache
+    public sealed class PreviewMeshCache : IDisposable
     {
         private readonly IFkSolver? _fk;
         private readonly TreeForwardKinematics? _treeFk;
@@ -679,6 +679,20 @@ public static class KinematicsPreview
             M20 = m[8], M21 = m[9], M22 = m[10], M23 = m[11],
             M30 = m[12], M31 = m[13], M32 = m[14], M33 = m[15],
         };
+
+        public void Dispose()
+        {
+            foreach (var (_, _, mesh) in _links)
+                mesh.Dispose();
+            _links.Clear();
+            _toolMesh?.Dispose();
+            if (_frameMeshes is not null)
+            {
+                foreach (var mesh in _frameMeshes)
+                    mesh.Dispose();
+                _frameMeshes.Clear();
+            }
+        }
     }
 
     /// <summary>
