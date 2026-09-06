@@ -75,9 +75,9 @@
         </chunk>
         <chunk name="GHALibraries">
           <items count="1">
-            <item name="Count" type_name="gh_int32" type_code="3">6</item>
+            <item name="Count" type_name="gh_int32" type_code="3">5</item>
           </items>
-          <chunks count="6">
+          <chunks count="5">
             <chunk name="Library" index="0">
               <items count="4">
                 <item name="Author" type_name="gh_string" type_code="10">Robert McNeel &amp; Associates</item>
@@ -120,23 +120,13 @@
                 <item name="Version" type_name="gh_string" type_code="10">0.13.2</item>
               </items>
             </chunk>
-            <chunk name="Library" index="5">
-              <items count="6">
-                <item name="AssemblyFullName" type_name="gh_string" type_code="10">Cassis, Version=1.3.4.0, Culture=neutral, PublicKeyToken=null</item>
-                <item name="AssemblyVersion" type_name="gh_string" type_code="10">1.3.4.0</item>
-                <item name="Author" type_name="gh_string" type_code="10">Cassis Contributors</item>
-                <item name="Id" type_name="gh_guid" type_code="9">dfbcda10-6fa8-4839-a512-8ee41d0bdf5f</item>
-                <item name="Name" type_name="gh_string" type_code="10">Cassis</item>
-                <item name="Version" type_name="gh_string" type_code="10">1.3.4.0</item>
-              </items>
-            </chunk>
           </chunks>
         </chunk>
         <chunk name="DefinitionObjects">
           <items count="1">
-            <item name="ObjectCount" type_name="gh_int32" type_code="3">26</item>
+            <item name="ObjectCount" type_name="gh_int32" type_code="3">25</item>
           </items>
-          <chunks count="26">
+          <chunks count="25">
             <chunk name="Object" index="0">
               <items count="2">
                 <item name="GUID" type_name="gh_guid" type_code="9">7f5c6c55-f846-4a08-9c9a-cfdc285cc6fe</item>
@@ -3531,114 +3521,6 @@
               </chunks>
             </chunk>
             <chunk name="Object" index="23">
-              <items count="3">
-                <item name="GUID" type_name="gh_guid" type_code="9">2f3ebd4c-3848-4c6a-9a60-9d59e5d6a5c8</item>
-                <item name="Lib" type_name="gh_guid" type_code="9">dfbcda10-6fa8-4839-a512-8ee41d0bdf5f</item>
-                <item name="Name" type_name="gh_string" type_code="10">Cassis</item>
-              </items>
-              <chunks count="1">
-                <chunk name="Container">
-                  <items count="5">
-                    <item name="Description" type_name="gh_string" type_code="10">Start MCP server</item>
-                    <item name="EnabledTools" type_name="gh_string" type_code="10">List_CSharp_Scripts,Get_CSharp_Script,Edit_CSharp_Script,Get_CSharp_Script_Errors,List_Python_Scripts,Get_Python_Script,Edit_Python_Script,Get_Python_Script_Errors,Edit_Script,Get_AllComponents,Get_ComponentCount,Get_Component_Output,GetAllConnections,List_Panels,Get_Panel_Text,Set_Panel_Text,Get_Components_In_Group,AddComponent,GetSolutionState,Orbit_Object,Capture_Viewport,List_Viewports,Manage_NamedViews,Get_Parameter_TypeHints,Set_Component_Enabled,Set_Component_Preview,Get_Component_State,LoadDocument,SaveDocument,CloseDocument,GetDocumentInfo,ListOpenDocuments,Canvas_Snapshot,Add_CSharp_Script_Component,Modify_Script_Component_Parameters,Add_Script_Parameter,Remove_Script_Parameter,GetDetailedComponentInfo,GetDetailedComponentInfoById,Set_Component_Value,Move_Component,Connect_Components_By_Name,ConnectComponentsWithValidation,ValidateConnection,Connect_Components,ReconnectByName,Capture_Canvas,Save_HiRes_Canvas,Toggle_BooleanToggle,ForceDocumentSolution,ExpireComponent,RecomputeScriptComponents,Toggle_SolverExecute,Toggle_SolverReset,NewDocument,GetSystemHealth,RunHealthCheck,ListHealthChecks,CreateGrasshopperDefinition,OptimizeGrasshopperDefinition,TroubleshootGrasshopper,LearnGrasshopperConcept,AnalyzeGrasshopperDefinition</item>
-                    <item name="InstanceGuid" type_name="gh_guid" type_code="9">286056a3-5513-49ec-9d3f-c7c59080d8cb</item>
-                    <item name="Name" type_name="gh_string" type_code="10">Cassis</item>
-                    <item name="NickName" type_name="gh_string" type_code="10">Cassis</item>
-                  </items>
-                  <chunks count="3">
-                    <chunk name="Attributes">
-                      <items count="2">
-                        <item name="Bounds" type_name="gh_drawing_rectanglef" type_code="35">
-                          <X>1455.5</X>
-                          <Y>293</Y>
-                          <W>240</W>
-                          <H>266</H>
-                        </item>
-                        <item name="Pivot" type_name="gh_drawing_pointf" type_code="31">
-                          <X>1573</X>
-                          <Y>307</Y>
-                        </item>
-                      </items>
-                    </chunk>
-                    <chunk name="param_input" index="0">
-                      <items count="6">
-                        <item name="Description" type_name="gh_string" type_code="10">HTTP prefix</item>
-                        <item name="InstanceGuid" type_name="gh_guid" type_code="9">e595923c-c301-40c2-a50a-4269e3a77bfb</item>
-                        <item name="Name" type_name="gh_string" type_code="10">Prefix</item>
-                        <item name="NickName" type_name="gh_string" type_code="10">P</item>
-                        <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                        <item name="SourceCount" type_name="gh_int32" type_code="3">0</item>
-                      </items>
-                      <chunks count="2">
-                        <chunk name="Attributes">
-                          <items count="2">
-                            <item name="Bounds" type_name="gh_drawing_rectanglef" type_code="35">
-                              <X>1549</X>
-                              <Y>295</Y>
-                              <W>9</W>
-                              <H>24</H>
-                            </item>
-                            <item name="Pivot" type_name="gh_drawing_pointf" type_code="31">
-                              <X>1463.5</X>
-                              <Y>307</Y>
-                            </item>
-                          </items>
-                        </chunk>
-                        <chunk name="PersistentData">
-                          <items count="1">
-                            <item name="Count" type_name="gh_int32" type_code="3">1</item>
-                          </items>
-                          <chunks count="1">
-                            <chunk name="Branch" index="0">
-                              <items count="2">
-                                <item name="Count" type_name="gh_int32" type_code="3">1</item>
-                                <item name="Path" type_name="gh_string" type_code="10">{0}</item>
-                              </items>
-                              <chunks count="1">
-                                <chunk name="Item" index="0">
-                                  <items count="2">
-                                    <item name="null_string" type_name="gh_bool" type_code="1">false</item>
-                                    <item name="string" type_name="gh_string" type_code="10">http://localhost:3003/mcp/</item>
-                                  </items>
-                                </chunk>
-                              </chunks>
-                            </chunk>
-                          </chunks>
-                        </chunk>
-                      </chunks>
-                    </chunk>
-                    <chunk name="param_output" index="0">
-                      <items count="7">
-                        <item name="Access" type_name="gh_int32" type_code="3">1</item>
-                        <item name="Description" type_name="gh_string" type_code="10">Received JSON-RPC messages</item>
-                        <item name="InstanceGuid" type_name="gh_guid" type_code="9">933b98c9-7d01-4440-9d1b-66261cffe676</item>
-                        <item name="Name" type_name="gh_string" type_code="10">Messages</item>
-                        <item name="NickName" type_name="gh_string" type_code="10">M</item>
-                        <item name="Optional" type_name="gh_bool" type_code="1">false</item>
-                        <item name="SourceCount" type_name="gh_int32" type_code="3">0</item>
-                      </items>
-                      <chunks count="1">
-                        <chunk name="Attributes">
-                          <items count="2">
-                            <item name="Bounds" type_name="gh_drawing_rectanglef" type_code="35">
-                              <X>1588</X>
-                              <Y>295</Y>
-                              <W>14</W>
-                              <H>24</H>
-                            </item>
-                            <item name="Pivot" type_name="gh_drawing_pointf" type_code="31">
-                              <X>1686.5</X>
-                              <Y>307</Y>
-                            </item>
-                          </items>
-                        </chunk>
-                      </chunks>
-                    </chunk>
-                  </chunks>
-                </chunk>
-              </chunks>
-            </chunk>
-            <chunk name="Object" index="24">
               <items count="2">
                 <item name="GUID" type_name="gh_guid" type_code="9">b6ba1144-02d6-4a2d-b53c-ec62e290eeb7</item>
                 <item name="Name" type_name="gh_string" type_code="10">C# Script</item>
@@ -4164,7 +4046,7 @@
                 </chunk>
               </chunks>
             </chunk>
-            <chunk name="Object" index="25">
+            <chunk name="Object" index="24">
               <items count="2">
                 <item name="GUID" type_name="gh_guid" type_code="9">b6ba1144-02d6-4a2d-b53c-ec62e290eeb7</item>
                 <item name="Name" type_name="gh_string" type_code="10">C# Script</item>

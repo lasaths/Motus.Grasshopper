@@ -55,7 +55,6 @@ public sealed class MotusCollisionBoxesComponent : MotusComponentBase
         if (string.IsNullOrWhiteSpace(prefix)) prefix = "b";
 
         var objects = new List<CollisionObjectGoo>(planes.Count);
-        var meshes = new List<Mesh>(planes.Count);
         for (var i = 0; i < planes.Count; i++)
         {
             var pl = planes[i];
@@ -63,14 +62,20 @@ public sealed class MotusCollisionBoxesComponent : MotusComponentBase
             var name = $"{prefix}{i:D2}";
             var obj = CollisionObject.Box(name, FrameConversion.FromPlanePlate(pl), hx, hy, hz);
             objects.Add(new CollisionObjectGoo(obj));
-            meshes.AddRange(CollisionViewportPreview.MeshesFor(obj));
         }
 
         var key = string.Join("|", objects.Select(o => o.Value is null ? "" : $"{o.Value.Name}:{o.Value.ContentHash}"));
         if (_previewKey != key)
         {
+            foreach (var mesh in _previewMeshes)
+                mesh.Dispose();
             _previewKey = key;
-            _previewMeshes = meshes;
+            _previewMeshes = new List<Mesh>(objects.Count);
+            foreach (var goo in objects)
+            {
+                if (goo.Value is { } obj)
+                    _previewMeshes.AddRange(CollisionViewportPreview.MeshesFor(obj));
+            }
         }
 
         da.SetDataList(0, objects);

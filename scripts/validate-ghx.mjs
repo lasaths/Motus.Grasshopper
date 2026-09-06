@@ -25,6 +25,8 @@ const MOTUS_COMPONENTS = new Map([
   ['133ba1e0-5b0e-46f7-92e8-31aaa7e60a55', 'Motus Waypoints'],
   ['c1a2b3c4-d5e6-4789-a012-3456789abcde', 'Motus Collision Sphere'],
   ['d2b3c4d5-e6f7-4890-b123-456789abcdef', 'Motus Collision Box'],
+  ['a4b5c6d7-e8f9-4012-b345-6789abcdef01', 'Motus Collision Boxes'],
+  ['b5c6d7e8-f9a0-4123-c456-789abcdef012', 'Motus Pick Place'],
   ['f4d5e6f7-a8b9-4012-d345-6789abcdef01', 'Motus Collision Mesh'],
   ['e3c4d5e6-f7a8-4901-c234-56789abcdef0', 'Motus Collision Scene'],
   ['91e2a9db-cfb4-4a6c-99a3-305ba27fdf1e', 'Motus Planning Group'],

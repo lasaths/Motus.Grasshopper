@@ -43,10 +43,18 @@ public sealed class MotusScrubSliderAttributes : GH_NumberSliderAttributes
         if (channel != GH_CanvasChannel.Objects) return;
 
         var timeline = ScrubOwner.ResolveTimeline();
-        var t = Math.Clamp((double)ScrubOwner.Slider.Value, 0, 1);
+        var t = Math.Clamp(ScrubOwner.PlayheadDisplay ?? (double)ScrubOwner.Slider.Value, 0, 1);
         var track = TrackBounds();
         if (track.Width > 4f)
+        {
             DrawKeyframeTicks(graphics, track, timeline, t);
+            if (ScrubOwner.PlayheadDisplay is { } playT)
+            {
+                var x = track.X + (float)(Math.Clamp(playT, 0, 1) * track.Width);
+                using var playPen = new Pen(Accent, 2f);
+                graphics.DrawLine(playPen, x, track.Y - 3f, x, track.Bottom + 3f);
+            }
+        }
 
         DrawHeader(graphics, timeline, t);
     }

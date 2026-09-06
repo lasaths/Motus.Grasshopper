@@ -72,9 +72,25 @@ public sealed class MotusScrubSlider : GH_NumberSlider
 
     internal bool IsDragging { get; private set; }
 
+    /// <summary>Playhead fraction for canvas readout without writing <see cref="GH_NumberSlider.Slider"/> (avoids ExpireSolution).</summary>
+    internal double? PlayheadDisplay { get; private set; }
+
     internal bool IsSyncingFromPreview => _syncFromPreviewDepth > 0;
 
     internal void SetDragging(bool dragging) => IsDragging = dragging;
+
+    internal void SetPlayheadDisplay(double t)
+    {
+        PlayheadDisplay = Math.Clamp(t, 0, 1);
+        OnDisplayExpired(false);
+    }
+
+    internal void ClearPlayheadDisplay()
+    {
+        if (PlayheadDisplay is null) return;
+        PlayheadDisplay = null;
+        OnDisplayExpired(false);
+    }
 
     internal void BeginSyncFromPreview() => _syncFromPreviewDepth++;
 

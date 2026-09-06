@@ -915,7 +915,7 @@ try
     var rqCol = ur10eRobotiq.ToModel().WithTool(robotiqTool);
     if (rqCol.CollisionModel?.ToolGeometry is null)
         Fail("UR10e+Robotiq WithTool should attach gripper hull");
-    var colCache = KinematicsPreview.PreviewMeshCache.TryCreate(
+    using var colCache = KinematicsPreview.PreviewMeshCache.TryCreate(
         rqCol, rqCol.CollisionModel!, ur10eRobotiq.Chain,
         toolCapabilities: ToolCapabilities.Robotiq2F85,
         tree: ur10eRobotiq.Tree,
@@ -926,6 +926,34 @@ try
     if (colMeshes.Count <= rqCol.CollisionModel!.Links.Count)
         Fail("Collision preview should include Robotiq tool hull mesh");
     Ok("UR10e+Robotiq collision preview includes gripper hull");
+
+    // Example 10 preview contract: 21 scene boxes + released bricks cached; only the attached brick is new/frame.
+    var destack = new CollisionScene(Enumerable.Range(0, 21)
+        .Select(i => CollisionObject.Box($"brick_{i}", Frame.Identity, 0.04, 0.04, 0.04))
+        .ToArray());
+    var sceneCache = new Dictionary<string, Mesh>(StringComparer.Ordinal);
+    foreach (var obj in destack.Objects)
+    {
+        if (KinematicsPreview.CollisionObjectMesh(obj) is { } baked)
+            sceneCache[obj.Name] = baked;
+    }
+    if (sceneCache.Count != 21)
+        Fail("Example 10 scene cache should hold 21 obstacle meshes");
+    var released = KinematicsPreview.CollisionObjectAtWorldPose(destack.Objects[0], new Frame(0.5, 0, 0.04));
+    Mesh? attached = null;
+    for (var frame = 0; frame < 120; frame++)
+    {
+        attached?.Dispose();
+        attached = KinematicsPreview.CollisionObjectAtWorldPose(
+            destack.Objects[1], new Frame(0, 0, 0.4 + frame * 0.001));
+        if (attached is null)
+            Fail("Attached brick mesh should tessellate each preview frame");
+    }
+    attached?.Dispose();
+    released?.Dispose();
+    foreach (var mesh in sceneCache.Values)
+        mesh.Dispose();
+    Ok("Example 10 preview meshes stay bounded (21 scene + 1 released + 1 attached/frame)");
 }
 catch (DllNotFoundException)
 {
@@ -1183,7 +1211,7 @@ catch (DllNotFoundException)
     }, jointNames: gaitNames);
     try
     {
-        var cache = KinematicsPreview.PreviewMeshCache.TryCreate(
+        using var cache = KinematicsPreview.PreviewMeshCache.TryCreate(
             gaitModel, previewGeom, chain: null, tree: tree, armJointNames: gaitNames,
             treeDriverHome: new JointState(home18));
         if (cache is null)

@@ -294,6 +294,8 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
         var previewKey = string.Join("|", objects.Select(o => $"{o.Name}:{o.ContentHash}:{o.Pose.X:R},{o.Pose.Y:R},{o.Pose.Z:R}"));
         if (_previewKey != previewKey)
         {
+            foreach (var mesh in _previewMeshes)
+                mesh.Dispose();
             _previewKey = previewKey;
             _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
         }

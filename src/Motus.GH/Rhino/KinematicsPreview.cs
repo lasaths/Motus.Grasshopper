@@ -391,6 +391,8 @@ public static class KinematicsPreview
         private readonly double[]? _treeDriverHome;
         private List<Mesh>? _frameMeshes;
         private Dictionary<string, double>? _toolStateScratch;
+        private List<Mesh>? _posedTarget;
+        private Transform[]? _lastWorld;
 
         public IReadOnlyList<Color?> MeshColors => _meshColors;
 
@@ -608,17 +610,15 @@ public static class KinematicsPreview
                             : baseM;
                 }
 
+                var worldX = ToRhinoTransform(worldM);
                 if (duplicate)
                 {
                     var mesh = localMesh.DuplicateMesh();
-                    mesh.Transform(ToRhinoTransform(worldM));
+                    mesh.Transform(worldX);
                     results.Add(mesh);
                 }
                 else
-                {
-                    target[i].CopyFrom(localMesh);
-                    target[i].Transform(ToRhinoTransform(worldM));
-                }
+                    PoseInPlace(target, i, localMesh, worldX);
             }
 
             if (_toolMesh is not null && _fk is not null)
@@ -635,11 +635,7 @@ public static class KinematicsPreview
                     results.Add(mesh);
                 }
                 else
-                {
-                    var toolIndex = _links.Count;
-                    target[toolIndex].CopyFrom(_toolMesh);
-                    target[toolIndex].Transform(toolXform);
-                }
+                    PoseInPlace(target, _links.Count, _toolMesh, toolXform);
             }
             else if (!duplicate && target.Count > _links.Count)
                 target.RemoveRange(_links.Count, target.Count - _links.Count);
@@ -672,6 +668,28 @@ public static class KinematicsPreview
             _treeFk!.ComputeLinkTransformsInto(q, _treeMats!);
         }
 
+        private void PoseInPlace(List<Mesh> target, int index, Mesh local, Transform world)
+        {
+            if (!ReferenceEquals(_posedTarget, target) || _lastWorld is null || _lastWorld.Length != target.Count)
+            {
+                _posedTarget = target;
+                _lastWorld = new Transform[target.Count];
+                for (var i = 0; i < _lastWorld.Length; i++)
+                    _lastWorld[i] = Transform.Unset;
+            }
+
+            if (_lastWorld[index].IsValid && _lastWorld[index].TryGetInverse(out var inv))
+            {
+                target[index].Transform(world * inv);
+                _lastWorld[index] = world;
+                return;
+            }
+
+            target[index].CopyFrom(local);
+            target[index].Transform(world);
+            _lastWorld[index] = world;
+        }
+
         private static Transform ToRhinoTransform(double[] m) => new()
         {
             M00 = m[0], M01 = m[1], M02 = m[2], M03 = m[3],
@@ -691,7 +709,11 @@ public static class KinematicsPreview
                 foreach (var mesh in _frameMeshes)
                     mesh.Dispose();
                 _frameMeshes.Clear();
+                _frameMeshes = null;
             }
+            _posedTarget = null;
+            _lastWorld = null;
+            GC.SuppressFinalize(this);
         }
     }
 
@@ -941,6 +963,48 @@ public static class KinematicsPreview
         }
 
         return tree.Links.Count > 0 ? tree.Links.Count - 1 : -1;
+    }
+
+    public static bool TryAttachedWorldXform(
+        AttachedBody body,
+        JointState state,
+        RobotModel model,
+        SerialJointChain? chain,
+        BaseFrame baseFrame,
+        ToolFrame toolFrame,
+        KinematicTree? tree,
+        IReadOnlyList<string>? armJointNames,
+        IReadOnlyList<double>? treeDriverHome,
+        out Transform world)
+    {
+        world = Transform.Unset;
+        if (!TryComputeTcpTransformMatrix(
+                model, state, chain, baseFrame, toolFrame, tree, armJointNames, treeDriverHome, out var tcpM))
+            return false;
+        world = ToRhinoXform(Transforms.Multiply(tcpM, Transforms.FromFrame(body.TcpLocalPose)));
+        return true;
+    }
+
+    private static Transform ToRhinoXform(double[] m) => new()
+    {
+        M00 = m[0], M01 = m[1], M02 = m[2], M03 = m[3],
+        M10 = m[4], M11 = m[5], M12 = m[6], M13 = m[7],
+        M20 = m[8], M21 = m[9], M22 = m[10], M23 = m[11],
+        M30 = m[12], M31 = m[13], M32 = m[14], M33 = m[15],
+    };
+
+    public static void PoseMesh(Mesh target, Mesh local, Transform world, ref Transform lastWorld)
+    {
+        if (lastWorld.IsValid && lastWorld.TryGetInverse(out var inv))
+        {
+            target.Transform(world * inv);
+            lastWorld = world;
+            return;
+        }
+
+        target.CopyFrom(local);
+        target.Transform(world);
+        lastWorld = world;
     }
 
     public static Mesh? AttachedBodyMesh(

@@ -54,12 +54,21 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private List<Mesh> _obstacleMeshes = new();
+    private readonly Dictionary<string, Mesh> _sceneMeshesCache = new(StringComparer.Ordinal);
+    private int _cachedSceneFp;
+    private readonly Dictionary<int, Mesh> _releasedMeshesCache = new();
+    private int _cachedReleasedSpansFp;
+    private readonly Dictionary<string, Mesh> _attachedLocalCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Mesh> _activeAttachedMeshes = new();
+    private readonly List<Transform> _activeAttachedLast = new();
+    private readonly List<string> _activeAttachedNames = new();
     private CollisionScene? _collisionScene;
     private Plane _previewTcp = Plane.Unset;
     private bool _showTcp;
     private KinematicsPreview.PreviewMeshCache? _meshCache;
     private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount, int homeFp) _cacheSig;
     private StewartPlatform? _playStewart;
+    private RobotContext _previewCtx;
     private List<TrajectoryPoint> _previewPoints = [];
     private readonly Dictionary<(Color Color, float Transparency), DisplayMaterial> _materialCache = new();
 
@@ -249,6 +258,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         StopPlayTimer();
         _playing = false;
+        DisposePreviewGeometry();
         base.RemovedFromDocument(doc);
     }
 
@@ -398,6 +408,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         {
             StopPlayTimer();
             _playing = false;
+            if (TryGetWiredScrub(out var scrubStop))
+                scrubStop.ClearPlayheadDisplay();
         }
         else if (_trajectory?.Points.Count > 0)
         {
@@ -462,17 +474,13 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 dynamicBase = BasePathSampler.AtTime(bp2, PreviewTrajectory(), duration);
             if (_meshCache is not null && _currentMeshes.Count > 0)
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
-            if (_trajGoo is not null)
-            {
-                var ctxEnd = _trajGoo.Context();
-                RefreshContactCircles(ctxEnd, state, dynamicBase);
-                UpdatePreviewTcp(ctxEnd, state, dynamicBase);
-                RefreshObstacleMeshes(ctxEnd, state, duration);
-            }
+            RefreshContactCircles(_previewCtx, state, dynamicBase);
+            UpdatePreviewTcp(_previewCtx, state, dynamicBase);
+            RefreshObstacleMeshes(_previewCtx, state, duration);
+            if (TryGetWiredScrub(out var scrubEnd))
+                scrubEnd.ClearPlayheadDisplay();
             SyncScrubSlider(_position, expireDownstream: false);
-            ExpirePreview(true);
-            OnDisplayExpired(false);
-            RhinoDoc.ActiveDoc?.Views.Redraw();
+            RedrawPlayFrame();
             ExpireSolution(false);
             return;
         }
@@ -482,18 +490,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             if (_playStewart is not null)
             {
                 var stewartPrev = KinematicsPreview.StewartPreview(_playStewart, state);
-                _currentMeshes = stewartPrev.Meshes.ToList();
+                ReplaceMeshes(ref _currentMeshes, stewartPrev.Meshes.ToList());
                 _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
-                if (_trajGoo is not null)
-                {
-                    var ctxSt = _trajGoo.Context();
-                    UpdatePreviewTcp(ctxSt, state, dynamicBase);
-                    RefreshObstacleMeshes(ctxSt, state, elapsed);
-                }
-                SyncScrubSlider(_position, expireDownstream: false);
-                ExpirePreview(true);
-                OnDisplayExpired(false);
-                RhinoDoc.ActiveDoc?.Views.Redraw();
+                UpdatePreviewTcp(_previewCtx, state, dynamicBase);
+                RefreshObstacleMeshes(_previewCtx, state, elapsed);
+                SyncPlayheadDisplay();
+                RedrawPlayFrame();
                 return;
             }
 
@@ -507,14 +509,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
-        var ctxPlay = _trajGoo!.Context();
-        RefreshContactCircles(ctxPlay, state, dynamicBase);
-        UpdatePreviewTcp(ctxPlay, state, dynamicBase);
-        RefreshObstacleMeshes(ctxPlay, state, elapsed);
-        SyncScrubSlider(_position, expireDownstream: false);
-        ExpirePreview(true);
-        OnDisplayExpired(false);
-        RhinoDoc.ActiveDoc?.Views.Redraw();
+        RefreshContactCircles(_previewCtx, state, dynamicBase);
+        UpdatePreviewTcp(_previewCtx, state, dynamicBase);
+        RefreshObstacleMeshes(_previewCtx, state, elapsed);
+        SyncPlayheadDisplay();
+        RedrawPlayFrame();
     }
 
     private void EnsureMeshCache(
@@ -525,6 +524,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         if (previewGeometry is null)
         {
+            _meshCache?.Dispose();
             _meshCache = null;
             _drawMeshColors = null;
             return;
@@ -555,6 +555,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
 
         _cacheSig = sig;
+        _meshCache?.Dispose();
+        DisposeMeshes(_currentMeshes);
+        DisposeMeshes(_startMeshes);
+        _lastBuiltShowStart = false;
         _meshCache = KinematicsPreview.PreviewMeshCache.TryCreate(
             ctx.EffectiveModel,
             previewGeometry,
@@ -577,6 +581,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             return;
         var t = trajGoo.Value!;
         var ctx = trajGoo.Context();
+        _previewCtx = ctx;
         _playStewart = ctx.Stewart;
         var previewGeometry = RobotPreviewGeometry.ForViewport(
             ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
@@ -599,8 +604,12 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _position = 0;
             _staticsFor = null;
             _suppressScrubInput = true;
+            InvalidateReleasedMeshCache();
             if (TryGetWiredScrub(out var wiredScrub))
+            {
+                wiredScrub.ClearPlayheadDisplay();
                 wiredScrub.InvalidateTimelineCache();
+            }
         }
         _trajectory = t;
         _trajGoo = trajGoo;
@@ -625,8 +634,11 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         if (t.Points.Count == 0)
         {
-            _currentMeshes = [];
-            _startMeshes = [];
+            DisposeMeshes(_currentMeshes);
+            DisposeMeshes(_startMeshes);
+            TrimAttachedWorkingMeshes(0);
+            _obstacleMeshes.Clear();
+            _tcpCurve?.Dispose();
             _tcpCurve = null;
             _previewTcp = Plane.Unset;
             _invalidSegments = [];
@@ -672,6 +684,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         var staticsDirty = trajectoryChanged || _staticsFor is null;
         if (staticsDirty)
         {
+            _tcpCurve?.Dispose();
             if (_trajGoo?.BasePath is { Count: >= 2 } bodyPath)
             {
                 var pts = bodyPath.Select(f => KinematicsPreview.ToPoint(f)).ToList();
@@ -699,9 +712,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (staticsDirty || _showStart != _lastBuiltShowStart)
         {
             if (_showStart && _meshCache is not null && previewPoints.Count > 0)
-                _startMeshes = _meshCache.MeshesFor(previewPoints[0].JointState, previewPoints[0].ToolState);
+                ReplaceMeshes(ref _startMeshes, _meshCache.MeshesFor(previewPoints[0].JointState, previewPoints[0].ToolState));
             else
-                _startMeshes = [];
+                DisposeMeshes(_startMeshes);
             _lastBuiltShowStart = _showStart;
         }
         if (_meshCache is not null)
@@ -717,18 +730,18 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             catch (InvalidOperationException ex)
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
-                _currentMeshes = [];
+                DisposeMeshes(_currentMeshes);
             }
         }
         else if (ctx.Stewart is not null)
         {
             var stewartPrev = KinematicsPreview.StewartPreview(ctx.Stewart, state);
-            _currentMeshes = stewartPrev.Meshes.ToList();
+            ReplaceMeshes(ref _currentMeshes, stewartPrev.Meshes.ToList());
             _drawMeshColors = stewartPrev.Colors.Select(c => (Color?)c).ToArray();
         }
         else
         {
-            _currentMeshes = KinematicsPreview.LinkMeshes(ctx.EffectiveModel, state, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList();
+            ReplaceMeshes(ref _currentMeshes, KinematicsPreview.LinkMeshes(ctx.EffectiveModel, state, previewGeometry, ctx.Chain, ctx.Base, ctx.Tool).ToList());
             _drawMeshColors = PreviewColorResolver.AlignMeshColors(previewGeometry!, ctx.PreviewMeshColors);
         }
 
@@ -739,13 +752,13 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         if (_playing)
         {
             StartPlayTimer();
-            SyncScrubSlider(_position);
-            ExpirePreview(true);
+            SyncPlayheadDisplay();
+            RedrawPlayFrame();
             return;
         }
         if (IsScrubDragging())
         {
-            ExpirePreview(true);
+            RedrawPlayFrame();
             return;
         }
         da.SetDataList(0, _currentMeshes);
@@ -794,6 +807,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
 
         var hidden = new HashSet<string>(StringComparer.Ordinal);
         var activeBodyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var attachedCount = 0;
         if (activeSpan is not null)
         {
             foreach (var body in activeSpan.Bodies)
@@ -802,19 +816,52 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 if (body.SourceSceneObjectName is { } sourceName)
                     hidden.Add(sourceName);
 
-                if (KinematicsPreview.AttachedBodyMesh(
+                if (!KinematicsPreview.TryAttachedWorldXform(
                         body, state, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
-                        ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions) is { } mesh)
-                    _obstacleMeshes.Add(mesh);
+                        ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions, out var world))
+                    continue;
+                if (!_attachedLocalCache.TryGetValue(body.Name, out var local))
+                {
+                    local = KinematicsPreview.CollisionObjectMesh(body.Geometry);
+                    if (local is null) continue;
+                    _attachedLocalCache[body.Name] = local;
+                }
+
+                if (attachedCount == _activeAttachedMeshes.Count)
+                {
+                    _activeAttachedMeshes.Add(local.DuplicateMesh());
+                    _activeAttachedLast.Add(Transform.Unset);
+                    _activeAttachedNames.Add(body.Name);
+                }
+                else if (!string.Equals(_activeAttachedNames[attachedCount], body.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    _activeAttachedLast[attachedCount] = Transform.Unset;
+                    _activeAttachedNames[attachedCount] = body.Name;
+                }
+
+                var last = _activeAttachedLast[attachedCount];
+                KinematicsPreview.PoseMesh(_activeAttachedMeshes[attachedCount], local, world, ref last);
+                _activeAttachedLast[attachedCount] = last;
+                _obstacleMeshes.Add(_activeAttachedMeshes[attachedCount]);
+                attachedCount++;
             }
         }
+        TrimAttachedWorkingMeshes(attachedCount);
 
         // Always draw already-detached workpieces at ReleaseWorldPose — including while the
         // next brick is attached (else branch alone made placed bricks vanish mid-cycle).
         if (previewTraj is not null && _trajGoo?.AttachSpans is { Count: > 0 } endedSpans)
         {
-            foreach (var span in endedSpans)
+            var spansFp = AttachSpansFingerprint(endedSpans);
+            if (spansFp != _cachedReleasedSpansFp)
             {
+                InvalidateReleasedMeshCache();
+                _cachedReleasedSpansFp = spansFp;
+            }
+
+            for (var i = 0; i < endedSpans.Count; i++)
+            {
+                var span = endedSpans[i];
                 if (timeSeconds <= span.EndSeconds + 1e-9) continue;
                 foreach (var body in span.Bodies)
                 {
@@ -822,15 +869,20 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                     if (body.SourceSceneObjectName is { } sourceName)
                         hidden.Add(sourceName);
 
-                    Mesh? mesh = null;
-                    if (span.ReleaseWorldPose is { } release)
-                        mesh = KinematicsPreview.CollisionObjectAtWorldPose(body.Geometry, release);
-                    else
+                    if (!_releasedMeshesCache.TryGetValue(i, out var mesh))
                     {
-                        var releaseState = TrajectorySampler.AtTime(previewTraj, span.EndSeconds, out _);
-                        mesh = KinematicsPreview.AttachedBodyMesh(
-                            body, releaseState, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
-                            ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions);
+                        if (span.ReleaseWorldPose is { } release)
+                            mesh = KinematicsPreview.CollisionObjectAtWorldPose(body.Geometry, release);
+                        else
+                        {
+                            var releaseState = TrajectorySampler.AtTime(previewTraj, span.EndSeconds, out _);
+                            mesh = KinematicsPreview.AttachedBodyMesh(
+                                body, releaseState, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
+                                ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions);
+                        }
+
+                        if (mesh is not null)
+                            _releasedMeshesCache[i] = mesh;
                     }
 
                     if (mesh is not null)
@@ -839,11 +891,124 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             }
         }
 
+        EnsureSceneMeshesCache();
         if (_collisionScene is not null)
         {
-            foreach (var mesh in KinematicsPreview.SceneMeshesExcept(_collisionScene, hidden))
-                _obstacleMeshes.Add(mesh);
+            foreach (var obj in _collisionScene.Objects)
+            {
+                if (hidden.Contains(obj.Name)) continue;
+                if (_sceneMeshesCache.TryGetValue(obj.Name, out var mesh))
+                    _obstacleMeshes.Add(mesh);
+            }
         }
+    }
+
+    private void EnsureSceneMeshesCache()
+    {
+        var fp = SceneFingerprint(_collisionScene);
+        if (fp == _cachedSceneFp && _sceneMeshesCache.Count > 0)
+            return;
+        if (fp == _cachedSceneFp && _collisionScene is null)
+            return;
+        DisposeMeshValues(_sceneMeshesCache);
+        _cachedSceneFp = fp;
+        if (_collisionScene is null) return;
+        foreach (var obj in _collisionScene.Objects)
+        {
+            if (KinematicsPreview.CollisionObjectMesh(obj) is { } mesh)
+                _sceneMeshesCache[obj.Name] = mesh;
+        }
+    }
+
+    private void InvalidateReleasedMeshCache()
+    {
+        DisposeMeshValues(_releasedMeshesCache);
+        _cachedReleasedSpansFp = 0;
+    }
+
+    private void TrimAttachedWorkingMeshes(int keep)
+    {
+        while (_activeAttachedMeshes.Count > keep)
+        {
+            var last = _activeAttachedMeshes.Count - 1;
+            _activeAttachedMeshes[last].Dispose();
+            _activeAttachedMeshes.RemoveAt(last);
+            _activeAttachedLast.RemoveAt(last);
+            _activeAttachedNames.RemoveAt(last);
+        }
+    }
+
+    private static int SceneFingerprint(CollisionScene? scene)
+    {
+        if (scene is null) return 0;
+        var hash = new HashCode();
+        hash.Add(scene.Objects.Count);
+        foreach (var obj in scene.Objects)
+        {
+            hash.Add(obj.Name, StringComparer.Ordinal);
+            hash.Add(obj.Shape);
+            hash.Add(obj.Pose.X);
+            hash.Add(obj.Pose.Y);
+            hash.Add(obj.Pose.Z);
+            hash.Add(obj.ExtentX);
+            hash.Add(obj.ExtentY);
+            hash.Add(obj.ExtentZ);
+        }
+        return hash.ToHashCode();
+    }
+
+    private static int AttachSpansFingerprint(IReadOnlyList<AttachPreviewSpan> spans)
+    {
+        var hash = new HashCode();
+        hash.Add(spans.Count);
+        foreach (var span in spans)
+        {
+            hash.Add(span.StartSeconds);
+            hash.Add(span.EndSeconds);
+            hash.Add(span.Bodies.Count);
+            foreach (var body in span.Bodies)
+                hash.Add(body.Name, StringComparer.OrdinalIgnoreCase);
+        }
+        return hash.ToHashCode();
+    }
+
+    private void DisposePreviewGeometry()
+    {
+        _obstacleMeshes.Clear();
+        DisposeMeshes(_currentMeshes);
+        DisposeMeshes(_startMeshes);
+        DisposeMeshes(_activeAttachedMeshes);
+        _activeAttachedLast.Clear();
+        _activeAttachedNames.Clear();
+        DisposeMeshValues(_sceneMeshesCache);
+        DisposeMeshValues(_attachedLocalCache);
+        InvalidateReleasedMeshCache();
+        _cachedSceneFp = 0;
+        _tcpCurve?.Dispose();
+        _tcpCurve = null;
+        _meshCache?.Dispose();
+        _meshCache = null;
+    }
+
+    private static void ReplaceMeshes(ref List<Mesh> target, List<Mesh> next)
+    {
+        if (!ReferenceEquals(target, next))
+            DisposeMeshes(target);
+        target = next;
+    }
+
+    private static void DisposeMeshes(List<Mesh> meshes)
+    {
+        foreach (var mesh in meshes)
+            mesh.Dispose();
+        meshes.Clear();
+    }
+
+    private static void DisposeMeshValues<TKey>(Dictionary<TKey, Mesh> dict) where TKey : notnull
+    {
+        foreach (var mesh in dict.Values)
+            mesh.Dispose();
+        dict.Clear();
     }
 
     private void RefreshContactCircles(RobotContext ctx, JointState state, Frame? dynamicBase)
@@ -1008,17 +1173,25 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             else
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
         }
-        if (_trajGoo is not null)
-        {
-            var ctx = _trajGoo.Context();
-            RefreshContactCircles(ctx, state, dynamicBase);
-            UpdatePreviewTcp(ctx, state, dynamicBase);
-            RefreshObstacleMeshes(ctx, state, elapsed);
-        }
-        ExpirePreview(true);
+        RefreshContactCircles(_previewCtx, state, dynamicBase);
+        UpdatePreviewTcp(_previewCtx, state, dynamicBase);
+        RefreshObstacleMeshes(_previewCtx, state, elapsed);
+        RedrawPlayFrame();
+        return true;
+    }
+
+    private void SyncPlayheadDisplay()
+    {
+        if (!TryGetWiredScrub(out var scrub)) return;
+        var timeline = scrub.ResolveTimeline();
+        var display = timeline.IsEmpty ? _position : timeline.TimeToDisplayFraction(_position);
+        scrub.SetPlayheadDisplay(display);
+    }
+
+    private void RedrawPlayFrame()
+    {
         OnDisplayExpired(false);
         RhinoDoc.ActiveDoc?.Views.Redraw();
-        return true;
     }
 
     private void SyncScrubSlider(double position, bool expireDownstream = false)
