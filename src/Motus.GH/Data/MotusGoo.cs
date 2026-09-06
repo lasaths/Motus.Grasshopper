@@ -338,7 +338,26 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     /// <summary>Optional ground height sampler (m) for Family=legged contact rings.</summary>
     public LeggedGait.TerrainHeight? TerrainSampler { get; set; }
     /// <summary>Carry-segment attach windows (merged when trajectories concatenate).</summary>
-    public IReadOnlyList<AttachPreviewSpan>? AttachSpans { get; set; }
+    private IReadOnlyList<AttachPreviewSpan>? _attachSpans;
+    public IReadOnlyList<AttachPreviewSpan>? AttachSpans
+    {
+        get => _attachSpans ?? (Value?.AttachSpans is { Count: > 0 } spans
+            ? spans.Select(s => new AttachPreviewSpan
+            {
+                StartSeconds = s.StartSeconds, EndSeconds = s.EndSeconds,
+                Bodies = s.Bodies, ReleaseWorldPose = s.ReleaseWorldPose
+            }).ToArray() : null);
+        set => _attachSpans = value;
+    }
+
+    /// <summary>Keep preview/session metadata while replacing points and the attachment clock.</summary>
+    internal TrajectoryGoo WithTrajectory(Trajectory trajectory)
+    {
+        var copy = (TrajectoryGoo)MemberwiseClone();
+        copy.Value = trajectory;
+        copy._attachSpans = null;
+        return copy;
+    }
 
     public TrajectoryGoo() { }
     public TrajectoryGoo(Trajectory t) : base(t) { }
@@ -404,6 +423,7 @@ public sealed class MotionSegmentGoo : MotusGooBase<MotionSegment>
     public override string ToString() => Value switch
     {
         PtpSegment ptp => $"PTP blend={ptp.BlendRadiusMeters:F3}m",
+        TransferSegment => "TRANSFER",
         LinSegment lin => $"LIN step={lin.StepMeters:F3}m blend={lin.BlendRadiusMeters:F3}m",
         CircSegment circ => $"CIRC samples={circ.ArcSamples} blend={circ.BlendRadiusMeters:F3}m",
         SetToolStateSegment set => $"SET dur={set.DurationSeconds:F2}s",

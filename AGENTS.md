@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.16.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet.
+Pinned **0.17.0** (unreleased) via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet. Use local references for 0.17.0 until publication.
 
 | Package | Role |
 |---------|------|
@@ -103,6 +103,6 @@ Also check in Rhino:
 - `06_turntable_group`: UR beside 1-DOF turntable; GH Center Box → Motus Robot Attach on `turntable_link` (TreeFK); AllDrivers multi-waypoint TCP tracks spoke
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
-- `10_pick_place`: UR10e fingers-down home (Rhino TCP Z = world +Z); C# layout script (5×4 rotating destack → 5 columns × 4) + Collision Boxes + Pick Place → one Program (Auto Plan); SET open `0.085` / close `0.04`; plan ColScene = table only; Cassis-authored (not `generate-examples.mjs --only=10`)
+- `10_pick_place`: UR10e fingers-down home (Rhino TCP Z = world −Z); C# layout script (5×4 rotating destack → 5 columns × 4) + Collision Boxes + Pick Place → one Program (Auto Plan); SET open `0.085` / close `0.04`; Pick Place `Touch=robotiq_2f85`; plan ColScene = **empty** (Robotiq closed-envelope hull intersects the table at grasp — preview ColScene still has table+bricks); Cassis-authored (not `generate-examples.mjs --only=10`)
 - Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract

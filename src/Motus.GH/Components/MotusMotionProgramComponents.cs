@@ -1,3 +1,4 @@
+using Motus.OMPL.NET;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -825,11 +826,13 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         JointState start,
         CollisionScene? scene)
     {
-        var parts = segments.Select(SegmentFingerprint)
+        var parts = segments.Select(s => SegmentFingerprint(s) + ":contacts=" +
+                string.Join(";", s.AllowedCollisionPairs.Select(pair => $"{pair.A},{pair.B}")))
             .Append(string.Join(",", start.Positions.Select(q => q.ToString("R"))))
             .Append(scene is null
-                ? ""
-                : string.Join(";", scene.Objects.Select(o => $"{o.Name}:{o.ContentHash}")));
+                ? "scene=null"
+                : "scene=" + string.Join(";", scene.Objects.Select(o => $"{o.Name}:{o.ContentHash}:{FrameFp(o.Pose)}"))
+                    + "#pairs=" + string.Join(";", scene.AllowedPairs.Select(p => $"{p.A},{p.B}")));
         return string.Join("|", parts);
     }
 
@@ -838,6 +841,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     private static string SegmentFingerprint(MotionSegment s) => s switch
     {
+        TransferSegment transfer => $"TRANSFER:{FrameFp(transfer.Goal.Tcp)}",
         LinSegment lin => $"LIN:{lin.StepMeters:R}:{lin.BlendRadiusMeters:R}:{FrameFp(lin.Goal.Tcp)}",
         CircSegment circ => $"CIRC:{circ.ArcSamples}:{circ.BlendRadiusMeters:R}:{FrameFp(circ.Via.Tcp)}:{FrameFp(circ.Goal.Tcp)}",
         PtpSegment ptp => $"PTP:{ptp.BlendRadiusMeters:R}:{string.Join(",", ptp.Goal.Positions.Select(q => q.ToString("R")))}",
@@ -866,12 +870,15 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                     ScheduleDebouncedPlan();
                 if (stale || _planning)
                 {
+                    // Keep previous Tr live (Motus Plan pattern) so Auto Plan debounce does not null Tr.
+                    if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
                     AddRuntimeMessage(
                         GH_RuntimeMessageLevel.Warning,
                         _planning
                             ? "Replanning — previous Trajectory is not current."
                             : "Inputs changed — click Plan (or enable Auto Plan).");
                     da.SetData(1, _planning || _autoPlan ? "Planning…" : "Inputs changed — click Plan.");
+                    if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
                     return;
                 }
             }
@@ -953,44 +960,19 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
 
         var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
-        var checker = GhExtract.TryCollisionChecker(ctx.EffectiveModel, ctx.Chain, planningContext.Scene, planningContext.Attached, ctx);
-        if (checker is not null && collision.Scene is not null)
-        {
-            var startHit = PlanningCollision.ValidateEndpoints(
-                start, start, collision.Scene, checker,
-                includeAttachedBodies: planningContext.Attached is { Count: > 0 });
-            if (startHit is not null)
-            {
-                _lastPlannedFingerprint = fp;
-                _cached = startHit;
-                _cachedGoo = null;
-                da.SetData(1, GhExtract.BuildProgramStatusMessage(startHit, false));
-                da.SetDataList(2, GhExtract.BuildProgramWarnings(startHit));
-                foreach (var err in startHit.Errors)
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
-                return;
-            }
-        }
-
-        var opts = planningContext.ToPlanningOptions(new PlanningOptions
-        {
-            MaxJointStepRadians = MaxJointStep,
-            CollisionChecker = checker
-        });
-
-        var request = new MotionProgramRequest(ctx.EffectiveModel, start, segments, opts)
-        {
-            InitialToolState = initialToolState,
-            ToolCapabilities = toolCaps,
-            SessionTool = robotGoo.Tool
-        };
-
-        var preset = ctx.EffectiveModel.Preset;
-        var chain = ctx.Chain;
-        var attached = planningContext.Attached;
+        // Snapshot only on UI — mesh BVH / checker build + Plan run off-thread (20-brick pick-place freezes Rhino otherwise).
         var robotSnap = robotGoo;
+        var modelSnap = ctx.EffectiveModel;
+        var chainSnap = ctx.Chain;
+        var sceneSnap = collision.Scene;
+        var attachedSnap = planningContext.Attached;
+        var startSnap = start;
+        var segmentsSnap = segments;
         var capsSnap = toolCaps;
+        var toolSnap = robotGoo.Tool;
+        var initialToolSnap = initialToolState;
         var fpSnap = fp;
+        var maxStep = MaxJointStep;
         _planning = true;
         Message = "Planning…";
         OnDisplayExpired(false);
@@ -1001,7 +983,36 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             string? error = null;
             try
             {
-                result = new IndustrialMotionPlanner(preset, chain).Plan(request);
+                var robotOnly = GhExtract.TryCollisionChecker(modelSnap, chainSnap, sceneSnap, null, ctx: null);
+                if (robotOnly is not null && sceneSnap is not null)
+                {
+                    var startHit = PlanningCollision.ValidateEndpoints(
+                        startSnap, startSnap, sceneSnap, robotOnly,
+                        includeAttachedBodies: attachedSnap is { Count: > 0 });
+                    if (startHit is not null)
+                    {
+                        result = startHit;
+                    }
+                }
+
+                if (result is null)
+                {
+                    var opts = planningContext.ToPlanningOptions(new PlanningOptions
+                    {
+                        MaxJointStepRadians = maxStep,
+                        // IndustrialMotionPlanner owns the changing attachment set.
+                        CollisionChecker = robotOnly
+                    });
+                    var request = new MotionProgramRequest(modelSnap, startSnap, segmentsSnap, opts)
+                    {
+                        InitialToolState = initialToolSnap,
+                        ToolCapabilities = capsSnap,
+                        SessionTool = toolSnap,
+                        TransferPlannerFactory = c => SamplingPlanner.Create(c,
+                            new SamplingPlannerOptions { PlannerId = SamplingPlannerId.RrtConnect, RandomSeed = 42 })
+                    };
+                    result = new IndustrialMotionPlanner(modelSnap.Preset, chainSnap).Plan(request);
+                }
             }
             catch (Exception ex)
             {
@@ -1013,7 +1024,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 _cached = error is not null
                     ? PlanningResult.Failed(new[] { error })
                     : result;
-                _cachedGoo = BuildProgramGoo(_cached, robotSnap, capsSnap, attached);
+                _cachedGoo = BuildProgramGoo(_cached, robotSnap, capsSnap, attachedSnap);
                 _lastPlannedFingerprint = fpSnap;
                 _planning = false;
                 Message = string.Empty;

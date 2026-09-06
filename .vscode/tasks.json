@@ -10,6 +10,9 @@
         "${workspaceFolder}/src/Motus.GH/Motus.GH.csproj",
         "-c",
         "Debug",
+        "-f",
+        "net8.0",
+        "-p:UseMotusNetProjectReference=true",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary;ForceNoAlign"
       ],
@@ -30,6 +33,19 @@
         "/consoleloggerparameters:NoSummary;ForceNoAlign"
       ],
       "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "open-rhino",
+      "type": "shell",
+      "command": "open -n -a '/Volumes/Storage/00_Applications/Rhino 8.app' && for i in $(seq 1 50); do pgrep -x Rhinoceros >/dev/null && sleep 2 && exit 0; sleep 0.2; done; echo 'Rhinoceros did not start'; exit 1",
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "debug-rhino",
+      "dependsOn": ["build-debug", "open-rhino"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
     }
   ]
 }

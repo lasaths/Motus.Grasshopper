@@ -53,7 +53,8 @@ internal static class RobotViewportPreview
             goo.PreviewMeshColors, goo.Tree, goo.Value?.JointNames, goo.Tool?.Bindings,
             goo.TreeDriverHome) is { } cache)
     {
-      meshes = cache.MeshesFor(home);
+      using (cache)
+        meshes = cache.MeshesFor(home);
     }
     else
     {
@@ -82,7 +83,10 @@ internal static class RobotViewportPreview
             ctx.EffectiveModel, geometry, ctx.Chain, ctx.Base, ctx.Tool, goo.Tool?.Capabilities,
             tree: goo.Tree, armJointNames: goo.Value?.JointNames, toolBindings: goo.Tool?.Bindings,
             treeDriverHome: goo.TreeDriverHome) is { } cache)
-      return cache.MeshesFor(home);
+    {
+      using (cache)
+        return cache.MeshesFor(home);
+    }
 
     return KinematicsPreview
       .LinkMeshes(ctx.EffectiveModel, home, geometry, ctx.Chain, ctx.Base, ctx.Tool)

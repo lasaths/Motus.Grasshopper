@@ -544,6 +544,70 @@ public static class KinematicsPreview
             UpdateMeshes(state, target, duplicate: false, toolState, dynamicBase);
         }
 
+        /// <summary>Number of local (never-mutated) link/tool meshes, same order as <see cref="LocalMeshAt"/>.</summary>
+        public int LinkCount => _links.Count + (_toolMesh is not null && _fk is not null ? 1 : 0);
+
+        /// <summary>Static local-space mesh at draw index i — never mutated, safe to draw repeatedly
+        /// via a pushed transform instead of posing a world copy every frame.</summary>
+        public Mesh LocalMeshAt(int i) => i < _links.Count ? _links[i].Mesh : _toolMesh!;
+
+        /// <summary>
+        /// Computes world transforms without modifying mesh vertices. The Play draw path
+        /// uses these with PushModelTransform to avoid per-frame mesh display invalidation.
+        /// The effect on the observed native/GPU memory growth requires a Rhino run.
+        /// </summary>
+        public Transform[] ComputeWorldTransforms(
+            Transform[]? reuse, JointState state, EndEffectorState? toolState = null, Frame? dynamicBase = null)
+        {
+            var baseM = dynamicBase is { } db ? Transforms.FromFrame(db) : _baseMatrix;
+            var tipCount = _fk?.LinkRadiiMeters.Length ?? state.AxisCount;
+            var tipQ = TipJointPositions(state.Positions, tipCount);
+            var linkMats = _treeFk is null && _fk is not null
+                ? _fk.ComputeLinkTransforms(tipQ)
+                : Array.Empty<double[]>();
+
+            var jawWidth = _toolOpenWidth;
+            if (toolState?.Values.TryGetValue("width", out var width) == true)
+                jawWidth = width;
+            if (_treeFk is not null && _tree is not null && _driverQ is not null && _treeMats is not null)
+                FillTreeDriverQ(state.Positions, jawWidth);
+
+            var result = reuse is { Length: var len } && len == LinkCount ? reuse : new Transform[LinkCount];
+            for (var i = 0; i < _links.Count; i++)
+            {
+                var (linkIndex, _, _) = _links[i];
+                double[] worldM;
+                if (_treeFk is not null && _treeMats is not null && _treeLinkOfMesh is not null
+                    && _treeLinkOfMesh[i] >= 0)
+                {
+                    worldM = Transforms.Multiply(baseM, _treeMats[_treeLinkOfMesh[i]]);
+                }
+                else if (linkIndex == TreeLinkIndex)
+                {
+                    worldM = baseM;
+                }
+                else
+                {
+                    worldM = linkIndex < 0
+                        ? baseM
+                        : linkIndex < linkMats.Count
+                            ? Transforms.Multiply(baseM, linkMats[linkIndex])
+                            : baseM;
+                }
+                result[i] = ToRhinoTransform(worldM);
+            }
+
+            if (_toolMesh is not null && _fk is not null)
+            {
+                var toolM = ToolCollisionPlacement.WorldMatrix(
+                    _fk, tipQ, dynamicBase is { } toolBase ? new BaseFrame(toolBase) : _baseF,
+                    _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
+                result[_links.Count] = ToRhinoTransform(toolM);
+            }
+
+            return result;
+        }
+
         private List<Mesh> CreateFrameMeshList()
         {
             var list = new List<Mesh>(_links.Count + (_toolMesh is null ? 0 : 1));
@@ -625,7 +689,8 @@ public static class KinematicsPreview
             {
                 // Planning hull (Robotiq is a merged STL, not per-finger URDF collision).
                 var toolM = ToolCollisionPlacement.WorldMatrix(
-                    _fk, tipQ, _baseF, _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
+                    _fk, tipQ, dynamicBase is { } toolBase ? new BaseFrame(toolBase) : _baseF,
+                    _toolF, _toolGeometry, _toolInFlangeFrame, _toolAttachOffset);
                 var toolXform = ToRhinoTransform(toolM);
 
                 if (duplicate)

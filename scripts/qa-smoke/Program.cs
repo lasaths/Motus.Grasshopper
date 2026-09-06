@@ -910,6 +910,46 @@ if (robotiqSession.CollisionModel?.ToolGeometry?.MeshVertices is not { Count: > 
     Fail("Robotiq tool mesh should merge into session collision model");
 Ok("Robotiq 2F-85 merged STL loads as Motus Tool geometry");
 
+// Compare draw-only poses with world-space output, and ensure animation never mutates templates.
+void CheckDrawTransforms(KinematicsPreview.PreviewMeshCache cache, JointState state)
+{
+    var localVertices = Enumerable.Range(0, cache.LinkCount)
+        .Select(i => cache.LocalMeshAt(i).Vertices.ToPoint3dArray()).ToArray();
+    Transform[]? reuse = null;
+    foreach (var movingBase in new Frame?[] { null, new Frame(0.7, -0.3, 0.2, 0.9238795325, 0, 0, 0.3826834324) })
+    {
+        var toolState = new EndEffectorState(new Dictionary<string, double> { ["width"] = 0.04 });
+        var poses = cache.ComputeWorldTransforms(reuse, state, toolState, movingBase);
+        if (reuse is not null && !ReferenceEquals(reuse, poses))
+            Fail("Draw transform array must be reused");
+        reuse = poses;
+        var worldMeshes = cache.MeshesFor(state, toolState, movingBase);
+        try
+        {
+            if (worldMeshes.Count != poses.Length) Fail("Draw mesh/transform count mismatch");
+            for (var i = 0; i < poses.Length; i++)
+            {
+                var local = cache.LocalMeshAt(i);
+                var bounds = local.GetBoundingBox(false);
+                bounds.Transform(poses[i]);
+                bounds.Inflate(1e-5);
+                for (var v = 0; v < local.Vertices.Count; v++)
+                {
+                    var point = (Point3d)local.Vertices[v];
+                    if (point.DistanceTo(localVertices[i][v]) > 0)
+                        Fail("Draw pose computation mutated a local mesh");
+                    point.Transform(poses[i]);
+                    if (point.DistanceTo((Point3d)worldMeshes[i].Vertices[v]) > 1e-5)
+                        Fail("Draw pose differs from world mesh output");
+                    if (!bounds.Contains(point)) Fail("Draw clipping bounds exclude posed vertex");
+                }
+            }
+        }
+        finally { foreach (var mesh in worldMeshes) mesh.Dispose(); }
+    }
+    Ok("Draw transforms match world meshes, reuse storage, preserve local vertices and clipping");
+}
+
 try
 {
     var rqCol = ur10eRobotiq.ToModel().WithTool(robotiqTool);
@@ -922,6 +962,7 @@ try
         armJointNames: rqCol.JointNames);
     if (colCache is null)
         Fail("Collision preview cache should build for UR10e+Robotiq");
+    CheckDrawTransforms(colCache, start);
     var colMeshes = colCache.MeshesFor(start);
     if (colMeshes.Count <= rqCol.CollisionModel!.Links.Count)
         Fail("Collision preview should include Robotiq tool hull mesh");
@@ -1216,6 +1257,7 @@ catch (DllNotFoundException)
             treeDriverHome: new JointState(home18));
         if (cache is null)
             Fail("PreviewMeshCache should build for 18-DOF gait tree without serial FK");
+        CheckDrawTransforms(cache, new JointState(home18));
         var meshes = cache.MeshesFor(new JointState(home18));
         if (meshes.Count == 0)
             Fail("TreeFK preview meshes empty for walking hex gait");

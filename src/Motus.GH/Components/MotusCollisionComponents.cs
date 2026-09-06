@@ -28,11 +28,25 @@ internal static class CollisionNameUtil
     private static string ShortId(GH_Component owner) => owner.InstanceGuid.ToString("N")[..4];
 }
 
-public sealed class MotusCollisionSphereComponent : MotusComponentBase
+/// <summary>Owns native meshes used only for component viewport preview.</summary>
+public abstract class CollisionPreviewComponentBase : MotusComponentBase
 {
-    private List<Mesh> _previewMeshes = new();
-    private string? _previewKey;
+    protected List<Mesh> _previewMeshes = new();
+    protected string? _previewKey;
 
+    protected CollisionPreviewComponentBase(string name, string nickname, string description, string sub, string icon)
+        : base(name, nickname, description, sub, icon) { }
+
+    protected override void ReleasePreviewResources()
+    {
+        foreach (var mesh in _previewMeshes) mesh.Dispose();
+        _previewMeshes.Clear();
+        _previewKey = null;
+    }
+}
+
+public sealed class MotusCollisionSphereComponent : CollisionPreviewComponentBase
+{
     public MotusCollisionSphereComponent() : base("Motus Collision Sphere", "ColSph", "Sphere obstacle (meters)", "Collision", "sphere") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
@@ -60,6 +74,7 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
         var key = $"{pt.X:R},{pt.Y:R},{pt.Z:R}|{r:R}|{name}";
         if (_previewKey != key)
         {
+            ReleasePreviewResources();
             _previewKey = key;
             _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
         }
@@ -76,11 +91,8 @@ public sealed class MotusCollisionSphereComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("c1a2b3c4-d5e6-4789-a012-3456789abcde");
 }
 
-public sealed class MotusCollisionPlaneComponent : MotusComponentBase
+public sealed class MotusCollisionPlaneComponent : CollisionPreviewComponentBase
 {
-    private List<Mesh> _previewMeshes = new();
-    private string? _previewKey;
-
     public MotusCollisionPlaneComponent()
         : base("Motus Collision Plane", "ColPlane", "Infinite floor/wall half-space (meters)", "Collision", "intersect-square") { }
 
@@ -127,6 +139,7 @@ public sealed class MotusCollisionPlaneComponent : MotusComponentBase
         var key = $"{posePlane.OriginX:R},{posePlane.OriginY:R},{posePlane.OriginZ:R}|{offset:R}|{previewSize:R}|{name}|{obj.ContentHash}";
         if (_previewKey != key)
         {
+            ReleasePreviewResources();
             _previewKey = key;
             var half = Math.Max(0.05, Math.Abs(previewSize));
             var box = new Box(
@@ -156,11 +169,8 @@ public sealed class MotusCollisionPlaneComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("7187b866-deb7-47b7-86a7-44b368af21d1");
 }
 
-public sealed class MotusCollisionBoxComponent : MotusComponentBase
+public sealed class MotusCollisionBoxComponent : CollisionPreviewComponentBase
 {
-    private List<Mesh> _previewMeshes = new();
-    private string? _previewKey;
-
     public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
@@ -189,6 +199,7 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
         var key = $"{pl.OriginX:R},{pl.OriginY:R},{pl.OriginZ:R}|{hx:R},{hy:R},{hz:R}|{name}|{obj.ContentHash}";
         if (_previewKey != key)
         {
+            ReleasePreviewResources();
             _previewKey = key;
             _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
         }
@@ -205,10 +216,8 @@ public sealed class MotusCollisionBoxComponent : MotusComponentBase
     public override Guid ComponentGuid => new Guid("d2b3c4d5-e6f7-4890-b123-456789abcdef");
 }
 
-public sealed class MotusCollisionSceneComponent : MotusComponentBase
+public sealed class MotusCollisionSceneComponent : CollisionPreviewComponentBase
 {
-    private List<Mesh> _previewMeshes = new();
-    private string? _previewKey;
     private string? _srdfCachePath;
     private long _srdfCacheTicks;
     private CollisionScene? _srdfBaseScene;
@@ -227,6 +236,7 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Objects", "O", "Collision objects", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("Srdf", "S", "Optional SRDF file path (disable_collisions pairs)", GH_ParamAccess.item, "");
         p[p.ParamCount - 1].Optional = true;
     }
@@ -239,7 +249,7 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
     protected override void SolveInstance(IGH_DataAccess da)
     {
         var goos = new List<IGH_Goo>();
-        if (!da.GetDataList(0, goos)) return;
+        da.GetDataList(0, goos);
         var objects = new List<CollisionObject>();
         foreach (var goo in goos)
         {
@@ -294,8 +304,7 @@ public sealed class MotusCollisionSceneComponent : MotusComponentBase
         var previewKey = string.Join("|", objects.Select(o => $"{o.Name}:{o.ContentHash}:{o.Pose.X:R},{o.Pose.Y:R},{o.Pose.Z:R}"));
         if (_previewKey != previewKey)
         {
-            foreach (var mesh in _previewMeshes)
-                mesh.Dispose();
+            ReleasePreviewResources();
             _previewKey = previewKey;
             _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
         }

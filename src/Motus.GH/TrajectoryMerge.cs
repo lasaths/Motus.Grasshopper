@@ -1,3 +1,4 @@
+using System.Linq;
 using Grasshopper.Kernel;
 using Motus.Core;
 using Motus.GH.Data;
@@ -118,14 +119,15 @@ internal static class TrajectoryMerge
                     pt.MotionType,
                     pt.SegmentIndex,
                     pt.BlendRadiusMeters,
-                    pt.ToolState));
+                    pt.ToolState, pt.BaseFrameOverride));
             }
 
             if (points.Count > 0)
                 timeOffset = points[^1].TimeSeconds;
         }
 
-        var merged = new Trajectory(first.Value!.Robot, points);
+        var merged = new Trajectory(first.Value!.Robot, points, mergedSpans.Select(s =>
+            new AttachTimeSpan(s.StartSeconds, s.EndSeconds, s.Bodies, s.ReleaseWorldPose)).ToArray());
         return new TrajectoryGoo(merged)
         {
             Chain = first.Chain,

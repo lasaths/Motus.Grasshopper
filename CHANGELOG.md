@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — 0.17.0
+
+- Pick Place appends optional `RRT` and `Touch` inputs for sampled hover transfers and explicit gripper contact names. Existing inputs keep their order.
+- Program uses RRT-Connect for Transfer segments with the current scene/attached-body checker. Contact edits invalidate cached plans.
+- Attachment timelines remain on core trajectories during concatenation and export; placed objects detach before retraction.
+- Example **10** sets Pick Place `Touch=robotiq_2f85` so Detach-at-place does not null Program `Tr`.
+- Motus Program keeps the previous `Tr` while Auto Plan replans (no null flicker).
+- Core pin is 0.17.0; build with `-p:UseMotusNetProjectReference=true` until publication.
+
 ## 0.16.0 — Tower destack / pick-place cycles
 
 Aligned with **Motus.NET 0.16.0**.

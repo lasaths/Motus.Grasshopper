@@ -211,7 +211,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 
 `Motus Program` inputs match `Motus Plan` collision/group/attach semantics. Tool state on moves is validated against the robot's wired **Tool** capabilities when present. Mid-program **Attach** / **Detach** segments (from **Motus Pick Place**) mutate the planning scene and stamp per-cycle `AttachSpans` on the trajectory for Preview.
 
-**Motus Pick Place** expands Grasp / Place / Objects lists into LIN → SET close → Attach → lift → place → SET open → lift → Detach cycles (`PickPlaceCycle` in Motus.NET). Wire `Seg` into **Motus Program**. Open/Close are jaw widths in meters (example 10: open `0.085`, close `0.04` = brick short side). Do not use Preset Closed `0` for pinch-through. SET jaws ≠ Attach payload.
+**Motus Pick Place** expands Grasp / Place / Objects lists into LIN → SET close → Attach → lift → place → SET open → Detach → retract cycles (`PickPlaceCycle` in Motus.NET). Wire `Seg` into **Motus Program**. Open/Close are jaw widths in meters (example 10: open `0.085`, close `0.04` = brick short side). Set **Touch** to the gripper collision body name(s) (example 10: `robotiq_2f85`) — Detach-at-place restores the brick into the jaws; empty Touch → Program `Tr` null. Do not use Preset Closed `0` for pinch-through. SET jaws ≠ Attach payload.
 
 `Motus Preview` outputs optional **ToolState** and **Width** at the playhead. Robotiq finger meshes follow URDF/PickNik joint kinematics from jaw width (not a flattened scale).
 

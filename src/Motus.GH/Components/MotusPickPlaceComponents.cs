@@ -14,11 +14,8 @@ using Rhino.Geometry;
 namespace Motus.GH.Components;
 
 /// <summary>Many box obstacles from a plane list (tower / pallet authoring).</summary>
-public sealed class MotusCollisionBoxesComponent : MotusComponentBase
+public sealed class MotusCollisionBoxesComponent : CollisionPreviewComponentBase
 {
-    private List<Mesh> _previewMeshes = new();
-    private string? _previewKey;
-
     public MotusCollisionBoxesComponent()
         : base("Motus Collision Boxes", "Boxes", "Box obstacles from a plane list (half extents, m)", "Collision", "bounding-box") { }
 
@@ -67,8 +64,7 @@ public sealed class MotusCollisionBoxesComponent : MotusComponentBase
         var key = string.Join("|", objects.Select(o => o.Value is null ? "" : $"{o.Value.Name}:{o.Value.ContentHash}"));
         if (_previewKey != key)
         {
-            foreach (var mesh in _previewMeshes)
-                mesh.Dispose();
+            ReleasePreviewResources();
             _previewKey = key;
             _previewMeshes = new List<Mesh>(objects.Count);
             foreach (var goo in objects)
@@ -119,6 +115,10 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         p.AddNumberParameter("Close", "Wclose", "Close jaw width (m) — brick short side", GH_ParamAccess.item, 0.04);
         p.AddNumberParameter("Step", "St", "LIN step (m)", GH_ParamAccess.item, 0.005);
         p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter("Sampling Transfers", "RRT", "Route travel between hover poses with RRT-Connect; approaches and retracts remain LIN", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Touch Bodies", "Touch", "Explicit gripper collision body names permitted to contact the current workpiece during grasp/release (e.g. robotiq_2f85)", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -140,6 +140,17 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         da.GetData(4, ref openW);
         da.GetData(5, ref closeW);
         da.GetData(6, ref step);
+        var sampling = false;
+        var touchBodies = new List<string>();
+        da.GetData(7, ref sampling);
+        da.GetDataList(8, touchBodies);
+        touchBodies = touchBodies.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        if (touchBodies.Count == 0)
+        {
+            // Detach-at-place restores the workpiece into the gripper; without Touch, Program Tr is null.
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                "Touch empty — Detach-at-place needs gripper collision body names (e.g. robotiq_2f85) or plan fails.");
+        }
 
         if (graspPlanes.Count != placePlanes.Count || graspPlanes.Count != rawObjects.Count)
         {
@@ -182,7 +193,8 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         IReadOnlyList<MotionSegment> segments;
         try
         {
-            segments = PickPlaceCycle.ExpandMany(grasps, places, objects, approach, open, close, step);
+            segments = PickPlaceCycle.ExpandMany(grasps, places, objects, approach, open, close, step,
+                options: new PickPlaceOptions { UseSamplingTransfers = sampling, TouchBodies = touchBodies });
         }
         catch (Exception ex)
         {

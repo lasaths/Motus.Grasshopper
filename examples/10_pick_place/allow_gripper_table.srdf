@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<robot name="ur10e_robotiq">
+  <!-- Closed-envelope Robotiq hull intersects the table at fingers-down grasp; permit that pair only. -->
+  <disable_collisions link1="robotiq_2f85" link2="table" reason="gripper envelope vs table at grasp"/>
+</robot>

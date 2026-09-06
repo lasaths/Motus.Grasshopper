@@ -53,6 +53,23 @@ public abstract class MotusComponentBase : GH_Component
         }
     }
 
+    // Closing a document does not necessarily remove its components individually.
+    // Cleanup is idempotent so delete/undo can rebuild the preview.
+    protected virtual void ReleasePreviewResources() { }
+
+    public override void RemovedFromDocument(GH_Document doc)
+    {
+        ReleasePreviewResources();
+        base.RemovedFromDocument(doc);
+    }
+
+    public override void DocumentContextChanged(GH_Document doc, GH_DocumentContext context)
+    {
+        if (context == GH_DocumentContext.Close)
+            ReleasePreviewResources();
+        base.DocumentContextChanged(doc, context);
+    }
+
     protected override System.Drawing.Bitmap Icon =>
         MotusIcon.Get(_iconName, MotusIcon.SubcategoryColor(_subcategory));
 }
@@ -76,6 +93,7 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
         if (key == _previewKey && _previewMeshes.Count > 0)
             return;
 
+        ClearPreview();
         _previewKey = key;
         RobotViewportPreview.Build(goo, sourcePath, out _previewMeshes, out _previewWires);
         _collisionPreviewMeshes = _showCollisionPreview
@@ -95,12 +113,16 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     protected void ClearPreview()
     {
         _previewKey = null;
-        _previewMeshes = [];
-        _collisionPreviewMeshes = [];
+        foreach (var mesh in _previewMeshes) mesh.Dispose();
+        _previewMeshes.Clear();
+        foreach (var mesh in _collisionPreviewMeshes) mesh.Dispose();
+        _collisionPreviewMeshes.Clear();
         _previewWires = [];
         _previewTcp = Plane.Unset;
         ExpirePreview(true);
     }
+
+    protected override void ReleasePreviewResources() => ClearPreview();
 
     private static string PreviewKey(RobotModelGoo goo, string? sourcePath, bool showCollision, bool showTcp) =>
         $"{sourcePath}|{goo.UrdfSourcePath}|{goo.Tool?.Name}|{goo.BaseFrameOverride}|{goo.PreviewGeometry?.Links.Count}|{goo.Value?.Preset.AxisCount}|{goo.Chain?.Joints.Length}|{goo.Tree?.Fingerprint}|{goo.PreviewHome}|col:{showCollision}|tcp:{showTcp}";
@@ -815,11 +837,15 @@ public sealed class MotusExportComponent : MotusComponentBase
         p.AddTextParameter("Csv", "C", "Trajectory as CSV", GH_ParamAccess.item);
         p.AddTextParameter("Validation", "Val", "Validation summary when Validate=true", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
+        p.AddParameter(new Param_MotusTrajectory(), "Prepared Trajectory", "Tr", "Trajectory on the exported clock, including retimed attachment events; wire to Preview or Waypoints", GH_ParamAccess.item);
     }
     protected override void SolveInstance(IGH_DataAccess da)
     {
         if (!TrajectoryMerge.TryResolve(da, 0, this, GH_RuntimeMessageLevel.Warning, out var trajGoo)) return;
         var t = trajGoo.Value!;
+        if (t.AttachSpans.Count == 0 && trajGoo.AttachSpans is { Count: > 0 } legacySpans)
+            t = new Trajectory(t.Robot, t.Points, legacySpans.Select(s =>
+                new AttachTimeSpan(s.StartSeconds, s.EndSeconds, s.Bodies, s.ReleaseWorldPose)).ToArray());
         var ctx = trajGoo.Context();
         var retime = true;
         var validate = false;
@@ -848,6 +874,7 @@ public sealed class MotusExportComponent : MotusComponentBase
         });
         da.SetData(0, result.Json);
         da.SetData(1, result.Csv);
+        da.SetData(3, trajGoo.WithTrajectory(result.Trajectory));
         if (validate && result.Validation is not null)
         {
             da.SetData(2, result.Validation.IsValid

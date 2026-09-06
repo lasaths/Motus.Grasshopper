@@ -19,7 +19,13 @@ internal static class UrdfRobotLoad
         Color?[]? PreviewMeshColors,
         string UrdfSourcePath);
 
-    private static readonly ConcurrentDictionary<string, CachedRobot> Cache = new(StringComparer.OrdinalIgnoreCase);
+    // ponytail: write-time ticks are a staleness check on the cached VALUE, not part of the key —
+    // embedding ticks in the key (as this used to) mints a brand-new dictionary entry on every
+    // file save during interactive URDF authoring (e.g. AGENTS.md's 07_urdf_gripper_tool workflow)
+    // and never removes the old one, growing unbounded over a long editing session.
+    private sealed record CacheEntry(long WriteUtcTicks, CachedRobot Robot);
+
+    private static readonly ConcurrentDictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
 
     public static RobotModelGoo Load(
         string path,
@@ -31,24 +37,24 @@ internal static class UrdfRobotLoad
         if (!File.Exists(path))
             throw new FileNotFoundException($"URDF not found: {path}");
 
-        var cacheKey = CacheKey(path, baseLink, tipLink, allDrivers);
-        if (!Cache.TryGetValue(cacheKey, out var cached))
+        var full = Path.GetFullPath(path);
+        var ticks = UrdfWriteTimeCache.GetTicks(full);
+        var cacheKey = CacheKey(full, baseLink, tipLink, allDrivers);
+        if (!Cache.TryGetValue(cacheKey, out var entry) || entry.WriteUtcTicks != ticks)
         {
-            cached = LoadUncached(path, baseLink, tipLink, allDrivers);
-            Cache[cacheKey] = cached;
+            var cached = LoadUncached(path, baseLink, tipLink, allDrivers);
+            entry = new CacheEntry(ticks, cached);
+            Cache[cacheKey] = entry;
         }
 
-        return CreateGoo(cached);
+        return CreateGoo(entry.Robot);
     }
 
     internal static RobotPreviewVisuals? LoadPreviewVisuals(string path, string baseLink = "base_link", string tipLink = "tool0") =>
         UrdfVisualPreviewLoader.TryLoad(UrdfPathResolver.ResolveUrdfPath(path), baseLink, tipLink);
 
-    private static string CacheKey(string path, string baseLink, string tipLink, bool allDrivers)
-    {
-        var full = Path.GetFullPath(path);
-        return $"{full}|{baseLink}|{tipLink}|{allDrivers}|{UrdfWriteTimeCache.GetTicks(full)}";
-    }
+    private static string CacheKey(string full, string baseLink, string tipLink, bool allDrivers) =>
+        $"{full}|{baseLink}|{tipLink}|{allDrivers}";
 
     private static CachedRobot LoadUncached(string path, string baseLink, string tipLink, bool allDrivers)
     {

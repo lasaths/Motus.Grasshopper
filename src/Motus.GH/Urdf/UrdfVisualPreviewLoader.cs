@@ -15,18 +15,24 @@ internal static class UrdfVisualPreviewLoader
     /// <summary>Preview geometry tagged for TreeFK placement by LinkName (must match KinematicsPreview.TreeLinkIndex).</summary>
     internal const int TreeLinkIndex = -2;
 
-    private static readonly ConcurrentDictionary<string, RobotPreviewVisuals?> VisualCache = new(StringComparer.OrdinalIgnoreCase);
+    // ponytail: ticks is a staleness check on the cached VALUE, not part of the key — embedding it
+    // in the key (as this used to) mints a new dictionary entry per file save during interactive
+    // URDF authoring and never drops the old one, growing unbounded over a long editing session.
+    private sealed record CacheEntry(long WriteUtcTicks, RobotPreviewVisuals? Visuals);
+
+    private static readonly ConcurrentDictionary<string, CacheEntry> VisualCache = new(StringComparer.OrdinalIgnoreCase);
 
     public static RobotPreviewVisuals? TryLoad(string urdfPath, string baseLink, string tipLink)
     {
         var full = Path.GetFullPath(urdfPath);
-        var key = $"{full}|{baseLink}|{tipLink}|{UrdfWriteTimeCache.GetTicks(full)}";
-        if (VisualCache.TryGetValue(key, out var cached))
-            return cached;
+        var ticks = UrdfWriteTimeCache.GetTicks(full);
+        var key = $"{full}|{baseLink}|{tipLink}";
+        if (VisualCache.TryGetValue(key, out var entry) && entry.WriteUtcTicks == ticks)
+            return entry.Visuals;
 
         var doc = XDocument.Load(urdfPath);
         var result = TryLoad(doc, Path.GetDirectoryName(full) ?? ".", baseLink, tipLink);
-        VisualCache[key] = result;
+        VisualCache[key] = new CacheEntry(ticks, result);
         return result;
     }
 
