@@ -68,8 +68,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, PlanButtonLabel, () => _autoPlan || IsOperationInProgress, RequestRun);
 
+    internal string ActivePlanningStage = "Preparing";
+    private long _planningStarted;
+
     private string PlanButtonLabel() =>
-        IsOperationInProgress ? "Planning…" : _autoPlan ? "Replan" : "Plan";
+        IsOperationInProgress ? "Working" : _autoPlan ? "Replan" : "Plan";
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -300,7 +303,9 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
         _planningPending = false;
         _activeWorkerFingerprint = fingerprint;
-        Message = "Planning…";
+        ActivePlanningStage = "Preparing";
+        _planningStarted = Environment.TickCount64;
+        Message = "Preparing";
         OnDisplayExpired(true);
         LaunchWorker(da, snapshot);
         EmitOutputs(da, GhExtract.PlanStatusKind.Planning, activity);
@@ -552,11 +557,5 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     public override Guid ComponentGuid => new Guid("8bb0bae3-527f-4e80-a8a4-c8a88b7276de");
 
     protected override string FormatProgressMessage(double fraction) =>
-        fraction switch
-        {
-            >= 0.999 => "Done",
-            <= 0.001 => "Planning…",
-            >= 0.90 => "Planning… RRT (busy)",
-            _ => $"Planning… {(fraction * 100):0}%"
-        };
+        $"{ActivePlanningStage} · {Math.Min(99, fraction * 100):0}% · {(Environment.TickCount64 - _planningStarted) / 1000.0:0}s";
 }

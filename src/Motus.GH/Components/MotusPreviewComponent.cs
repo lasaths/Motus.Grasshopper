@@ -68,6 +68,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private CollisionScene? _collisionScene;
     private Plane _previewTcp = Plane.Unset;
     private bool _showTcp;
+    private bool _showPath = true;
     private KinematicsPreview.PreviewMeshCache? _meshCache;
     private (int linkCount, string? toolName, int jointCount, int capCount, long treeFp, int bindingCount, int homeFp) _cacheSig;
     private StewartPlatform? _playStewart;
@@ -125,6 +126,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         Menu_AppendSeparator(menu);
         Menu_AppendItem(menu, "Show custom colours input", (_, _) => ToggleCustomColorsInput(), true, _showCustomColors);
         Menu_AppendItem(menu, "Show debug outputs", (_, _) => ToggleDebugOutputs(), true, _showDebugOutputs);
+        Menu_AppendItem(menu, "Show path", (_, _) => ToggleShowPath(), true, _showPath);
         Menu_AppendItem(menu, "Show TCP", (_, _) => ToggleShowTcp(), true, _showTcp);
         base.AppendAdditionalMenuItems(menu);
     }
@@ -204,7 +206,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 foreach (var mesh in _startMeshes)
                     bb.Union(mesh.GetBoundingBox(false));
             }
-            if (_tcpCurve is not null)
+            if (_showPath && _tcpCurve is not null)
                 bb.Union(_tcpCurve.GetBoundingBox(false));
             if (_previewTcp.IsValid)
                 bb.Union(_previewTcp.Origin);
@@ -228,7 +230,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     public override void DrawViewportWires(IGH_PreviewArgs args)
     {
         if (Locked) return;
-        if (_tcpCurve is not null)
+        if (_showPath && _tcpCurve is not null)
             args.Display.DrawCurve(_tcpCurve, PathColor, 2);
         foreach (var line in _invalidSegments)
             args.Display.DrawLine(line, InvalidColor, 3);
@@ -246,6 +248,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         writer.SetBoolean("ShowCustomColors", _showCustomColors);
         writer.SetBoolean("ShowDebugOutputs", _showDebugOutputs);
         writer.SetBoolean("ShowTcp", _showTcp);
+        writer.SetBoolean("ShowPath", _showPath);
         return base.Write(writer);
     }
 
@@ -263,6 +266,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             _showDebugOutputs = reader.GetBoolean("ShowDebugOutputs");
         if (reader.ItemExists("ShowTcp"))
             _showTcp = reader.GetBoolean("ShowTcp");
+        _showPath = !reader.ItemExists("ShowPath") || reader.GetBoolean("ShowPath");
         // Migrate older documents that always had debug outputs.
         if (Params.Output.Count > CoreOutputCount)
             _showDebugOutputs = true;
@@ -321,6 +325,13 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _showDebugOutputs = !_showDebugOutputs;
         EnsureDebugOutputs();
         ExpireSolution(true);
+    }
+
+    private void ToggleShowPath()
+    {
+        RecordUndoEvent("Show path");
+        _showPath = !_showPath;
+        RedrawPlayFrame();
     }
 
     private void ToggleShowTcp()

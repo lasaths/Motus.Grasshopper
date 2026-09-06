@@ -709,6 +709,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     private bool _run;
     private bool _autoPlan;
     private bool _planning;
+    private int _progressRun;
+    private string _progressButton = "Plan";
     private int _debounceGen;
     private string? _lastPlannedFingerprint;
 
@@ -731,7 +733,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(
             this,
-            () => _planning ? "Planning…" : _autoPlan ? "Replan" : "Plan",
+            () => _planning ? _progressButton : _autoPlan ? "Replan" : "Plan",
             () => _autoPlan || _planning,
             RequestRun);
 
@@ -883,6 +885,11 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 }
             }
 
+            if (_cached is { Success: false })
+            {
+                Message = "Failed";
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, string.Join(Environment.NewLine, _cached.Errors));
+            }
             if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
             da.SetData(1, _cached is null
                 ? (_autoPlan ? "Auto Plan pending…" : "Press Plan to compute.")
@@ -973,12 +980,29 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         var initialToolSnap = initialToolState;
         var fpSnap = fp;
         var maxStep = MaxJointStep;
+        var progressRun = ++_progressRun;
         _planning = true;
-        Message = "Planning…";
+        _progressButton = "Starting";
+        Message = "Preparing collision checks";
         OnDisplayExpired(false);
 
         Task.Run(() =>
         {
+            MotionProgramProgress progress = new(0, segmentsSnap.Count, "Preparing collision checks");
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            using var progressTimer = new System.Threading.Timer(_ =>
+            {
+                var current = System.Threading.Volatile.Read(ref progress);
+                var seconds = elapsed.Elapsed.TotalSeconds;
+                RhinoApp.InvokeOnUiThread((Action)(() =>
+                {
+                    if (!_planning || progressRun != _progressRun || OnPingDocument() is null) return;
+                    var active = Math.Min(current.CompletedSegments + 1, current.TotalSegments);
+                    _progressButton = $"{current.CompletedSegments}/{current.TotalSegments}";
+                    Message = $"{current.Phase} · {active}/{current.TotalSegments} · {seconds:0}s";
+                    OnDisplayExpired(true);
+                }));
+            }, null, 0, 333);
             PlanningResult? result = null;
             string? error = null;
             try
@@ -1005,6 +1029,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                     });
                     var request = new MotionProgramRequest(modelSnap, startSnap, segmentsSnap, opts)
                     {
+                        ReportProgress = p => System.Threading.Volatile.Write(ref progress, p),
                         InitialToolState = initialToolSnap,
                         ToolCapabilities = capsSnap,
                         SessionTool = toolSnap,
@@ -1019,6 +1044,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 error = ex.Message;
             }
 
+            progressTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
             RhinoApp.InvokeOnUiThread((Action)(() =>
             {
                 _cached = error is not null

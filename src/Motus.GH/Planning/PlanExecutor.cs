@@ -39,11 +39,13 @@ internal static class PlanExecutor
         PlanRequest request,
         CancellationToken cancellationToken,
         Action<double>? reportProgress = null,
-        PlanPhaseTimings? timings = null)
+        PlanPhaseTimings? timings = null,
+        Action<string>? reportActivity = null)
     {
         if (cancellationToken.IsCancellationRequested)
             return new PlanExecutionResult { Cancelled = true };
 
+        reportActivity?.Invoke("Preparing collision checks");
         var results = new List<PlanningResult>(request.Goals.Count);
         var segmentTrajectories = new List<Trajectory>();
         var session = request.Context.EffectiveModel;
@@ -75,6 +77,7 @@ internal static class PlanExecutor
                 timings.CheckerBuildMs = checkerSw.ElapsedMilliseconds;
         }
 
+        reportActivity?.Invoke("Preparing path");
         // Family=legged body-path gait: one-shot over all plane goals (not per-plane TCP LIN).
         if (TryPlanLeggedBodyPath(request, sharedChecker, cancellationToken, timings, out var leggedExec))
             return leggedExec!;
@@ -102,6 +105,7 @@ internal static class PlanExecutor
                 goal = (new JointState(map.EmbedGroupState(currentStart, map.ExtractGroupPositions(goalJs)).Positions.ToArray()), null);
             }
 
+            reportActivity?.Invoke($"Checking goal {goalIndex + 1}/{goalCount}");
             var preflightSw = Stopwatch.StartNew();
             var preflight = GhExtract.TryPreflightCollision(
                 request.Context,
@@ -121,8 +125,11 @@ internal static class PlanExecutor
             else
             {
                 var useSampling = needsCollision || request.Context.MobilityGoal is not null;
+                var method = goal.plane is not null ? "TCP LIN" : useSampling ? "RRT" : "Joint motion";
+                reportActivity?.Invoke($"{method} · goal {goalIndex + 1}/{goalCount}");
                 result = goal.plane is { } plane
-                    ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress, sharedChecker)
+                    ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress, sharedChecker,
+                        phase => reportActivity?.Invoke($"{phase} · goal {goalIndex + 1}/{goalCount}"))
                     : useSampling
                         ? PlanRrt(request, currentStart, goal.joints!, cancellationToken, goalProgress, sharedChecker)
                         : new JointLinearPlanner().Plan(new PlanningRequest(
@@ -191,7 +198,8 @@ internal static class PlanExecutor
         Plane plane,
         CancellationToken cancellationToken,
         Action<double>? goalProgress,
-        ICollisionChecker? sharedChecker)
+        ICollisionChecker? sharedChecker,
+        Action<string>? reportActivity = null)
     {
         goalProgress?.Invoke(0.1);
 
@@ -266,6 +274,7 @@ internal static class PlanExecutor
                 return PlanningResult.Failed(new[] { "Planning cancelled." });
 
             goalProgress?.Invoke(0.5);
+            reportActivity?.Invoke("RRT fallback");
             var rrtOpts = request.RrtSettings.ToOptions(cancellationToken, goalProgress);
             var rrtFallback = LinCollisionRrtFallback.Plan(
                 linRobot,
