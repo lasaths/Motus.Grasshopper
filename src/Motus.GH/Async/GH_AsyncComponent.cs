@@ -382,31 +382,36 @@ public abstract class GH_AsyncComponent : GH_Component
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
     }
 
+    // Must be called under _lifecycleLock.
+    private void ClearRunState(bool cancel)
+    {
+        foreach (var source in CancellationSources)
+        {
+            if (cancel) source.Cancel();
+            source.Dispose();
+        }
+        CancellationSources.Clear();
+        Workers.Clear();
+        ProgressReports.Clear();
+        Tasks.Clear();
+        while (_workerErrors.TryDequeue(out _)) { }
+
+        _completedWorkerCount = 0;
+        _setDataIndex = 0;
+        _isRunning = false;
+        _isReadyToSetData = false;
+        _setDataExpireScheduled = false;
+        _setDataSolutionPending = false;
+        _workersCommitted = false;
+    }
+
     private void ResetCompletedRun()
     {
-        var completionMessage = "Done";
-
+        string completionMessage;
         lock (_lifecycleLock)
         {
-            if (Workers.Count > 0)
-                completionMessage = Workers[^1].CompletionMessage ?? "Done";
-
-            foreach (var source in CancellationSources)
-                source.Dispose();
-
-            CancellationSources.Clear();
-            Workers.Clear();
-            ProgressReports.Clear();
-            Tasks.Clear();
-            ClearWorkerErrors();
-
-            _completedWorkerCount = 0;
-            _setDataIndex = 0;
-            _isRunning = false;
-            _isReadyToSetData = false;
-            _setDataExpireScheduled = false;
-            _setDataSolutionPending = false;
-            _workersCommitted = false;
+            completionMessage = Workers.Count > 0 ? Workers[^1].CompletionMessage ?? "Done" : "Done";
+            ClearRunState(cancel: false);
             _runId++;
         }
 
@@ -419,29 +424,7 @@ public abstract class GH_AsyncComponent : GH_Component
         lock (_lifecycleLock)
         {
             _runId++;
-
-            if (cancelWorkers)
-            {
-                foreach (var source in CancellationSources)
-                {
-                    source.Cancel();
-                    source.Dispose();
-                }
-            }
-
-            CancellationSources.Clear();
-            Workers.Clear();
-            ProgressReports.Clear();
-            Tasks.Clear();
-            ClearWorkerErrors();
-
-            _completedWorkerCount = 0;
-            _setDataIndex = 0;
-            _isRunning = false;
-            _isReadyToSetData = false;
-            _setDataExpireScheduled = false;
-            _setDataSolutionPending = false;
-            _workersCommitted = false;
+            ClearRunState(cancelWorkers);
         }
 
         Message = string.IsNullOrEmpty(message) ? string.Empty : message;
@@ -460,13 +443,6 @@ public abstract class GH_AsyncComponent : GH_Component
             return;
         Message = string.Empty;
         OnDisplayExpired(true);
-    }
-
-    private void ClearWorkerErrors()
-    {
-        while (_workerErrors.TryDequeue(out _))
-        {
-        }
     }
 
     protected virtual string FormatProgressMessage(double fraction) =>

@@ -43,7 +43,7 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
         base.Layout();
         var model = _getModel();
         EnsureCapacity(model.Lists.Count);
-        FixLayout(MinWidth(model));
+        GhLayoutUtils.FixLayout(this, MinWidth(model));
 
         const int s = 2;
         const int hSpacer = 10;
@@ -108,7 +108,7 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
             }
 
             var selected = i < model.Selected.Count ? model.Selected[i] : string.Empty;
-            using (var path = RoundedRect(_borders[i], 2))
+            using (var path = GhLayoutUtils.RoundedRect(_borders[i], 2))
             using (var fill = new SolidBrush(Accent))
             using (var pen = new Pen(AccentDark, 0.8f))
             {
@@ -251,38 +251,5 @@ public sealed class DropDownAttributes : GH_ComponentAttributes
         return max;
     }
 
-    private void FixLayout(float minWidth)
-    {
-        var width = Bounds.Width;
-        var newWidth = Math.Max(width, minWidth);
-        var delta = newWidth - width;
-        if (delta <= 0) return;
 
-        Bounds = new RectangleF(Bounds.X - delta / 2f, Bounds.Y, newWidth, Bounds.Height);
-        foreach (var p in Owner.Params.Output)
-        {
-            p.Attributes.Pivot = new PointF(p.Attributes.Pivot.X + delta / 2f, p.Attributes.Pivot.Y);
-            var b = p.Attributes.Bounds;
-            p.Attributes.Bounds = new RectangleF(b.X + delta / 2f, b.Y, b.Width, b.Height);
-        }
-        foreach (var p in Owner.Params.Input)
-        {
-            p.Attributes.Pivot = new PointF(p.Attributes.Pivot.X - delta / 2f, p.Attributes.Pivot.Y);
-            var b = p.Attributes.Bounds;
-            p.Attributes.Bounds = new RectangleF(b.X - delta / 2f, b.Y, b.Width, b.Height);
-        }
-    }
-
-    private static GraphicsPath RoundedRect(RectangleF b, int r)
-    {
-        var path = new GraphicsPath();
-        if (r <= 0) { path.AddRectangle(b); return path; }
-        var d = r * 2f;
-        path.AddArc(b.X, b.Y, d, d, 180, 90);
-        path.AddArc(b.Right - d, b.Y, d, d, 270, 90);
-        path.AddArc(b.Right - d, b.Bottom - d, d, d, 0, 90);
-        path.AddArc(b.X, b.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
 }

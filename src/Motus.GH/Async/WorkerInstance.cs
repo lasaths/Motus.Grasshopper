@@ -9,7 +9,7 @@ namespace Motus.GH.Async;
 /// </summary>
 public abstract class WorkerInstance
 {
-    public GH_Component? Parent { get; set; }
+    public GH_AsyncComponent? Parent { get; set; }
     public CancellationToken CancellationToken { get; set; }
     public string Id { get; set; } = string.Empty;
     public string CompletionMessage { get; set; } = "Done";

@@ -45,14 +45,12 @@ public static class PreviewColorResolver
         if (geometryColors is null || geometryColors.Length == 0)
             return [];
 
-        var aligned = new List<Color?>();
+        var count = geometry.Links.Count + (geometry.ToolGeometry is not null ? 1 : 0);
+        var aligned = new Color?[count];
         for (var gi = 0; gi < geometry.Links.Count; gi++)
-            aligned.Add(gi < geometryColors.Length ? geometryColors[gi] : null);
-
-        if (geometry.ToolGeometry is not null)
-            aligned.Add(null);
-
-        return aligned.ToArray();
+            aligned[gi] = gi < geometryColors.Length ? geometryColors[gi] : null;
+        // aligned[Links.Count] stays null for ToolGeometry slot (default)
+        return aligned;
     }
 
     private static Color ResolveUrdf(int meshIndex, IReadOnlyList<Color?>? urdfColors, bool isStartGhost)

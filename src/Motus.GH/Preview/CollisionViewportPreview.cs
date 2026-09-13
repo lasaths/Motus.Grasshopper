@@ -25,13 +25,8 @@ internal static class CollisionViewportPreview
     public static List<Mesh> MeshesFor(CollisionScene scene) =>
         KinematicsPreview.CollisionSceneMeshes(scene).ToList();
 
-    public static BoundingBox MeshesBoundingBox(IReadOnlyList<Mesh> meshes)
-    {
-        var bb = BoundingBox.Empty;
-        foreach (var mesh in meshes)
-            bb.Union(mesh.GetBoundingBox(false));
-        return bb.IsValid ? bb : BoundingBox.Unset;
-    }
+    public static BoundingBox MeshesBoundingBox(IReadOnlyList<Mesh> meshes) =>
+        RobotViewportPreview.ComputeBounds(meshes, []);
 
     public static void DrawMeshes(IGH_PreviewArgs args, IReadOnlyList<Mesh> meshes)
     {

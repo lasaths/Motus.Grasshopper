@@ -22,30 +22,34 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
     private RectangleF _buttonBounds;
     private bool _mouseDown;
     private bool _mouseOver;
+    // Measured once on first Layout; these strings are constant so the width never changes.
+    private float _cachedDesiredWidth;
 
     public ButtonAttributes(GH_Component owner, Func<string> label, Func<bool> isActive, Action onClick) : base(owner)
         => (_label, _isActive, _onClick) = (label, isActive, onClick);
 
     private float DesiredWidth()
     {
+        if (_cachedDesiredWidth > 0) return _cachedDesiredWidth;
         try
         {
             var idle = GH_FontServer.StringWidth("\u25B6 Play", GH_FontServer.Standard);
             var active = GH_FontServer.StringWidth("\u25A0 Stop", GH_FontServer.Standard);
             var replan = GH_FontServer.StringWidth("Replan", GH_FontServer.Standard);
-            return Math.Max(Math.Max(idle, active), replan) + 24;
+            _cachedDesiredWidth = Math.Max(Math.Max(idle, active), replan) + 24;
         }
         catch
         {
             // ponytail: GH_FontServer can NRE during GHA registration before UI fonts exist
-            return 96;
+            _cachedDesiredWidth = 96;
         }
+        return _cachedDesiredWidth;
     }
 
     protected override void Layout()
     {
         base.Layout();
-        FixLayout(DesiredWidth());
+        GhLayoutUtils.FixLayout(this, DesiredWidth());
 
         const int pad = 3;
         const int h = 22;
@@ -63,7 +67,7 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
         var baseColor = active ? MotusPalette.Chrome : MotusPalette.Model;
         var fill = _mouseDown ? Darken(baseColor, 0.18) : _mouseOver ? Lighten(baseColor, 0.12) : baseColor;
 
-        using var path = RoundedRect(_buttonBounds, 3);
+        using var path = GhLayoutUtils.RoundedRect(_buttonBounds, 3);
         using var brush = new SolidBrush(fill);
         graphics.FillPath(brush, path);
         using var pen = new Pen(Darken(baseColor, 0.3), _mouseDown ? 1.0f : 0.6f);
@@ -121,45 +125,11 @@ public sealed class ButtonAttributes : GH_ComponentAttributes
         return base.RespondToMouseMove(sender, e);
     }
 
-    /// <summary>Widen the component to <paramref name="minWidth"/> and shift the output params to stay right-aligned.</summary>
-    private void FixLayout(float minWidth)
-    {
-        var width = Bounds.Width;
-        var newWidth = Math.Max(width, minWidth);
-        var delta = newWidth - width;
-        if (delta <= 0) return;
-
-        Bounds = new RectangleF(Bounds.X - delta / 2f, Bounds.Y, newWidth, Bounds.Height);
-        foreach (var p in Owner.Params.Output)
-        {
-            p.Attributes.Pivot = new PointF(p.Attributes.Pivot.X + delta / 2f, p.Attributes.Pivot.Y);
-            var b = p.Attributes.Bounds;
-            p.Attributes.Bounds = new RectangleF(b.X + delta / 2f, b.Y, b.Width, b.Height);
-        }
-        foreach (var p in Owner.Params.Input)
-        {
-            p.Attributes.Pivot = new PointF(p.Attributes.Pivot.X - delta / 2f, p.Attributes.Pivot.Y);
-            var b = p.Attributes.Bounds;
-            p.Attributes.Bounds = new RectangleF(b.X - delta / 2f, b.Y, b.Width, b.Height);
-        }
-    }
-
     private static Color Lighten(Color c, double r) =>
         Color.FromArgb(c.A, (int)(c.R + (255 - c.R) * r), (int)(c.G + (255 - c.G) * r), (int)(c.B + (255 - c.B) * r));
 
     private static Color Darken(Color c, double r) =>
         Color.FromArgb(c.A, (int)(c.R * (1 - r)), (int)(c.G * (1 - r)), (int)(c.B * (1 - r)));
 
-    private static GraphicsPath RoundedRect(RectangleF b, int r)
-    {
-        var path = new GraphicsPath();
-        if (r <= 0) { path.AddRectangle(b); return path; }
-        var d = r * 2f;
-        path.AddArc(b.X, b.Y, d, d, 180, 90);
-        path.AddArc(b.Right - d, b.Y, d, d, 270, 90);
-        path.AddArc(b.Right - d, b.Bottom - d, d, d, 0, 90);
-        path.AddArc(b.X, b.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
+
 }

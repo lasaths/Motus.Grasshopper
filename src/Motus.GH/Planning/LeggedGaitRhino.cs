@@ -75,10 +75,6 @@ internal static class LeggedGaitRhino
         return true;
     }
 
-    internal static double[] BuildStanceQ(
-        LeggedMechanism mechanism, double hip, double femur, double tibia) =>
-        NetLeggedGait.BuildStanceQ(mechanism, hip, femur, tibia);
-
     private static List<Vec3> SamplePolyline(Curve curve)
     {
         var len = curve.GetLength();

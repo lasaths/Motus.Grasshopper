@@ -58,20 +58,11 @@ internal readonly struct ScrubTimeline
 
     public int NearestDisplayIndex(double displayFraction)
     {
-        if (DisplayFractions.Count == 0) return 0;
+        var n = DisplayFractions.Count;
+        if (n == 0) return 0;
+        // DisplayFractions are evenly spaced: i/(n-1), so nearest index is O(1).
         var t = Math.Clamp(displayFraction, 0, 1);
-        var best = 0;
-        var bestDist = double.MaxValue;
-        for (var i = 0; i < DisplayFractions.Count; i++)
-        {
-            var d = Math.Abs(DisplayFractions[i] - t);
-            if (d < bestDist)
-            {
-                bestDist = d;
-                best = i;
-            }
-        }
-        return best;
+        return Math.Clamp((int)Math.Round(t * (n - 1)), 0, n - 1);
     }
 
     public double DisplayFractionAt(int index)

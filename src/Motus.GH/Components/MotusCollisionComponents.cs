@@ -43,6 +43,13 @@ public abstract class CollisionPreviewComponentBase : MotusComponentBase
         _previewMeshes.Clear();
         _previewKey = null;
     }
+
+    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
+
+    public override void DrawViewportMeshes(IGH_PreviewArgs args)
+    {
+        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
+    }
 }
 
 public sealed class MotusCollisionSphereComponent : CollisionPreviewComponentBase
@@ -79,13 +86,6 @@ public sealed class MotusCollisionSphereComponent : CollisionPreviewComponentBas
             _previewMeshes = CollisionViewportPreview.MeshesFor(obj);
         }
         da.SetData(0, new CollisionObjectGoo(obj));
-    }
-
-    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
-
-    public override void DrawViewportMeshes(IGH_PreviewArgs args)
-    {
-        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
     }
 
     public override Guid ComponentGuid => new Guid("c1a2b3c4-d5e6-4789-a012-3456789abcde");
@@ -159,13 +159,6 @@ public sealed class MotusCollisionPlaneComponent : CollisionPreviewComponentBase
         da.SetData(0, new CollisionObjectGoo(obj));
     }
 
-    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
-
-    public override void DrawViewportMeshes(IGH_PreviewArgs args)
-    {
-        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
-    }
-
     public override Guid ComponentGuid => new Guid("7187b866-deb7-47b7-86a7-44b368af21d1");
 }
 
@@ -206,23 +199,13 @@ public sealed class MotusCollisionBoxComponent : CollisionPreviewComponentBase
         da.SetData(0, new CollisionObjectGoo(obj));
     }
 
-    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
-
-    public override void DrawViewportMeshes(IGH_PreviewArgs args)
-    {
-        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
-    }
-
     public override Guid ComponentGuid => new Guid("d2b3c4d5-e6f7-4890-b123-456789abcdef");
 }
 
 public sealed class MotusCollisionSceneComponent : CollisionPreviewComponentBase
 {
-    private string? _srdfCachePath;
-    private long _srdfCacheTicks;
-    private CollisionScene? _srdfBaseScene;
-    private List<PlanningGroup>? _srdfGroups;
-    private List<string>? _srdfEndEffectors;
+    private sealed record SrdfCache(string Path, long Ticks, CollisionScene Scene, List<PlanningGroup> Groups, List<string> EndEffectors);
+    private SrdfCache? _srdfCache;
 
     public MotusCollisionSceneComponent() : base("Motus Collision Scene", "ColScene", "Merge collision objects; optional SRDF allowed pairs/groups", "Collision", "circles-three-plus") { }
 
@@ -273,23 +256,22 @@ public sealed class MotusCollisionSceneComponent : CollisionPreviewComponentBase
                 try
                 {
                     var ticks = File.GetLastWriteTimeUtc(srdfPath).Ticks;
-                    if (_srdfCachePath != srdfPath || _srdfCacheTicks != ticks || _srdfGroups is null)
+                    if (_srdfCache is null || _srdfCache.Path != srdfPath || _srdfCache.Ticks != ticks)
                     {
                         var doc = System.Xml.Linq.XDocument.Load(srdfPath);
                         var pairs = SrdfLoader.LoadAllowedPairs(doc);
-                        _srdfBaseScene = SrdfLoader.MergeAllowedPairs(new CollisionScene(), pairs);
-                        _srdfGroups = SrdfLoader.LoadGroups(doc).ToList();
-                        _srdfEndEffectors = SrdfLoader.LoadEndEffectors(doc)
+                        var baseScene = SrdfLoader.MergeAllowedPairs(new CollisionScene(), pairs);
+                        var groupList = SrdfLoader.LoadGroups(doc).ToList();
+                        var eeList = SrdfLoader.LoadEndEffectors(doc)
                             .Select(kv => $"{kv.Key}={kv.Value}")
                             .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                             .ToList();
-                        _srdfCachePath = srdfPath;
-                        _srdfCacheTicks = ticks;
+                        _srdfCache = new SrdfCache(srdfPath, ticks, baseScene, groupList, eeList);
                     }
 
-                    scene = SrdfLoader.MergeAllowedPairs(scene, _srdfBaseScene!.AllowedPairs);
-                    groups = _srdfGroups!;
-                    endEffectors = _srdfEndEffectors!;
+                    scene = SrdfLoader.MergeAllowedPairs(scene, _srdfCache.Scene.AllowedPairs);
+                    groups = _srdfCache.Groups;
+                    endEffectors = _srdfCache.EndEffectors;
                 }
                 catch (Exception ex)
                 {
@@ -308,13 +290,6 @@ public sealed class MotusCollisionSceneComponent : CollisionPreviewComponentBase
             _previewKey = previewKey;
             _previewMeshes = CollisionViewportPreview.MeshesFor(scene);
         }
-    }
-
-    public override BoundingBox ClippingBox => CollisionViewportPreview.MeshesBoundingBox(_previewMeshes);
-
-    public override void DrawViewportMeshes(IGH_PreviewArgs args)
-    {
-        if (!Locked) CollisionViewportPreview.DrawMeshes(args, _previewMeshes);
     }
 
     public override Guid ComponentGuid => new Guid("e3c4d5e6-f7a8-4901-c234-56789abcdef0");

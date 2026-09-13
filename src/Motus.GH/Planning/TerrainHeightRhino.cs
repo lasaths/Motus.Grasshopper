@@ -210,25 +210,9 @@ internal static class TerrainHeightRhino
             case SubD subd when subd.IsValid:
                 AppendSubDMeshes(meshes, subd);
                 break;
-            case GeometryBase gb:
-                switch (gb)
-                {
-                    case Mesh mm when mm.IsValid:
-                        meshes.Add(mm.DuplicateMesh());
-                        break;
-                    case Brep bb2 when bb2.IsValid:
-                        AppendBrepMeshes(meshes, bb2);
-                        break;
-                    case Extrusion ex2 when ex2.IsValid && ex2.ToBrep() is { IsValid: true } eb2:
-                        AppendBrepMeshes(meshes, eb2);
-                        break;
-                    case Surface s2 when s2.IsValid:
-                        AppendSurfaceMeshes(meshes, s2);
-                        break;
-                    case SubD sd2 when sd2.IsValid:
-                        AppendSubDMeshes(meshes, sd2);
-                        break;
-                }
+            // GeometryBase subtypes (Mesh, Brep, Extrusion, Surface, SubD) are already caught
+            // by the specific cases above; this arm handles any remaining unknown subtype.
+            case GeometryBase:
                 break;
         }
     }

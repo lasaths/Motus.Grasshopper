@@ -15,11 +15,10 @@ public static class ToolCapContract
     public static readonly string[] Schemas = [None, Robotiq2F85, Custom];
 
     /// <summary>
-    /// Normalize Cap for UI/persistence. Known aliases map; unknown → <see cref="None"/> (fail-closed).
+    /// Maps a raw cap string to its canonical alias, or <c>null</c> for unknown values.
     /// </summary>
-    public static string Normalize(string? raw)
+    private static string? NormalizeAlias(string t)
     {
-        var t = (raw ?? None).Trim();
         if (string.IsNullOrWhiteSpace(t) ||
             t.Equals(None, StringComparison.OrdinalIgnoreCase) ||
             t.Equals("Off", StringComparison.OrdinalIgnoreCase))
@@ -30,8 +29,14 @@ public static class ToolCapContract
             return Robotiq2F85;
         if (t.Equals(Custom, StringComparison.OrdinalIgnoreCase))
             return Custom;
-        return None;
+        return null;
     }
+
+    /// <summary>
+    /// Normalize Cap for UI/persistence. Known aliases map; unknown → <see cref="None"/> (fail-closed).
+    /// </summary>
+    public static string Normalize(string? raw) =>
+        NormalizeAlias((raw ?? None).Trim()) ?? None;
 
     /// <summary>
     /// Parse Cap schema string. False when value is not None/Robotiq2F85/Custom.
@@ -45,38 +50,29 @@ public static class ToolCapContract
         double widthDefaultMeters = 0.085)
     {
         caps = null;
-        var t = (raw ?? None).Trim();
-        if (string.IsNullOrWhiteSpace(t) ||
-            t.Equals(None, StringComparison.OrdinalIgnoreCase) ||
-            t.Equals("Off", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (t.Equals(Robotiq2F85, StringComparison.OrdinalIgnoreCase) ||
-            t.Equals("Robotiq", StringComparison.OrdinalIgnoreCase) ||
-            t.Equals("2F85", StringComparison.OrdinalIgnoreCase))
+        switch (NormalizeAlias((raw ?? None).Trim()))
         {
-            caps = ToolCapabilities.Robotiq2F85;
-            return true;
-        }
-
-        if (t.Equals(Custom, StringComparison.OrdinalIgnoreCase))
-        {
-            if (!(widthMaxMeters > widthMinMeters) ||
-                double.IsNaN(widthMinMeters) || double.IsInfinity(widthMinMeters) ||
-                double.IsNaN(widthMaxMeters) || double.IsInfinity(widthMaxMeters) ||
-                double.IsNaN(widthDefaultMeters) || double.IsInfinity(widthDefaultMeters))
-                return false;
-            try
-            {
-                caps = ToolCapabilities.WidthSchema(widthMinMeters, widthMaxMeters, widthDefaultMeters);
+            case None: return true;
+            case Robotiq2F85:
+                caps = ToolCapabilities.Robotiq2F85;
                 return true;
-            }
-            catch
-            {
-                return false;
-            }
+            case Custom:
+                if (!(widthMaxMeters > widthMinMeters) ||
+                    double.IsNaN(widthMinMeters) || double.IsInfinity(widthMinMeters) ||
+                    double.IsNaN(widthMaxMeters) || double.IsInfinity(widthMaxMeters) ||
+                    double.IsNaN(widthDefaultMeters) || double.IsInfinity(widthDefaultMeters))
+                    return false;
+                try
+                {
+                    caps = ToolCapabilities.WidthSchema(widthMinMeters, widthMaxMeters, widthDefaultMeters);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            default: return false; // null → unknown
         }
-
-        return false;
     }
 
     /// <summary>

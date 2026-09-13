@@ -9,6 +9,7 @@ using Motus.GH.Preview;
 using Rhino.Display;
 using Rhino.Geometry;
 using System.Drawing;
+using System.Text.RegularExpressions;
 
 namespace Motus.GH.Components;
 
@@ -21,6 +22,17 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
     public const string LeggedFamily = Units.LeggedFamily;
 
     public static readonly Guid Id = new("236f9a53-c07b-4663-bf27-950e20fb59ab");
+
+    private static readonly Color ContactWireColor = Color.FromArgb(220, 80, 200, 120);
+    private static readonly Color LegWireColor = Color.FromArgb(200, 255, 140, 40);
+
+    // Cached compiled patterns for StripMethodCite (hot path: called per-warning per-solve).
+    private static readonly Regex RxDoiParen = new(
+        @"\s*\([^)]*doi:\s*[^)]+\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxDoiBare = new(
+        @"\s*;?\s*DOI\s+10\.[^\s);]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex RxLegIk = new(
+        @"\s*LegIk3R=analytic[^.]*\.", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private List<Color> _previewColors = [];
     private List<Circle> _previewContactCircles = [];
@@ -65,6 +77,13 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         p.AddCurveParameter("Support", "Sp", "Support polygon (foot tips)", GH_ParamAccess.item);
     }
 
+    private void ClearPreviewState()
+    {
+        ClearPreview();
+        _previewColors = [];
+        _previewContactCircles = [];
+    }
+
     protected override void SolveInstance(IGH_DataAccess da)
     {
         LeggedMechanismGoo? mechGoo = null;
@@ -86,9 +105,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
 
         if (mechGoo?.Value is null)
         {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
+            ClearPreviewState();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Mech required — wire Motus Mechanism (Body + Leg).");
             return;
         }
@@ -107,9 +124,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         if (!double.IsFinite(speed) || !double.IsFinite(stepLen) || !double.IsFinite(lift)
             || !double.IsFinite(hs) || !double.IsFinite(fs) || !double.IsFinite(ts))
         {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
+            ClearPreviewState();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Speed / Step / Lift / stance must be finite.");
             return;
         }
@@ -133,10 +148,9 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             JointState? treeDriverHome;
             if (hasPath)
             {
-                preset = mechanism.ToPreset(limits: allLimits);
                 preset = new RobotPreset
                 {
-                    Manufacturer = preset.Manufacturer,
+                    Manufacturer = mechanism.ToPreset(limits: allLimits).Manufacturer,
                     ModelName = mechanism.ModelName + "_gait",
                     Family = Units.LeggedFamily,
                     AxisCount = tree.DriverCount,
@@ -267,9 +281,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                         hs, fs, ts, model,
                         out var gait, out var gaitErr, terrain))
                 {
-                    ClearPreview();
-                    _previewColors = [];
-                    _previewContactCircles = [];
+                    ClearPreviewState();
                     AddRuntimeMessage(GH_RuntimeMessageLevel.Error, gaitErr);
                     return;
                 }
@@ -284,9 +296,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                             e.Contains("SSM", StringComparison.OrdinalIgnoreCase));
                     if (!ssmOnly)
                     {
-                        ClearPreview();
-                        _previewColors = [];
-                        _previewContactCircles = [];
+                        ClearPreviewState();
                         AddRuntimeMessage(
                             GH_RuntimeMessageLevel.Error,
                             validation.Errors.Count > 0
@@ -365,9 +375,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         }
         catch (Exception ex)
         {
-            ClearPreview();
-            _previewColors = [];
-            _previewContactCircles = [];
+            ClearPreviewState();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
         }
     }
@@ -390,13 +398,12 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
     public override void DrawViewportWires(IGH_PreviewArgs args)
     {
         if (Locked) return;
-        var contactColor = Color.FromArgb(220, 80, 200, 120);
         foreach (var c in _previewContactCircles)
-            args.Display.DrawCircle(c, contactColor, 2);
+            args.Display.DrawCircle(c, ContactWireColor, 2);
         if (_previewWires.Count > 0)
         {
             foreach (var line in _previewWires)
-                args.Display.DrawLine(line, Color.FromArgb(200, 255, 140, 40), 2);
+                args.Display.DrawLine(line, LegWireColor, 2);
             return;
         }
         base.DrawViewportWires(args);
@@ -410,22 +417,10 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
     private static string StripMethodCite(string message)
     {
         if (string.IsNullOrEmpty(message)) return message;
-        var cleaned = System.Text.RegularExpressions.Regex.Replace(
-            message,
-            @"\s*\([^)]*doi:\s*[^)]+\)",
-            "",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        cleaned = System.Text.RegularExpressions.Regex.Replace(
-            cleaned,
-            @"\s*;?\s*DOI\s+10\.[^\s);]+",
-            "",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var cleaned = RxDoiParen.Replace(message, "");
+        cleaned = RxDoiBare.Replace(cleaned, "");
         // NuGet 0.13.0 appended DescribeStack() into Warning.
-        cleaned = System.Text.RegularExpressions.Regex.Replace(
-            cleaned,
-            @"\s*LegIk3R=analytic[^.]*\.",
-            "",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        cleaned = RxLegIk.Replace(cleaned, "");
         return cleaned.Trim().TrimEnd(',', ';');
     }
 }

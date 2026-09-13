@@ -74,6 +74,78 @@ public abstract class MotusComponentBase : GH_Component
         MotusIcon.Get(_iconName, MotusIcon.SubcategoryColor(_subcategory));
 }
 
+/// <summary>
+/// Shared base for components that show a <see cref="DropDownAttributes"/> face dropdown and need
+/// canvas-pivot preservation across attribute rebuilds (schema changes, pin morphs).
+/// </summary>
+public abstract class MotusDropDownComponentBase : MotusComponentBase
+{
+    private PointF? _canvasPivot;
+
+    protected MotusDropDownComponentBase(string name, string nickname, string desc, string sub, string iconName)
+        : base(name, nickname, desc, sub, iconName) { }
+
+    /// <summary>Creates <see cref="DropDownAttributes"/>, preserving the current canvas pivot.</summary>
+    protected void CreateDropDownAttributes(Func<DropDownAttributes.Model> getModel, Action<int, int> onSelect)
+    {
+        var pivot = _canvasPivot;
+        if (pivot is null && Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                pivot = p;
+        }
+        m_attributes = new DropDownAttributes(this, getModel, onSelect);
+        if (pivot is { } keep)
+            m_attributes.Pivot = keep;
+    }
+
+    protected void WritePivot(GH_IWriter writer)
+    {
+        if (Attributes is not null)
+        {
+            writer.SetDouble("CanvasPivotX", Attributes.Pivot.X);
+            writer.SetDouble("CanvasPivotY", Attributes.Pivot.Y);
+        }
+    }
+
+    protected void ReadPivotFromReader(GH_IReader reader)
+    {
+        if (reader.ItemExists("CanvasPivotX") && reader.ItemExists("CanvasPivotY"))
+        {
+            _canvasPivot = new PointF(
+                (float)reader.GetDouble("CanvasPivotX"),
+                (float)reader.GetDouble("CanvasPivotY"));
+        }
+    }
+
+    protected void CapturePivotFromAttributes()
+    {
+        if (Attributes is not null)
+        {
+            var p = Attributes.Pivot;
+            if (p.X != 0 || p.Y != 0)
+                _canvasPivot = p;
+        }
+    }
+
+    protected void RestoreCanvasPivot()
+    {
+        if (_canvasPivot is not { } p || Attributes is null) return;
+        Attributes.Pivot = p;
+    }
+
+    protected int IndexOf(string name)
+    {
+        for (var i = 0; i < Params.Input.Count; i++)
+        {
+            if (string.Equals(Params.Input[i].Name, name, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
+    }
+}
+
 public abstract class RobotSourceComponentBase : MotusComponentBase
 {
     protected List<Mesh> _previewMeshes = [];

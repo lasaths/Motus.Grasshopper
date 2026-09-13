@@ -7,8 +7,6 @@ using Motus.GH.Preview;
 using Motus.GH.Rhino;
 using Rhino.Geometry;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-
 namespace Motus.GH.Components;
 
 public sealed class MotusCollisionMeshComponent : MotusComponentBase
@@ -68,7 +66,7 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
                 $"Dense collision mesh ({triangleCount:N0} tris). Decimate or use ColBox/ColSphere for faster planning.");
         }
 
-        var key = $"{geo.GetType().Name}|{RuntimeHelpers.GetHashCode(geo)}|{pl.OriginX:R},{pl.OriginY:R},{pl.OriginZ:R}|{name}|{obj.ContentHash}";
+        var key = $"{geo.GetType().Name}|{pl.OriginX:R},{pl.OriginY:R},{pl.OriginZ:R}|{name}|{obj.ContentHash}";
         if (_previewKey != key)
         {
             _previewKey = key;

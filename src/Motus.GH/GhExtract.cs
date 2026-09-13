@@ -457,15 +457,13 @@ internal static class GhExtract
     public static List<string> BuildWarnings(IReadOnlyList<PlanningResult> results)
     {
         var warnings = new List<string>();
-        foreach (var pair in results.Select((result, index) => (result, index)))
+        for (var i = 0; i < results.Count; i++)
         {
-            foreach (var warning in ExtractWarnings(pair.result))
-                warnings.Add($"Goal[{pair.index}]: {warning}");
+            foreach (var warning in ExtractWarnings(results[i]))
+                warnings.Add($"Goal[{i}]: {warning}");
         }
 
-        var capabilities = MotusCapabilities.Describe();
-        if (!warnings.Any(w => string.Equals(w, capabilities, StringComparison.OrdinalIgnoreCase)))
-            warnings.Add(capabilities);
+        AppendCapabilities(warnings);
         return warnings;
     }
 
@@ -529,10 +527,15 @@ internal static class GhExtract
     public static List<string> BuildProgramWarnings(PlanningResult result)
     {
         var warnings = ExtractWarnings(result).ToList();
-        var capabilities = MotusCapabilities.Describe();
-        if (!warnings.Any(w => string.Equals(w, capabilities, StringComparison.OrdinalIgnoreCase)))
-            warnings.Add(capabilities);
+        AppendCapabilities(warnings);
         return warnings;
+    }
+
+    private static void AppendCapabilities(List<string> warnings)
+    {
+        var capabilities = MotusCapabilities.Describe();
+        if (!warnings.Contains(capabilities))
+            warnings.Add(capabilities);
     }
 
     private static string FormatFailure(PlanningResult result)
@@ -602,11 +605,7 @@ internal static class GhExtract
                 return new TipPathCollisionChecker(checker, tipN);
             return checker;
         }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-        catch (ArgumentException)
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
             return null;
         }

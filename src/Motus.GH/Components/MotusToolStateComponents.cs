@@ -1,4 +1,3 @@
-using System.Drawing;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
@@ -15,12 +14,11 @@ namespace Motus.GH.Components;
 /// Motus Tool State — EndEffectorState from Cap schema. Preset is on-component.
 /// Pins stay stable (Width always optional) so GHX wires survive Preset changes.
 /// </summary>
-public sealed class MotusToolStateComponent : MotusComponentBase
+public sealed class MotusToolStateComponent : MotusDropDownComponentBase
 {
     private static readonly string[] Presets = ["Open", "Closed", "Custom"];
 
     private string _preset = "Open";
-    private PointF? _canvasPivot;
 
     public MotusToolStateComponent()
         : base(
@@ -30,20 +28,7 @@ public sealed class MotusToolStateComponent : MotusComponentBase
             "Model",
             "sliders-horizontal") { }
 
-    public override void CreateAttributes()
-    {
-        var pivot = _canvasPivot;
-        if (pivot is null && Attributes is not null)
-        {
-            var p = Attributes.Pivot;
-            if (p.X != 0 || p.Y != 0)
-                pivot = p;
-        }
-
-        m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
-        if (pivot is { } keep)
-            m_attributes.Pivot = keep;
-    }
+    public override void CreateAttributes() => CreateDropDownAttributes(BuildDropdownModel, OnDropdownSelect);
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -63,12 +48,7 @@ public sealed class MotusToolStateComponent : MotusComponentBase
     public override bool Write(GH_IWriter writer)
     {
         writer.SetString("ToolStatePreset", _preset);
-        if (Attributes is not null)
-        {
-            writer.SetDouble("CanvasPivotX", Attributes.Pivot.X);
-            writer.SetDouble("CanvasPivotY", Attributes.Pivot.Y);
-        }
-
+        WritePivot(writer);
         return base.Write(writer);
     }
 
@@ -76,26 +56,13 @@ public sealed class MotusToolStateComponent : MotusComponentBase
     {
         if (reader.ItemExists("ToolStatePreset"))
             _preset = NormalizePreset(reader.GetString("ToolStatePreset"));
-        if (reader.ItemExists("CanvasPivotX") && reader.ItemExists("CanvasPivotY"))
-        {
-            _canvasPivot = new PointF(
-                (float)reader.GetDouble("CanvasPivotX"),
-                (float)reader.GetDouble("CanvasPivotY"));
-        }
-
+        ReadPivotFromReader(reader);
         var ok = base.Read(reader);
-        if (Attributes is not null)
-        {
-            var p = Attributes.Pivot;
-            if (p.X != 0 || p.Y != 0)
-                _canvasPivot = p;
-        }
-
+        CapturePivotFromAttributes();
         MigrateLegacyPresetPin();
         var presetIdx = IndexOf("Preset");
         if (presetIdx >= 0)
             Params.UnregisterInputParameter(Params.Input[presetIdx]);
-
         RestoreCanvasPivot();
         return ok;
     }
@@ -111,12 +78,6 @@ public sealed class MotusToolStateComponent : MotusComponentBase
             if (!string.IsNullOrWhiteSpace(v))
                 _preset = NormalizePreset(v);
         }
-    }
-
-    private void RestoreCanvasPivot()
-    {
-        if (_canvasPivot is not { } p || Attributes is null) return;
-        Attributes.Pivot = p;
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -183,17 +144,6 @@ public sealed class MotusToolStateComponent : MotusComponentBase
         RecordUndoEvent("Tool State Preset");
         _preset = next;
         ExpireSolution(true);
-    }
-
-    private int IndexOf(string name)
-    {
-        for (var i = 0; i < Params.Input.Count; i++)
-        {
-            if (string.Equals(Params.Input[i].Name, name, StringComparison.Ordinal))
-                return i;
-        }
-
-        return -1;
     }
 
     private static string NormalizePreset(string? raw)

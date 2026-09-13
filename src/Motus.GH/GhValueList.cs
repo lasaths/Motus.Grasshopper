@@ -9,6 +9,10 @@ internal static class GhValueList
     /// <summary>GH Value List type id (dropdown preset picker).</summary>
     public static readonly Guid ValueListComponentId = new("86fb34a5-80c2-4a87-bf57-c9a32572455f");
 
+    private const float DropdownOffsetX = 120f;
+    private const float DropdownBaseOffsetY = 14f;
+    private const float DropdownRowHeight = 22f;
+
     public static void AttachDropdown(GH_Component owner, int inputIndex, IEnumerable<string> items, string? listNickName = null)
     {
         if (owner.Params.Input[inputIndex].SourceCount > 0) return;
@@ -22,7 +26,9 @@ internal static class GhValueList
         };
         list.ListItems.Clear();
         list.CreateAttributes();
-        list.Attributes.Pivot = new PointF(owner.Attributes.Pivot.X - 120, owner.Attributes.Pivot.Y + 14 + inputIndex * 22);
+        list.Attributes.Pivot = new PointF(
+            owner.Attributes.Pivot.X - DropdownOffsetX,
+            owner.Attributes.Pivot.Y + DropdownBaseOffsetY + inputIndex * DropdownRowHeight);
         foreach (var item in items)
             list.ListItems.Add(new GH_ValueListItem(item, $"\"{item}\""));
 

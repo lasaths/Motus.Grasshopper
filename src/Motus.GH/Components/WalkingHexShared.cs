@@ -13,13 +13,9 @@ internal static class WalkingHexShared
         LeggedMechanism mechanism, double hip, double femur, double tibia, IReadOnlyList<double>? overrideQ)
     {
         if (overrideQ is { Count: > 0 } oq && oq.Count >= mechanism.DriverCount)
-        {
-            var q = new double[mechanism.DriverCount];
-            for (var i = 0; i < q.Length; i++) q[i] = oq[i];
-            return q;
-        }
+            return oq.Take(mechanism.DriverCount).ToArray();
 
-        return LeggedGaitRhino.BuildStanceQ(mechanism, hip, femur, tibia);
+        return LeggedGait.BuildStanceQ(mechanism, hip, femur, tibia);
     }
 
     /// <summary>
@@ -28,7 +24,6 @@ internal static class WalkingHexShared
     internal static RobotDescription BuildDescription(LeggedMechanism mechanism)
     {
         var hips = mechanism.Legs.Select(l => l.HipInBody ?? Frame.Identity).ToList();
-        var bodyR = EstimateBodyR(hips);
         var bodyZ = mechanism.NominalBodyClearance;
         var links = new List<UrdfLink>
         {
@@ -69,12 +64,8 @@ internal static class WalkingHexShared
                 joints.Add(new UrdfJoint(prefix + "tibia", "revolute", femurLink, tibiaLink,
                     femur, 0, 0, 0, 1, 0, -Math.PI, Math.PI));
             }
-            else if (def.Chain is { } chain)
-            {
-                // Visual stick only — TreeFK poses via Assemble tree, not this URDF for numerical legs.
-                _ = chain;
-                _ = bodyR;
-            }
+            // Numerical-only legs have no Lengths3R; URDF visuals for those legs are skipped here
+            // (TreeFK poses them via the assembled tree, not this description).
         }
 
         if (!RobotDescription.TryAssemble(mechanism.ModelName, links, joints, tipLink: mechanism.TipLinkName,
@@ -82,17 +73,6 @@ internal static class WalkingHexShared
             throw new InvalidOperationException(string.Join("; ", diag.Errors));
 
         return desc;
-    }
-
-    private static double EstimateBodyR(IReadOnlyList<Frame> hips)
-    {
-        var r = 0.06;
-        foreach (var h in hips)
-        {
-            var d = Math.Sqrt(h.X * h.X + h.Y * h.Y);
-            if (d > r) r = d;
-        }
-        return r;
     }
 
     /// <summary>
@@ -191,6 +171,11 @@ internal static class WalkingHexShared
 /// <summary>Legged viewport meshes: N-gon body from hip frames, orange 3R sticks, ground-contact rings.</summary>
 internal static class WalkingHexPreview
 {
+    private static readonly Color BodyColor = Color.FromArgb(200, 255, 105, 180);
+    private static readonly Color LegColor = Color.FromArgb(220, 255, 140, 40);
+    private static readonly Color JointColor = Color.FromArgb(230, 255, 160, 70);
+    private static readonly Color ContactColor = Color.FromArgb(180, 80, 200, 120);
+
     public readonly record struct Result(
         IReadOnlyList<Mesh> Meshes,
         IReadOnlyList<Color> Colors,
@@ -208,11 +193,6 @@ internal static class WalkingHexPreview
         var contacts = new List<Circle>();
         var feet = new List<Point3d>();
 
-        var bodyColor = Color.FromArgb(200, 255, 105, 180);
-        var legColor = Color.FromArgb(220, 255, 140, 40);
-        var jointColor = Color.FromArgb(230, 255, 160, 70);
-        var contactColor = Color.FromArgb(180, 80, 200, 120);
-
         var n = mechanism.LegCount;
         var bodyPts = new Point3d[n];
         for (var i = 0; i < n; i++)
@@ -223,7 +203,7 @@ internal static class WalkingHexPreview
         if (NGonSlab(bodyPts, 0.02) is { } bodyMesh)
         {
             meshes.Add(bodyMesh);
-            colors.Add(bodyColor);
+            colors.Add(BodyColor);
         }
 
         const double segR = 0.007;
@@ -257,14 +237,12 @@ internal static class WalkingHexPreview
             var foot = ankle + tibiaDir * tibia;
             feet.Add(foot);
 
-            AddSeg(meshes, colors, wires, hip, knee, segR, jointR, legColor, jointColor);
-            AddSeg(meshes, colors, wires, knee, ankle, segR, jointR, legColor, jointColor);
-            AddSeg(meshes, colors, wires, ankle, foot, segR * 0.85, jointR * 0.85, legColor, jointColor);
+            AddSeg(meshes, colors, wires, hip, knee, segR, jointR, LegColor, JointColor);
+            AddSeg(meshes, colors, wires, knee, ankle, segR, jointR, LegColor, JointColor);
+            AddSeg(meshes, colors, wires, ankle, foot, segR * 0.85, jointR * 0.85, LegColor, JointColor);
         }
 
-        var worldFeet = new Point3d[feet.Count];
-        for (var i = 0; i < feet.Count; i++)
-            worldFeet[i] = feet[i];
+        var worldFeet = feet.ToArray();
         Transform? bodyXform = baseFrame is { } bf0 ? BodyWorldXform(bf0) : null;
         if (bodyXform is { } x0)
         {
@@ -289,7 +267,7 @@ internal static class WalkingHexPreview
                     16, 1) is { } pad)
             {
                 meshes.Add(pad);
-                colors.Add(contactColor);
+                colors.Add(ContactColor);
             }
         }
 

@@ -49,7 +49,7 @@ public sealed class RobotModelGoo : MotusGooBase<RobotModel>
         });
         Chain = urdf.Chain;
         Tree ??= urdf.Tree;
-        if (PreviewGeometry is null && !string.IsNullOrWhiteSpace(path))
+        if (PreviewGeometry is null)
         {
             var visuals = UrdfRobotLoad.LoadPreviewVisuals(path);
             PreviewGeometry = visuals?.Geometry;

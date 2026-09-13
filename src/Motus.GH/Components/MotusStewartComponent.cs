@@ -90,6 +90,8 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
         da.GetData(7, ref name);
         da.GetData(8, ref sep);
 
+        void Fail(string msg) { ClearPreview(); _previewColors = []; AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg); }
+
         try
         {
             StewartRobot stewart;
@@ -97,9 +99,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
             {
                 if (!File.Exists(path))
                 {
-                    ClearPreview();
-                    _previewColors = [];
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Stewart JSON not found: {path}");
+                    Fail($"Stewart JSON not found: {path}");
                     return;
                 }
                 stewart = StewartRobot.LoadFile(path);
@@ -108,9 +108,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
             {
                 if (!TryAnchors(basePts, platPts, lmin, lmax, name, out stewart, out var err))
                 {
-                    ClearPreview();
-                    _previewColors = [];
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err!);
+                    Fail(err!);
                     return;
                 }
             }
@@ -118,9 +116,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
             {
                 if (!double.IsFinite(sep) || sep <= 0 || sep >= Math.PI)
                 {
-                    ClearPreview();
-                    _previewColors = [];
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "PairSep must be finite and in (0, π).");
+                    Fail("PairSep must be finite and in (0, π).");
                     return;
                 }
                 stewart = new StewartRobot(StewartPlatform.CreateClassic(
@@ -152,9 +148,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
         }
         catch (Exception ex)
         {
-            ClearPreview();
-            _previewColors = [];
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+            Fail(ex.Message);
         }
     }
 

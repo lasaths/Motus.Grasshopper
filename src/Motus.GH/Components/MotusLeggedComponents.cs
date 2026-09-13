@@ -149,7 +149,7 @@ public sealed class MotusBodyComponent : MotusComponentBase
             if (custom.Count >= 2)
             {
                 hips = custom.Select(pl => new Frame(pl.OriginX, pl.OriginY, pl.OriginZ)).ToList();
-                if (!double.IsFinite(bz) || Math.Abs(bz) < 1e-12)
+                if (bz < 1e-12)
                     bz = hips.Average(h => h.Z);
             }
             else

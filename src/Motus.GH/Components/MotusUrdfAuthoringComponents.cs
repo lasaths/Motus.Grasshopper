@@ -258,8 +258,8 @@ public sealed class MotusUrdfAssembleComponent : MotusComponentBase
             return;
         }
 
-        var links = linkGoos.Select(g => g.Value).Where(v => v is not null).Cast<UrdfLink>().ToList();
-        var joints = jointGoos.Select(g => g.Value).Where(v => v is not null).Cast<UrdfJoint>().ToList();
+        var links = linkGoos.Select(g => g.Value).OfType<UrdfLink>().ToList();
+        var joints = jointGoos.Select(g => g.Value).OfType<UrdfJoint>().ToList();
 
         if (!RobotDescription.TryAssemble(name, links, joints, tip, out var description, out var diagnostics))
         {

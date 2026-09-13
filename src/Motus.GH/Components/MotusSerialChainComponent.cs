@@ -74,11 +74,6 @@ public sealed class MotusSerialChainComponent : RobotSourceComponentBase
                 "serial_chain",
                 types.Count > 0 && !rail ? types : null);
 
-            if (tree.Fingerprint == _lastFingerprint && _previewMeshes.Count > 0)
-            {
-                // still emit goo each solve (GH needs output) — rebuild is cheap enough; fingerprint skips mesh rebake via ApplyPreview key
-            }
-
             _lastFingerprint = tree.Fingerprint;
             var tip = tree.ExtractSerialTip("base_link", "tool0");
             var limits = new List<JointLimit>(tree.DriverCount);
@@ -151,9 +146,7 @@ public sealed class MotusSerialChainComponent : RobotSourceComponentBase
             var radius = 0.04;
             // Capsule along local +Z; offset so it spans the link roughly
             var pose = new Frame(0, 0, half, 1, 0, 0, 0);
-            if (chain.Joints[i].Motion == JointMotionType.Prismatic)
-                pose = new Frame(0, 0, half, 1, 0, 0, 0);
-            else if (i > 0 || !rail)
+            if (chain.Joints[i].Motion != JointMotionType.Prismatic && (i > 0 || !rail))
                 pose = new Frame(half, 0, 0, 0, 0, 0, 1); // along +X for revolute segments
 
             var name = i == chain.Joints.Length - 1 ? "tool0" : $"link{i + 1}";

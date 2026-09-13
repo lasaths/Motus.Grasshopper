@@ -49,12 +49,7 @@ internal static class TrajectoryMerge
         if (!da.GetDataList(index, list) || list.Count == 0)
             return false;
 
-        var valid = new List<TrajectoryGoo>(list.Count);
-        foreach (var item in list)
-        {
-            if (item?.Value is not null)
-                valid.Add(item);
-        }
+        var valid = list.Where(item => item?.Value is not null).ToList();
 
         if (valid.Count == 0)
             return false;

@@ -1,4 +1,3 @@
-using System.Drawing;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Types;
@@ -22,13 +21,12 @@ namespace Motus.GH.Components;
 /// Cap = ToolCapabilities schema for Tool State / export (not ToolMode, not bindings).
 /// Pins stay stable (no VariableParameter morph) so GHX wires survive Cap changes.
 /// </summary>
-public sealed class MotusToolComponent : MotusComponentBase
+public sealed class MotusToolComponent : MotusDropDownComponentBase
 {
     private const int MaxMeshVertices = 50_000;
     private List<Mesh> _previewMeshes = new();
 
     private string _cap = ToolCapContract.None;
-    private PointF? _canvasPivot;
 
     public MotusToolComponent()
         : base(
@@ -46,20 +44,7 @@ public sealed class MotusToolComponent : MotusComponentBase
         "Wire: optional Motus Urdf Assemble Rd to Description Rd (actuated mechanism)",
     ];
 
-    public override void CreateAttributes()
-    {
-        var pivot = _canvasPivot;
-        if (pivot is null && Attributes is not null)
-        {
-            var p = Attributes.Pivot;
-            if (p.X != 0 || p.Y != 0)
-                pivot = p;
-        }
-
-        m_attributes = new DropDownAttributes(this, BuildDropdownModel, OnDropdownSelect);
-        if (pivot is { } keep)
-            m_attributes.Pivot = keep;
-    }
+    public override void CreateAttributes() => CreateDropDownAttributes(BuildDropdownModel, OnDropdownSelect);
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -118,12 +103,7 @@ public sealed class MotusToolComponent : MotusComponentBase
     public override bool Write(GH_IWriter writer)
     {
         writer.SetString("ToolCapabilities", _cap);
-        if (Attributes is not null)
-        {
-            writer.SetDouble("CanvasPivotX", Attributes.Pivot.X);
-            writer.SetDouble("CanvasPivotY", Attributes.Pivot.Y);
-        }
-
+        WritePivot(writer);
         return base.Write(writer);
     }
 
@@ -131,27 +111,14 @@ public sealed class MotusToolComponent : MotusComponentBase
     {
         if (reader.ItemExists("ToolCapabilities"))
             _cap = ToolCapContract.Normalize(reader.GetString("ToolCapabilities"));
-        if (reader.ItemExists("CanvasPivotX") && reader.ItemExists("CanvasPivotY"))
-        {
-            _canvasPivot = new PointF(
-                (float)reader.GetDouble("CanvasPivotX"),
-                (float)reader.GetDouble("CanvasPivotY"));
-        }
-
+        ReadPivotFromReader(reader);
         var ok = base.Read(reader);
-        if (Attributes is not null)
-        {
-            var p = Attributes.Pivot;
-            if (p.X != 0 || p.Y != 0)
-                _canvasPivot = p;
-        }
-
+        CapturePivotFromAttributes();
         MigrateLegacyCapPin();
         // Remove legacy Cap pin if an older document still has it (face dropdown owns schema).
         var capIdx = IndexOf("Capabilities");
         if (capIdx >= 0)
             Params.UnregisterInputParameter(Params.Input[capIdx]);
-
         RestoreCanvasPivot();
         return ok;
     }
@@ -167,12 +134,6 @@ public sealed class MotusToolComponent : MotusComponentBase
             if (!string.IsNullOrWhiteSpace(v))
                 _cap = ToolCapContract.Normalize(v);
         }
-    }
-
-    private void RestoreCanvasPivot()
-    {
-        if (_canvasPivot is not { } p || Attributes is null) return;
-        Attributes.Pivot = p;
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
@@ -297,17 +258,6 @@ public sealed class MotusToolComponent : MotusComponentBase
         ExpireSolution(true);
     }
 
-    private int IndexOf(string name)
-    {
-        for (var i = 0; i < Params.Input.Count; i++)
-        {
-            if (string.Equals(Params.Input[i].Name, name, StringComparison.Ordinal))
-                return i;
-        }
-
-        return -1;
-    }
-
     private static bool TryResolveBindings(
         RobotDescription? mechanism,
         ToolCapabilities? caps,
@@ -391,30 +341,19 @@ public sealed class MotusToolComponent : MotusComponentBase
 
     private static bool TryDriverUpper(RobotDescription mechanism, string jointName, out double upper)
     {
+        if (mechanism.Joints.FirstOrDefault(j => j.IsActuated && j.MimicJoint is null &&
+                string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase)) is { } found)
+        {
+            upper = found.Upper;
+            return true;
+        }
         upper = 0;
-        foreach (var j in mechanism.Joints)
-        {
-            if (j.IsActuated && j.MimicJoint is null &&
-                string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase))
-            {
-                upper = j.Upper;
-                return true;
-            }
-        }
         return false;
     }
 
-    private static bool MechanismHasDriver(RobotDescription mechanism, string jointName)
-    {
-        foreach (var j in mechanism.Joints)
-        {
-            if (j.IsActuated && j.MimicJoint is null &&
-                string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
+    private static bool MechanismHasDriver(RobotDescription mechanism, string jointName) =>
+        mechanism.Joints.Any(j => j.IsActuated && j.MimicJoint is null &&
+            string.Equals(j.Name, jointName, StringComparison.OrdinalIgnoreCase));
 
     private static CollisionObject? BuildGeometry(
         IGH_GeometricGoo geo,

@@ -2,6 +2,7 @@ using Grasshopper;
 using Grasshopper.Kernel;
 using Motus.GH.Resources;
 using System.Drawing;
+using Rhino;
 
 namespace Motus.GH;
 
@@ -20,7 +21,7 @@ public sealed class MotusGhPlugin : GH_AssemblyInfo
         get
         {
             try { return MotusIcon.GetAssembly(); }
-            catch { return null; }
+            catch (Exception ex) { RhinoApp.WriteLine($"[Motus] Failed to load assembly icon: {ex.Message}"); return null; }
         }
     }
 }
@@ -37,9 +38,10 @@ public sealed class MotusCategoryIcon : GH_AssemblyPriority
             server.AddCategoryIcon("Motus", MotusIcon.GetCategoryTab());
             server.AddCategorySymbolName("Motus", 'M');
         }
-        catch
+        catch (Exception ex)
         {
             // Tab chrome is optional; components still register.
+            RhinoApp.WriteLine($"[Motus] Failed to register category icon: {ex.Message}");
         }
 
         return GH_LoadingInstruction.Proceed;

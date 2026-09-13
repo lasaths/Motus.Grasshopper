@@ -63,6 +63,8 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
+        void Emit(string outPath) { da.SetData(0, outPath); da.SetData(1, _status); }
+
         RobotDescriptionGoo? descGoo = null;
         var folder = "";
         var name = "";
@@ -70,12 +72,7 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
         da.GetData(1, ref folder);
         da.GetData(2, ref name);
 
-        if (!_run)
-        {
-            da.SetData(0, _lastPath ?? "");
-            da.SetData(1, _status);
-            return;
-        }
+        if (!_run) { Emit(_lastPath ?? ""); return; }
 
         _run = false;
 
@@ -83,8 +80,7 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
         {
             _status = "Wire a RobotDescription (Motus Urdf Assemble / Attach).";
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, _status);
-            da.SetData(0, _lastPath ?? "");
-            da.SetData(1, _status);
+            Emit(_lastPath ?? "");
             return;
         }
 
@@ -92,8 +88,7 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
         {
             _status = "Set an output Folder.";
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, _status);
-            da.SetData(0, _lastPath ?? "");
-            da.SetData(1, _status);
+            Emit(_lastPath ?? "");
             return;
         }
 
@@ -104,15 +99,13 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
             _lastPath = path;
             var d = descGoo.Value;
             _status = $"Wrote {d.Links.Count} links / {d.Joints.Count} joints -> {path}";
-            da.SetData(0, path);
-            da.SetData(1, _status);
+            Emit(path);
         }
         catch (Exception ex)
         {
             _status = ex.Message;
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, _status);
-            da.SetData(0, _lastPath ?? "");
-            da.SetData(1, _status);
+            Emit(_lastPath ?? "");
         }
     }
 
