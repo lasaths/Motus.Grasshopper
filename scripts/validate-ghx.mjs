@@ -82,6 +82,16 @@ function parseXml(name, xml) {
   const dangling = [...new Set(sources.filter((s) => !instanceGuids.has(s)))];
   if (dangling.length) throw new Error(`dangling wire sources: ${dangling.join(', ')}`);
 
+  // Example graphs must use portable repo-relative asset paths (resources/…, examples/…).
+  const machineAbs = [...xml.matchAll(/>(\/(?:agent|Users|home)\/[^<]+|[A-Za-z]:\\[^<]+)</g)]
+    .map((m) => m[1])
+    .filter((p) =>
+      /\.(urdf|xacro|srdf|stl)$/i.test(p) ||
+      /[/\\](?:resources|examples)[/\\]/i.test(p));
+  if (machineAbs.length) {
+    throw new Error(`machine-absolute asset path(s): ${[...new Set(machineAbs)].join(', ')}`);
+  }
+
   const libs = [...xml.matchAll(/<chunk name="Library"[\s\S]*?<item name="Id"[^>]*>([0-9a-f-]{36})<\/item>/gi)]
     .map((m) => m[1].toLowerCase());
   if (!libs.includes(MOTUS_LIB)) throw new Error('Motus GHA library entry missing');
