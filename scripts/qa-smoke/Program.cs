@@ -697,12 +697,14 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     Ok("Pick Place Touch contract: empty/blank Error; robotiq_2f85 ok");
 
     // Milestone 1.9: Family handoff warnings (Rhino-free).
+    // Motus.NET 2.0 RobotModel requires AxisCount == JointLimits.Count.
     static RobotPreset Preset(string family, int axes, string model = "test") => new()
     {
         Manufacturer = RobotManufacturer.UniversalRobots,
         ModelName = model,
         Family = family,
-        AxisCount = axes
+        AxisCount = axes,
+        JointLimits = Enumerable.Range(0, axes).Select(_ => new JointLimit(-Math.PI, Math.PI)).ToArray()
     };
     var stewartW = Motus.GH.FamilyHandoffWarnings.ForWaypoints(Preset(Units.StewartFamily, 6), 0, false, true, false, null);
     if (stewartW.Count != 1 || stewartW[0] != Motus.GH.FamilyHandoffWarnings.StewartWaypoints)
