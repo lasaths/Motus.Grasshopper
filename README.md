@@ -101,7 +101,7 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 | <img src="src/Motus.GH/Resources/icons/path-duotone.png" width="24" alt="" /> | **Waypoints** | `Q` joint trees for controllers (MoveJ); `P` planes; `Tm` times |
 | <img src="src/Motus.GH/Resources/icons/export-duotone.png" width="24" alt="" /> | **Export** | JSON / CSV PlanBundle |
 
-**Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ.
+**Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ. Aerial `Family=aerial` = HolonomicSE3 body poses — not MoveJ (Export bodyPose).
 
 </details>
 

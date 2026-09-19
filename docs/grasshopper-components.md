@@ -258,7 +258,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 | Component | Output |
 |-----------|--------|
 | Motus Waypoints | Controller-oriented trees: `Joints` (`Q`) as `{waypoint → q}`, TCP `Planes`, `Times` (default GH plane fans on `P` hidden; path viz on Motus Preview) |
-| Motus Export | `Json` and `Csv` strings; warns for `Family=stewart` meters and `Family=legged` non-UR MoveJ handoff |
+| Motus Export | `Json` and `Csv` strings; warns for `Family=stewart` meters, `Family=legged` non-UR MoveJ, and `Family=aerial` bodyPose ≠ MoveJ |
 | Motus Export URDF | `RobotDescription` (Assemble/Attach); Folder; optional Name — click **Write** → Motus.NET `UrdfWriter` |
 
 **Motus Waypoints** reshapes a planned trajectory for live controllers (e.g. UR Write). It does not connect to or command robots.
@@ -268,7 +268,7 @@ For URDF robots, preview shows mesh visuals (`.stl` / `.dae`) loaded from the UR
 - `Tm` — waypoint times (seconds); metadata for downstream graphs.
 - `D` (Decimate) — keep every Nth waypoint; **always keeps first and last**. Default `1` = all points.
 
-Dense Motus paths executed as discrete MoveJ segments are stop-and-go; use Decimate to thin. Prefer `Q` → joint moves for planned path fidelity. Use `P` → linear TCP moves only for Cartesian-intent (LIN) paths — FK planes from joint-space / RRT trajectories are not a safe MoveL path (TCP re-interpolation can diverge). Warns when `AxisCount ≠ 6`. Controller handoff notes: [AGENTS.md](../AGENTS.md).
+Dense Motus paths executed as discrete MoveJ segments are stop-and-go; use Decimate to thin. Prefer `Q` → joint moves for planned path fidelity. Use `P` → linear TCP moves only for Cartesian-intent (LIN) paths — FK planes from joint-space / RRT trajectories are not a safe MoveL path (TCP re-interpolation can diverge). Warns when `AxisCount ≠ 6`. **`Family=aerial`:** HolonomicSE3 body poses — do **not** wire `Q` to UR MoveJ; prefer Export bodyPose / Preview body scrub. Controller handoff notes: [AGENTS.md](../AGENTS.md).
 
 JSON export includes `jointNames` when the robot model provides them. Point count is the length of `Times`; duration is the last `Times` value (native Grasshopper list ops). `Retime` stays a boolean; optional `Retimer` selects `TotgLite` (default), `Totg`, `SegmentTrapezoid`, or `Bottleneck` when Motus.NET supports it. The algorithms and references are documented in [motus-net/METHODS.md](motus-net/METHODS.md) and [citation-audit.md](citation-audit.md).
 

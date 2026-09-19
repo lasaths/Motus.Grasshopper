@@ -790,6 +790,8 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
         var axisCount = t.Robot.Preset.AxisCount;
         var stewart = Units.IsStewart(t.Robot.Preset) || ctx.Stewart is not null;
         var legged = Units.IsLegged(t.Robot.Preset);
+        // Mirror Motus.NET Units.IsAerial / AerialFamily (string gate so NuGet 0.17.0 builds without tip API).
+        var aerial = string.Equals(t.Robot.Preset.Family, "aerial", StringComparison.OrdinalIgnoreCase);
         var treeDrivers = ctx.Tree?.DriverCount ?? 0;
         var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
         if (stewart)
@@ -814,6 +816,12 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
                         ? $"Family=legged tip-path: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
                         : $"Family=legged: Q values are joint angles in radians (not Stewart meters) — do not wire full-driver gait to UR MoveJ.");
             }
+        }
+        else if (aerial)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "Family=aerial: HolonomicSE3 body poses (m + RPY rad) — Q is not UR MoveJ radians. Prefer Motus Export bodyPose / Preview body scrub.");
         }
         else if (tipPathOnly && treeDrivers > axisCount)
         {
@@ -960,6 +968,8 @@ public sealed class MotusExportComponent : MotusComponentBase
         var axisCount = trajectory.Robot.Preset.AxisCount;
         var stewart = Units.IsStewart(trajectory.Robot.Preset) || ctx.Stewart is not null;
         var legged = Units.IsLegged(trajectory.Robot.Preset);
+        // Mirror Motus.NET Units.IsAerial / AerialFamily (string gate so NuGet 0.17.0 builds without tip API).
+        var aerial = string.Equals(trajectory.Robot.Preset.Family, "aerial", StringComparison.OrdinalIgnoreCase);
         var treeDrivers = ctx.Tree?.DriverCount ?? 0;
         var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
         if (stewart)
@@ -975,6 +985,12 @@ public sealed class MotusExportComponent : MotusComponentBase
                 tipPathOnly && treeDrivers > axisCount
                     ? $"Family=legged tip-path export: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
                     : "Family=legged export: Q values are joint angles in radians — not Stewart meters and not a UR MoveJ handoff for the whole mechanism.");
+        }
+        else if (aerial)
+        {
+            AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "Family=aerial export: bodyPose SE(3) (m + RPY rad) — not jointsRadians / UR MoveJ. Motus.NET JSON/CSV marks waypointsQ=not_ur_movej.");
         }
     }
 

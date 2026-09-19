@@ -72,7 +72,7 @@ Controllers like UR Write MoveJ need `{waypoint → q[n]}` from **Motus Waypoint
 | `Tm` | Times (metadata) |
 
 Primary (serial 6R): Plan → Waypoints `Q` → UR Write MoveJ → Run.  
-Do **not** MoveL FK planes from joint-space RRT. Gate handoff on **`Preset.Family`**, not bare `AxisCount == 6` — Stewart (`Family=stewart`) `Q` is **leg lengths in meters**, not UR MoveJ radians; legged (`Family=legged`) `Q` is joint **radians** (tip-path or full-driver gait — not UR MoveJ for the whole mechanism). No Play/Session on Motus side.
+Do **not** MoveL FK planes from joint-space RRT. Gate handoff on **`Preset.Family`**, not bare `AxisCount == 6` — Stewart (`Family=stewart`) `Q` is **leg lengths in meters**, not UR MoveJ radians; legged (`Family=legged`) `Q` is joint **radians** (tip-path or full-driver gait — not UR MoveJ for the whole mechanism); aerial (`Family=aerial`) is HolonomicSE3 body poses (m + RPY) — Waypoints/Export warn **not** UR MoveJ (prefer Export bodyPose). No Play/Session on Motus side.
 
 **Motus Export** JSON/CSV stays for scripts and PlanBundle-style handoff.
 
