@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Motus Pick Place: empty **Touch** is an Error and emits no `Seg` (fail-closed; avoids Program `Tr` null after Detach-at-place). qa-smoke covers `PickPlaceTouchContract`.
+
+
 ## 1.8.0 — Trust & polish · SemVer jump — 2026-09-19
 
 Aligned with **Motus.NET 1.8.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **1.8.0**). Public package SemVer jumps **0.17.0 → 1.8.0** (no empty 1.0–1.7 line); Yak still unpublished (Package Manager target **2.0.0**).

@@ -11,7 +11,7 @@ CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-mot
 - [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **1.8.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **1.8.0** on nuget.org.
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
-- [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` via qa-smoke Cap block.
+- [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` + Pick Place `PickPlaceTouchContract.TryRequireTouch` via qa-smoke.
 ## Rhino (manual — required before Rhino-touching release)
 
 - [ ] Serial UR10e quick plan: plane LIN, joint-linear, and joint goal + collision RRT still succeed.

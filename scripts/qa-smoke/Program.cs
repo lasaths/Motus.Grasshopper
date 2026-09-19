@@ -679,6 +679,22 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     if (!Motus.GH.ToolCapContract.TryValidateBinding(Motus.GH.ToolCapContract.Custom, hasBinding: true, hasMechanism: true, out _))
         Fail("Cap=Custom with Bd must succeed gate");
     Ok("Tool Cap contract: None|Robotiq|Custom; Cap=None rejects Bd; Cap=Custom requires Bd");
+
+    // Milestone 1.9: Pick Place Touch fail-closed (Rhino-free).
+    if (Motus.GH.PickPlaceTouchContract.TryRequireTouch(null, out _, out var emptyTouch)
+        || emptyTouch is null
+        || !emptyTouch.Contains("Touch empty", StringComparison.Ordinal))
+        Fail("Empty Touch must fail named");
+    if (Motus.GH.PickPlaceTouchContract.TryRequireTouch(["", "  "], out _, out var blankTouch)
+        || blankTouch is null
+        || !blankTouch.Contains("Touch empty", StringComparison.Ordinal))
+        Fail("Blank Touch names must fail named");
+    if (!Motus.GH.PickPlaceTouchContract.TryRequireTouch(["robotiq_2f85"], out var touchOk, out var touchErr)
+        || touchOk.Count != 1
+        || touchErr is not null
+        || !string.Equals(touchOk[0], "robotiq_2f85", StringComparison.Ordinal))
+        Fail("Touch=robotiq_2f85 must succeed");
+    Ok("Pick Place Touch contract: empty/blank Error; robotiq_2f85 ok");
 }
 
 // TL-009: Mechanism URDF XML round-trip (ToolGoo.Write/Read uses UrdfWriter.ToXml/TryParse)
