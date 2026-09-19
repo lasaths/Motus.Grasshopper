@@ -76,6 +76,35 @@ public static class ToolCapContract
     }
 
     /// <summary>
+    /// Cap + Bd gate used by Motus Tool (Rhino-free). Cap=None rejects Bd; Cap=Custom requires Bd when a mechanism is present.
+    /// </summary>
+    public static bool TryValidateBinding(
+        string capNorm,
+        bool hasBinding,
+        bool hasMechanism,
+        out string? error)
+    {
+        error = null;
+        if (capNorm == None)
+        {
+            if (hasBinding)
+            {
+                error = "Cap=None cannot use Binding (Bd) — set Cap to Robotiq2F85 or Custom.";
+                return false;
+            }
+            return true;
+        }
+
+        if (capNorm == Custom && hasMechanism && !hasBinding)
+        {
+            error = "Cap=Custom with Description requires Binding (Bd) naming the width driver joint.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Tool State Cap gate: wired Tool/Robot with null Cap → error; unwired → warning + Robotiq.
     /// </summary>
     public static bool TryResolveForToolState(
