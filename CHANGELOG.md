@@ -1,15 +1,23 @@
 # Changelog
 
-## 2.0.0 — Public product / Yak GA — 2026-09-19
+## Unreleased
 
-Aligned with **Motus.NET 2.0.0**. First public Yak Package Manager target for `motus` **2.0.0** (push requires Package Manager auth).
+## 2.0.0 — Public product · Yak GA — 2026-09-19
+
+Aligned with **Motus.NET 2.0.0** (NuGet publish pending — Prefer UseLocal until nuget.org has **2.0.0**). Motus.Core **1.9.0** is live (CI `build-*-nuget` overrides to **1.9.0**). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak`; production `yak push` needs human Package Manager auth (no agent interactive login).
+
+### Added
+
+- Docs: [supported-surface.md](docs/supported-surface.md) — Supported (Yak GA) / Advanced / Experimental / Out.
 
 ### Changed
 
-- Plugin / yak manifest / MotusNetVersion pin **→ 2.0.0**.
+- Plugin / yak manifest / `MotusNetVersion` pin aligned to **2.0.0**.
+- Docs (AGENTS, README, examples, regression matrix) describe **2.0.0** cut.
 
+### Motus.NET pin
 
-## Unreleased
+`MotusNetVersion` = **2.0.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). UseLocal until nuget.org lists Motus.Core **2.0.0**.
 
 ## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
 
