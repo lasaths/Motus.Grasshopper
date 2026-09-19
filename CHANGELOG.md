@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.0 — Public product / Yak GA — 2026-09-19
+
+Aligned with **Motus.NET 2.0.0**. First public Yak Package Manager target for `motus` **2.0.0** (push requires Package Manager auth).
+
+### Changed
+
+- Plugin / yak manifest / MotusNetVersion pin **→ 2.0.0**.
+
+
 ## Unreleased
 
 ## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
