@@ -38,7 +38,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **0.17.0** (unreleased) via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). Default = NuGet (VS-friendly) once published. For close-open-dev / local Motus.NET work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so restore does not depend on nuget.org having the pin yet. Use local references for 0.17.0 until publication.
+Pinned **0.17.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/0.17.0) via [`build/MotusNetPackages.props`](build/MotusNetPackages.props). **Default local Release** restores NuGet (VS-friendly). For close-open-dev / Motus.NET tip work, use sibling or in-repo `Motus.NET` via `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and builds with UseLocal so GH tracks Motus.NET master ahead of the published pin. Yak `motus` is **not** on Package Manager yet — install from source / `-Yak` pack only (first public Yak target is **2.0.0**).
 
 | Package | Role |
 |---------|------|
@@ -92,7 +92,7 @@ GitHub-hosted CI **compiles** qa-smoke but **skips the run** (no Rhino 8). Befor
 
 `./scripts/verify-qa.ps1 -Configuration Release -Install`
 
-Also check in Rhino:
+Also check in Rhino (full list: [docs/regression-matrix.md](docs/regression-matrix.md)):
 
 - Motus tab visible; Plan button vs Auto Plan; unreachable plane Status
 - Preview meshes + Scrub/Play handoff

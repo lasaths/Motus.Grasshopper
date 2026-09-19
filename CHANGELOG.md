@@ -2,7 +2,7 @@
 
 ## 0.17.0 — Pick/place transfers + attachment timelines — 2026-09-19
 
-Aligned with **Motus.NET 0.17.0** (NuGet not published yet — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until then).
+Aligned with **Motus.NET 0.17.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/0.17.0). Default Release restores NuGet; `-UseLocal` remains for Motus.NET tip / CI.
 
 ### Added
 
@@ -18,7 +18,7 @@ Aligned with **Motus.NET 0.17.0** (NuGet not published yet — build with `-UseL
 
 ### Motus.NET pin
 
-`MotusNetVersion` = **0.17.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). CI and local builds use UseLocal until nuget.org has 0.17.0.
+`MotusNetVersion` = **0.17.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Local default = NuGet; CI continues UseLocal against sibling Motus.NET. Yak `motus` still unpublished (Package Manager target is **2.0.0**).
 
 ## 0.16.0 — Tower destack / pick-place cycles
 

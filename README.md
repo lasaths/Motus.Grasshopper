@@ -5,7 +5,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths); pin **0.17.0**, UseLocal until published) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **0.17.0**; optional `-UseLocal` for Motus.NET tip) |
 
 **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
@@ -136,17 +136,18 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-- Motus.NET **0.17.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Until that version is on nuget.org, build with `./build.ps1 -UseLocal` (sibling project refs; CI does the same)
+- Motus.NET **0.17.0** on nuget.org ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Default `./build.ps1` restores that pin. Use `./build.ps1 -UseLocal` (sibling project refs) for Motus.NET tip / CI close-open-dev.
+- **Yak unpublished** — no Rhino Package Manager entry for `motus` yet; install from source (first public Yak target is Motus **2.0.0**)
 
 ## Install from source
 
 **Windows**
 
 ```powershell
-./build.ps1                      # Release (NuGet Motus.NET 0.17.0 when published)
-./build.ps1 -UseLocal            # sibling Motus.NET project refs (required until NuGet publish)
+./build.ps1                      # Release (NuGet Motus.NET 0.17.0)
+./build.ps1 -UseLocal            # sibling Motus.NET project refs (tip / CI)
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
-./build.ps1 -Yak                 # dist/motus-*-rh8_*-any.yak
+./build.ps1 -Yak                 # pack only → dist/motus-*-rh8_*-any.yak (not published)
 ./build.ps1 -Install             # %APPDATA%\Grasshopper\Libraries\Motus
 ```
 
@@ -163,7 +164,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 |----------|---------|
 | `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
 | `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
-| `MotusNetVersion` | Override NuGet pin (default `0.17.0`; UseLocal until published) |
+| `MotusNetVersion` | Override NuGet pin (default `0.17.0`) |
 
 ## Common workflows
 
@@ -211,6 +212,7 @@ Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ
 
 | Doc | Contents |
 |-----|----------|
+| [docs/regression-matrix.md](docs/regression-matrix.md) | Milestone 1.8 host-readiness checklist (NuGet + Rhino + experimental) |
 | [docs/grasshopper-components.md](docs/grasshopper-components.md) | Every component, pins, planner rules |
 | [docs/motus-net/METHODS.md](docs/motus-net/METHODS.md) | Full methods table (API + units + DOI) |
 | [docs/citation-audit.md](docs/citation-audit.md) | Citation coverage audit |
