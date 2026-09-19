@@ -141,15 +141,14 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         da.GetData(5, ref closeW);
         da.GetData(6, ref step);
         var sampling = false;
-        var touchBodies = new List<string>();
+        var touchRaw = new List<string>();
         da.GetData(7, ref sampling);
-        da.GetDataList(8, touchBodies);
-        touchBodies = touchBodies.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
-        if (touchBodies.Count == 0)
+        da.GetDataList(8, touchRaw);
+        // Detach-at-place restores the workpiece into the gripper; without Touch, Program Tr is null — fail closed.
+        if (!PickPlaceTouchContract.TryRequireTouch(touchRaw, out var touchBodies, out var touchErr))
         {
-            // Detach-at-place restores the workpiece into the gripper; without Touch, Program Tr is null.
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                "Touch empty — Detach-at-place needs gripper collision body names (e.g. robotiq_2f85) or plan fails.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, touchErr!);
+            return;
         }
 
         if (graspPlanes.Count != placePlanes.Count || graspPlanes.Count != rawObjects.Count)
@@ -194,7 +193,7 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         try
         {
             segments = PickPlaceCycle.ExpandMany(grasps, places, objects, approach, open, close, step,
-                options: new PickPlaceOptions { UseSamplingTransfers = sampling, TouchBodies = touchBodies });
+                options: new PickPlaceOptions { UseSamplingTransfers = sampling, TouchBodies = touchBodies.ToList() });
         }
         catch (Exception ex)
         {
