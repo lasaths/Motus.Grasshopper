@@ -39,7 +39,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **2.0.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) (NuGet publish pending). Until Motus.Core **2.0.0** is on nuget.org, build with `-p:UseMotusNetProjectReference=true` or `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)); CI checkouts `lasaths/Motus.NET` as a sibling and Prefer UseLocal. Motus.Core **1.8.0** is live — CI NuGet jobs override to that pin until **2.0.0** ships. Yak `motus` is **not** on Package Manager yet — install from source / `-Yak` pack only (first public Yak target is **2.0.0**).
+Pinned **2.0.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) — Motus.Core **2.0.0** is live on nuget.org. Default build restores NuGet; optional `-p:UseMotusNetProjectReference=true` / `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)) for sibling tip. CI NuGet jobs use the props pin; Prefer UseLocal jobs still checkout `lasaths/Motus.NET`. Yak `motus` is **not** on Package Manager yet — install from source / `-Yak` pack only (first public Yak target is **2.0.0**).
 
 | Package | Role |
 |---------|------|

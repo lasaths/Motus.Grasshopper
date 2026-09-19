@@ -66,7 +66,8 @@ if (onNuget) {
   for (const rel of docFiles) {
     const text = read(rel);
     // Historical older pins may say "until NuGet publishes 0.15.0" — only flag current-cut section.
-    const slice = rel === "CHANGELOG.md" ? text.split("\n## 1.8.0")[0] : text;
+    // Current cut only — older ## sections may still say "publish pending" historically.
+    const slice = rel === "CHANGELOG.md" ? text.split("\n## 1.9.0")[0] : text;
     for (const { re, label } of stalePatterns) {
       if (re.test(slice)) fail(`${rel} still claims "${label}" after ${EXPECTED} is on nuget.org`);
     }
