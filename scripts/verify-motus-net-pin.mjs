@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Non-Rhino host-readiness check for Milestone 1.9:
+ * Non-Rhino host-readiness check for Milestone 2.0:
  * - MotusNetPackages.props pin is the expected Motus.NET NuGet version
  * - if that version exists on nuget.org: docs must not claim unreleased / UseLocal-only
  * - if not yet on nuget.org: docs must acknowledge UseLocal until publish (pre-cut gate)
@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = "1.9.0";
+const EXPECTED = "2.0.0";
 
 function fail(msg) {
   console.error(`verify-motus-net-pin: ${msg}`);
@@ -31,7 +31,7 @@ if (m[1].trim() !== EXPECTED) {
 }
 
 const stalePatterns = [
-  { re: /1\.9\.0\s*\(unreleased\)/i, label: "1.9.0 (unreleased)" },
+  { re: /2\.0\.0\s*\(unreleased\)/i, label: "2.0.0 (unreleased)" },
   { re: /NuGet not published yet/i, label: "NuGet not published yet" },
   { re: /UseLocal until (that )?NuGet (is )?publish/i, label: "UseLocal until NuGet publish" },
   { re: /until that version is on nuget\.org/i, label: "until that version is on nuget.org" },
@@ -66,7 +66,7 @@ if (onNuget) {
   for (const rel of docFiles) {
     const text = read(rel);
     // Historical older pins may say "until NuGet publishes 0.15.0" — only flag current-cut section.
-    const slice = rel === "CHANGELOG.md" ? text.split("\n## 1.8.0")[0] : text;
+    const slice = rel === "CHANGELOG.md" ? text.split("\n## 1.9.0")[0] : text;
     for (const { re, label } of stalePatterns) {
       if (re.test(slice)) fail(`${rel} still claims "${label}" after ${EXPECTED} is on nuget.org`);
     }

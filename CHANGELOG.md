@@ -1,10 +1,22 @@
-# Changelog
-
 ## Unreleased
+
+## 2.0.0 — Public product · Yak GA identity — 2026-09-19
+
+Aligned with **Motus.NET 2.0.0** (NuGet publish pending — Prefer `-UseLocal` until nuget.org has **2.0.0**). CI NuGet jobs override to Motus.NET **1.8.0** (last confirmed live index) while **1.9.0** may still be indexing. **Yak Package Manager push is not part of this SemVer cut** — pack path ready; production push needs human auth after NuGet **2.0.0** is live.
+
+### Changed
+
+- Plugin / yak manifest / `MotusNetVersion` pin aligned to **2.0.0**.
+- Docs (AGENTS, README, examples, regression matrix, supported-surface) describe **2.0.0** cut + UseLocal until Motus.NET **2.0.0** NuGet publish.
+- `verify-motus-net-pin.mjs` EXPECTED **2.0.0**.
+
+### Motus.NET pin
+
+`MotusNetVersion` = **2.0.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Prefer UseLocal until nuget.org lists Motus.Core **2.0.0**.
 
 ## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
 
-Aligned with **Motus.NET 1.9.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **1.9.0**). Motus.Core **1.8.0** remains the last published NuGet (CI `build-*-nuget` overrides to **1.8.0**). Yak still unpublished (Package Manager target **2.0.0**).
+Aligned with **Motus.NET 1.9.0** ([GitHub v1.9.0](https://github.com/lasaths/Motus.NET/releases/tag/v1.9.0); nuget.org index may lag). Yak still unpublished until production **2.0.0** push.
 
 ### Fixed
 
