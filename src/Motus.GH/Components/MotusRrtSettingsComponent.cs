@@ -13,9 +13,9 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
 
     public MotusRrtSettingsComponent()
         : base(
-            "Motus RRT Settings",
-            "RrtSet",
-            "Tune sampling planners for joint goals with collision; wire Settings into Motus Plan",
+            "Motus Sampling Settings",
+            "Sampling",
+            "Tune sampling planners for collision-aware paths; wire Settings into Motus Plan or Motus Program",
             "Plan",
             "faders") { }
 

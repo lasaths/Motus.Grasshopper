@@ -31,6 +31,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public bool CollisionInputWired { get; private set; }
     public string Fingerprint { get; private set; } = string.Empty;
     public bool IsAutoPlan { get; private set; }
+    public bool BodyPathMode { get; private set; }
 
     public SerialJointChain? Chain { get; private set; }
     public KinematicTree? Tree { get; private set; }
@@ -81,6 +82,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         CollisionInputWired = snap.CollisionInputWired;
         Fingerprint = snap.Fingerprint;
         IsAutoPlan = snap.IsAutoPlan;
+        BodyPathMode = snap.BodyPathMode;
         Chain = snap.Chain;
         Tree = snap.Tree;
         Stewart = snap.Stewart;
@@ -158,7 +160,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         try
         {
             Report(0);
-            var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings);
+            var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings, BodyPathMode);
             Result = PlanExecutor.Execute(request, CancellationToken, Report, Timings,
                 stage => _owner.ActivePlanningStage = stage);
             LeggedGaitSynthesized = Result.LeggedGaitSynthesized;

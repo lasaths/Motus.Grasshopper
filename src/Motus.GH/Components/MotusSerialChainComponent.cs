@@ -81,7 +81,7 @@ public sealed class MotusSerialChainComponent : RobotSourceComponentBase
             {
                 var j = tree.Joints[tree.DriverJointIndices[i]];
                 var vel = j.Velocity ?? Math.PI;
-                limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+                limits.Add(new JointLimit(j.Lower, j.Upper, j.Type == KinematicJointType.Prismatic ? JointCoordinateUnit.Meters : JointCoordinateUnit.Radians, vel, vel * 2));
             }
 
             var toolFrame = ToolFrame.Identity;
@@ -102,7 +102,7 @@ public sealed class MotusSerialChainComponent : RobotSourceComponentBase
                 SourceNote = "Motus Serial Chain",
             };
 
-            var model = new RobotModel(preset, BuildCapsuleCollision(tip.Chain, lengths, rail));
+            var model = new RobotModel(preset, BuildCapsuleCollision(tip.Chain, lengths, rail), tip.JointNames);
             var goo = new RobotModelGoo(model)
             {
                 Chain = tip.Chain,

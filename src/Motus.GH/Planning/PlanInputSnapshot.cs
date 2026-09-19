@@ -25,6 +25,7 @@ internal sealed class PlanInputSnapshot
     public string? CollisionWarning { get; init; }
     public string Fingerprint { get; init; } = string.Empty;
     public bool IsAutoPlan { get; init; }
+    public bool BodyPathMode { get; init; }
 
     public SerialJointChain? Chain { get; init; }
     public KinematicTree? Tree { get; init; }
@@ -75,6 +76,11 @@ internal sealed class PlanInputSnapshot
             return false;
         }
 
+        if (owner.BodyPathMode && (context.Mechanism is null || goals.Count < 2 || goals.Any(g => g.plane is null)))
+        {
+            error = "Body-path gait mode requires a legged Mechanism and at least two plane origins. Use TCP/joint mode for tip goals.";
+            return false;
+        }
         for (var gi = 0; gi < goals.Count; gi++)
         {
             if (goals[gi].joints is not { } goalJs)
@@ -136,7 +142,8 @@ internal sealed class PlanInputSnapshot
             RrtSettings = rrtSettings,
             CollisionInputWired = collisionParse.Wired,
             CollisionWarning = collisionParse.Warning,
-            Fingerprint = fingerprint,
+            Fingerprint = fingerprint + ":bodyPath=" + owner.BodyPathMode,
+            BodyPathMode = owner.BodyPathMode,
             IsAutoPlan = owner.AutoPlanEnabled,
             Chain = robotGoo.Chain,
             Tree = robotGoo.Tree,

@@ -55,7 +55,8 @@ public sealed class MotusCollisionBoxesComponent : CollisionPreviewComponentBase
         for (var i = 0; i < planes.Count; i++)
         {
             var pl = planes[i];
-            if (!pl.IsValid) continue;
+            if (!pl.IsValid)
+            { ReleasePreviewResources(); AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Invalid box plane at index {i}; list order must be preserved."); return; }
             var name = $"{prefix}{i:D2}";
             var obj = CollisionObject.Box(name, FrameConversion.FromPlanePlate(pl), hx, hy, hz);
             objects.Add(new CollisionObjectGoo(obj));
@@ -159,7 +160,8 @@ public sealed class MotusPickPlaceComponent : MotusComponentBase
         }
 
         if (graspPlanes.Count == 0) return;
-        if (approach < 0 || step <= 0 || openW < 0 || closeW < 0)
+        if (!double.IsFinite(approach) || !double.IsFinite(step) || !double.IsFinite(openW) || !double.IsFinite(closeW)
+            || approach < 0 || step <= 0 || openW < 0 || closeW < 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Approach/Step/Open/Close must be non-negative (Step > 0).");
             return;

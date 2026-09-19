@@ -75,6 +75,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
         p.AddPlaneParameter("PathPlanes", "Pp", "Body planes sampled along path", GH_ParamAccess.list);
         p.AddMeshParameter("Meshes", "M", "Preview meshes", GH_ParamAccess.list);
         p.AddCurveParameter("Support", "Sp", "Support polygon (foot tips)", GH_ParamAccess.item);
+        p.AddTextParameter("Validity", "V", "Gait validation status; invalid gait emits no Trajectory", GH_ParamAccess.item);
     }
 
     private void ClearPreviewState()
@@ -289,24 +290,10 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
                 var validation = LeggedGait.ValidateForPlan(gait!.GaitResult);
                 if (!validation.Success)
                 {
-                    // Preview Walk: SSM/constraint messages stay named, but do not kill Tr —
-                    // outdoor hills + odd N often dip McGhee–Frank margin slightly negative.
-                    var ssmOnly = validation.Errors.Count > 0
-                        && validation.Errors.All(e =>
-                            e.Contains("SSM", StringComparison.OrdinalIgnoreCase));
-                    if (!ssmOnly)
-                    {
-                        ClearPreviewState();
-                        AddRuntimeMessage(
-                            GH_RuntimeMessageLevel.Error,
-                            validation.Errors.Count > 0
-                                ? string.Join("; ", validation.Errors)
-                                : "LeggedGait.ValidateForPlan failed.");
-                        return;
-                    }
-
-                    foreach (var e in validation.Errors)
-                        AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, StripMethodCite(e));
+                    ClearPreviewState();
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, string.Join("; ", validation.Errors));
+                    da.SetData(7, "Invalid: " + string.Join("; ", validation.Errors));
+                    return;
                 }
                 foreach (var warning in validation.Warnings)
                 {
@@ -365,6 +352,7 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             _previewContactCircles = preview.ContactCircles.ToList();
             ExpirePreview(true);
 
+            da.SetData(7, hasPath ? "Valid gait (SSM checked)." : "Stance only — no trajectory.");
             da.SetData(0, goo);
             da.SetData(1, new JointStateGoo(new JointState(q)));
             da.SetData(2, trajGoo);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Motus.Presets;
 using Motus.Geometry;
 using GH_IO.Serialization;
 
@@ -47,6 +48,7 @@ public sealed class RobotDescriptionGoo : MotusGooBase<RobotDescription>
     public override bool Write(GH_IWriter writer)
     {
         if (Value is null) return true;
+        writer.SetString("DescriptionUrdf", UrdfWriter.ToXml(Value, inlineMeshes: true));
         writer.SetString("Name", Value.Name);
         writer.SetString("Fingerprint", Value.Fingerprint.ToString(CultureInfo.InvariantCulture));
         return true;
@@ -54,6 +56,13 @@ public sealed class RobotDescriptionGoo : MotusGooBase<RobotDescription>
 
     public override bool Read(GH_IReader reader)
     {
+        Value = null!;
+        if (reader.ItemExists("DescriptionUrdf"))
+        {
+            if (!UrdfWriter.TryParse(reader.GetString("DescriptionUrdf"), out var description, out _)
+                || description is null) return false;
+            Value = description;
+        }
         if (reader.ItemExists("Name"))
             PersistedName = reader.GetString("Name");
         if (reader.ItemExists("Fingerprint"))

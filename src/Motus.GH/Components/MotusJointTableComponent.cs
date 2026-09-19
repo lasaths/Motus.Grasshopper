@@ -121,7 +121,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
 
             var tip = tree.ExtractSerialTip(root, tipLink);
             IReadOnlyList<JointLimit> limits;
-            IReadOnlyList<string>? jointNames = null;
+            IReadOnlyList<string>? jointNames = tip.JointNames;
             int axisCount;
             string sourceNote;
 
@@ -258,7 +258,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             if (!byName.TryGetValue(name, out var j))
                 throw new InvalidOperationException($"Tip joint '{name}' missing from tree.");
             var vel = j.Velocity ?? Math.PI;
-            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+            limits.Add(new JointLimit(j.Lower, j.Upper, j.Type == KinematicJointType.Prismatic ? JointCoordinateUnit.Meters : JointCoordinateUnit.Radians, vel, vel * 2));
         }
         return limits;
     }

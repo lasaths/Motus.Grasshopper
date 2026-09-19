@@ -46,7 +46,7 @@ public readonly record struct RrtPlanSettings(
         var timeLimit = settings.MaxPlanTimeSeconds;
         if (da.GetData(timeLimitIndex, ref timeLimit))
         {
-            if (timeLimit < 0)
+            if (!double.IsFinite(timeLimit) || timeLimit < 0)
             {
                 error = "RrtTimeLimit must be zero (no limit) or positive seconds.";
                 return false;
@@ -77,7 +77,7 @@ public readonly record struct RrtPlanSettings(
         var goalBias = settings.GoalBias;
         if (da.GetData(goalBiasIndex, ref goalBias))
         {
-            if (goalBias is < 0 or > 1)
+            if (!double.IsFinite(goalBias) || goalBias is < 0 or > 1)
             {
                 error = "RrtGoalBias must be between 0 and 1.";
                 return false;
@@ -89,7 +89,7 @@ public readonly record struct RrtPlanSettings(
         var stepRadians = settings.StepRadians;
         if (da.GetData(stepIndex, ref stepRadians))
         {
-            if (stepRadians <= 0)
+            if (!double.IsFinite(stepRadians) || stepRadians <= 0)
             {
                 error = "RrtStep must be positive (radians for serial/legged; meters for Family=stewart).";
                 return false;
