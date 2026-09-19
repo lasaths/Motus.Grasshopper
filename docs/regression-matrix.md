@@ -9,6 +9,7 @@ Host-readiness checklist for Motus.Grasshopper against Motus.NET **1.8.0** (UseL
 CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
 - [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **1.8.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **1.8.0** on nuget.org.
+- [ ] `node scripts/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree; icon + dual-TFM pack path present; first public Yak remains **2.0.0** (pre-GA pack OK, production push blocked).
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
 - [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` via qa-smoke Cap block.
