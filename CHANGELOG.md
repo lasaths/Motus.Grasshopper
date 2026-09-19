@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
+
+Aligned with **Motus.NET 1.9.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **1.9.0**). Motus.Core **1.8.0** remains the last published NuGet (CI `build-*-nuget` overrides to **1.8.0**). Yak still unpublished (Package Manager target **2.0.0**).
+
 ### Fixed
 
 - Motus Pick Place: empty **Touch** is an Error and emits no `Seg` (fail-closed; avoids Program `Tr` null after Detach-at-place). qa-smoke covers `PickPlaceTouchContract`.
@@ -9,6 +13,14 @@
 - Motus Robot: experimental Remark for free-flyer / H2 / Go2 (and `Family=urdf` AxisCount=0) URDF loads.
 - Motus Waypoints / Export: shared `FamilyHandoffWarnings` (incl. `Family=urdf` AxisCount=0 ≠ MoveJ).
 
+### Changed
+
+- Plugin / yak manifest / `MotusNetVersion` pin aligned to **1.9.0**.
+- Docs (AGENTS, README, examples, regression matrix) describe **1.9.0** cut + UseLocal until Motus.NET **1.9.0** NuGet publish.
+
+### Motus.NET pin
+
+`MotusNetVersion` = **1.9.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). UseLocal until nuget.org lists Motus.Core **1.9.0**.
 
 ## 1.8.0 — Trust & polish · SemVer jump — 2026-09-19
 
@@ -16,18 +28,18 @@ Aligned with **Motus.NET 1.8.0** on [nuget.org](https://www.nuget.org/packages/M
 
 ### Added
 
-- CI `build-*-nuget` jobs alongside Prefer UseLocal (host-readiness for NuGet-default restore once **1.8.0** is published).
+- CI `build-*-nuget` jobs alongside Prefer UseLocal (host-readiness for NuGet-default restore).
 - Cap `ToolCapContract.TryValidateBinding` extraction + qa-smoke Cap block; regression matrix points at Motus.NET `RegressionMatrixLogicTests`.
 - `scripts/verify-motus-net-pin.mjs` — pin/docs/nuget.org honesty check.
 
 ### Changed
 
 - Plugin / yak manifest / `MotusNetVersion` pin aligned to **1.8.0**.
-- Docs (AGENTS, README, examples, regression matrix) describe **1.8.0** with NuGet default.
+- Docs (AGENTS, README, examples, regression matrix) describe **1.8.0** with NuGet default after publish.
 
 ### Motus.NET pin
 
-`MotusNetVersion` = **1.8.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Local default = NuGet; CI continues UseLocal against sibling Motus.NET. Yak `motus` still unpublished (Package Manager target is **2.0.0**).
+`MotusNetVersion` = **1.8.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Local default = NuGet after publish; Yak `motus` still unpublished (Package Manager target is **2.0.0**).
 
 ## 0.17.0 — Pick/place transfers + attachment timelines — 2026-09-19
 
