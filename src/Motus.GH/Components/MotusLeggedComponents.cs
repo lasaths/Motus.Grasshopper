@@ -115,7 +115,7 @@ public sealed class MotusBodyComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("BodyZ", "Bz", "Body / hip height clearance (m)", GH_ParamAccess.item, 0.07);
         p[p.ParamCount - 1].Optional = true;
-        p.AddPlaneParameter("Planes", "Pl", "Optional custom hip planes (origins = hip mounts, m)", GH_ParamAccess.list);
+        p.AddPlaneParameter("Hip Origins", "Pl", "Legacy plane input: origins only in body coordinates (m); orientation is not used", GH_ParamAccess.list);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -145,7 +145,11 @@ public sealed class MotusBodyComponent : MotusComponentBase
             int? metaN = null;
             double? metaR = null;
 
-            var custom = planes.Where(pl => pl.IsValid).ToList();
+            if (planes.Any(pl => !pl.IsValid)) throw new ArgumentException("Hip origins contain an invalid plane.");
+            if (planes.Count == 1) throw new ArgumentException("Supply at least two hip origins, or leave empty for radial hips.");
+            if (planes.Any(pl => pl.XAxis != Vector3d.XAxis || pl.YAxis != Vector3d.YAxis))
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Hip Origins uses positions only; plane rotations are ignored.");
+            var custom = planes;
             if (custom.Count >= 2)
             {
                 hips = custom.Select(pl => new Frame(pl.OriginX, pl.OriginY, pl.OriginZ)).ToList();

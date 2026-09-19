@@ -641,7 +641,8 @@ internal static class GhExtract
     public static List<string> CollectPlaneGoalReachErrors(
         RobotContext ctx,
         JointState start,
-        IReadOnlyList<(JointState? joints, Plane? plane)> goals)
+        IReadOnlyList<(JointState? joints, Plane? plane)> goals,
+        bool bodyPathMode = false)
     {
         var errors = new List<string>();
         var session = ctx.EffectiveModel;
@@ -669,7 +670,7 @@ internal static class GhExtract
 
         // Family=legged body-path (≥2 planes + Mechanism): origins only — skip tip TCP IK.
         var isLegged = Units.IsLegged(session.Preset) || Units.IsLegged(ctx.Model.Preset) || ctx.Mechanism is not null;
-        if (isLegged)
+        if (isLegged && bodyPathMode)
         {
             var planeCount = 0;
             for (var i = 0; i < goals.Count; i++)

@@ -52,9 +52,10 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
         if (existing is not null)
             joints.AddRange(existing.JointNames);
 
-        da.GetData(1, ref name);
-        da.GetData(2, ref baseLink);
-        da.GetData(3, ref tipLink);
+        // Persistent defaults are not explicit overrides of an incoming SRDF group.
+        if (existing is null || Params.Input[1].SourceCount > 0) da.GetData(1, ref name);
+        if (existing is null || Params.Input[2].SourceCount > 0) da.GetData(2, ref baseLink);
+        if (existing is null || Params.Input[3].SourceCount > 0) da.GetData(3, ref tipLink);
         var userJoints = new List<string>();
         if (da.GetDataList(4, userJoints) && userJoints.Count > 0)
             joints = userJoints.Where(j => !string.IsNullOrWhiteSpace(j)).ToList();

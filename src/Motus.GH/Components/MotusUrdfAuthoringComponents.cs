@@ -32,8 +32,11 @@ public sealed class MotusUrdfLinkComponent : MotusComponentBase
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddTextParameter("Name", "N", "Link name (unique within the description)", GH_ParamAccess.item);
-        p.AddGeometryParameter("Visual", "V", "Visual geometry in link frame (meters): Box, Mesh, Brep, Surface, Extrusion, SubD, …", GH_ParamAccess.list);
-        p.AddGeometryParameter("Collision", "C", "Optional collision geometry; defaults to Visual when omitted", GH_ParamAccess.list);
+        p.AddGeometryParameter("Visual", "V", "Optional visual geometry in link frame (meters); empty creates a frame-only link", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddGeometryParameter("Collision", "C", "Optional collision geometry; policy controls whether omitted geometry uses Visual", GH_ParamAccess.list);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Collision Policy", "CP", "Visual (default), Explicit (only C), or None", GH_ParamAccess.item, "Visual");
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -50,12 +53,13 @@ public sealed class MotusUrdfLinkComponent : MotusComponentBase
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Name is required.");
             return;
         }
-        if (!da.GetDataList(1, visuals) || visuals.Count == 0)
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "At least one Visual geometry is required.");
-            return;
-        }
+        da.GetDataList(1, visuals);
         da.GetDataList(2, collisions);
+        var policy = "Visual";
+        da.GetData(3, ref policy);
+        policy = policy.Trim().ToLowerInvariant();
+        if (policy is not ("visual" or "explicit" or "none"))
+        { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Collision Policy must be Visual, Explicit or None."); return; }
 
         try
         {
@@ -66,10 +70,10 @@ public sealed class MotusUrdfLinkComponent : MotusComponentBase
             }
 
             List<UrdfGeometry> collisionGeoms;
-            if (collisions.Count == 0)
-            {
+            if (policy == "none" || (policy == "explicit" && collisions.Count == 0))
+                collisionGeoms = [];
+            else if (collisions.Count == 0)
                 collisionGeoms = visualGeoms;
-            }
             else if (!UrdfGeometryFromGoo.TryConvertAll(collisions, out collisionGeoms, out var collisionError))
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collisionError!);
@@ -172,6 +176,8 @@ public sealed class MotusUrdfJointComponent : MotusComponentBase
                 direction.X, direction.Y, direction.Z,
                 lower, upper,
                 mimicJoint, mimicMult, mimicOffset);
+            if (joint.Kind is UrdfJointKind.Revolute or UrdfJointKind.Prismatic && lower == upper)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Lower equals Upper: this joint is locked. Supply a non-zero travel range.");
             da.SetData(0, new UrdfJointGoo(joint));
         }
         catch (Exception ex)
@@ -339,7 +345,7 @@ public sealed class MotusUrdfAttachComponent : MotusComponentBase
         p.AddParameter(new Param_MotusRobotDescription(), "Parent", "Pd", "Parent robot description", GH_ParamAccess.item);
         p.AddParameter(new Param_MotusRobotDescription(), "Child", "Cd", "Child robot description to graft on", GH_ParamAccess.item);
         p.AddTextParameter("ParentLink", "Pl", "Parent link to attach the child's root link to", GH_ParamAccess.item);
-        p.AddPlaneParameter("Plane", "Pln", "Attach origin in the parent link's frame (identity rotation)", GH_ParamAccess.item, Plane.WorldXY);
+        p.AddPlaneParameter("Translation Plane", "Pln", "Translation-only mount in parent link coordinates; rotated planes are rejected", GH_ParamAccess.item, Plane.WorldXY);
         p[p.ParamCount - 1].Optional = true;
         p.AddTextParameter("JointName", "Jn", "Optional name for the new fixed joint", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
@@ -373,7 +379,7 @@ public sealed class MotusUrdfAttachComponent : MotusComponentBase
         }
         da.GetData(3, ref pl);
         da.GetData(4, ref jointName);
-        if (!pl.IsValid) pl = Plane.WorldXY;
+        if (!pl.IsValid) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Mount plane must be valid."); return; }
 
         // RobotDescription.Attach rejects non-identity rotation — fail here instead of stripping it.
         if (!IsIdentityOrientation(pl))

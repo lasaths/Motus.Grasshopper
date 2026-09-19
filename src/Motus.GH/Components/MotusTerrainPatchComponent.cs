@@ -27,7 +27,7 @@ public sealed class MotusTerrainPatchComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddNumberParameter("SizeY", "Sy", "Full depth Y (m)", GH_ParamAccess.item, 1.0);
         p[p.ParamCount - 1].Optional = true;
-        p.AddNumberParameter("Amp", "A", "Hill amplitude (m) — keep below Walk Lift", GH_ParamAccess.item, 0.04);
+        p.AddNumberParameter("Amp", "A", "Hill amplitude (m) — keep below Walk Lift", GH_ParamAccess.item, 0.01);
         p[p.ParamCount - 1].Optional = true;
     }
 
@@ -41,7 +41,7 @@ public sealed class MotusTerrainPatchComponent : MotusComponentBase
         var origin = new Point3d(0.22, 0, 0);
         var sx = 1.2;
         var sy = 1.0;
-        var amp = 0.04;
+        var amp = 0.01;
         da.GetData(0, ref origin);
         da.GetData(1, ref sx);
         da.GetData(2, ref sy);

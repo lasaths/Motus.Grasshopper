@@ -33,7 +33,7 @@ public static class PlanDofComposer
         {
             names.Add(j.Name);
             var vel = j.Velocity ?? Math.PI;
-            limits.Add(new JointLimit(j.Lower, j.Upper, vel, vel * 2));
+            limits.Add(new JointLimit(j.Lower, j.Upper, j.Type == KinematicJointType.Prismatic ? JointCoordinateUnit.Meters : JointCoordinateUnit.Radians, vel, vel * 2));
         }
 
         foreach (var tipName in tipJointNames)

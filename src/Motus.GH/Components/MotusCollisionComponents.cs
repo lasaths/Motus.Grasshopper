@@ -164,7 +164,7 @@ public sealed class MotusCollisionPlaneComponent : CollisionPreviewComponentBase
 
 public sealed class MotusCollisionBoxComponent : CollisionPreviewComponentBase
 {
-    public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Axis-aligned box obstacle (half extents, m)", "Collision", "bounding-box") { }
+    public MotusCollisionBoxComponent() : base("Motus Collision Box", "ColBox", "Oriented box obstacle (half extents, m)", "Collision", "bounding-box") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [

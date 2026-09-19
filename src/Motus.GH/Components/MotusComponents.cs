@@ -602,7 +602,9 @@ public sealed class MotusJointStateComponent : MotusComponentBase
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
-        p.AddAngleParameter("Joints", "J", "Joint angles (right-click J input to toggle °)", GH_ParamAccess.list);
+        p.AddAngleParameter("Joints", "J", "Joint coordinates in robot order. Degrees converts angular axes only when Robot is supplied; linear axes stay meters.", GH_ParamAccess.list);
+        p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Optional robot for joint count, limits and per-axis units; without Robot all values are angles", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p) =>
@@ -619,10 +621,17 @@ public sealed class MotusJointStateComponent : MotusComponentBase
         // Joints is list access — never call GetData (throws when the list is empty).
         if (!da.GetDataList(0, vals) || vals.Count == 0) return;
 
-        var arr = _useDegrees
-            ? vals.Select(RhinoMath.ToRadians).ToArray()
-            : vals.ToArray();
-        da.SetData(0, new JointStateGoo(new JointState(arr)));
+        RobotModelGoo? robot = null;
+        da.GetData(1, ref robot);
+        try
+        {
+            var state = JointCoordinateInput.Create(vals, _useDegrees, robot?.Value);
+            da.SetData(0, new JointStateGoo(state));
+        }
+        catch (ArgumentException ex)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+        }
     }
 
     public override Guid ComponentGuid => new Guid("380f17c2-5d5f-4f77-a251-8309f25ef61e");

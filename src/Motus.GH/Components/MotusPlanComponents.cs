@@ -34,7 +34,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _planningPending;
     private string? _activeWorkerFingerprint;
 
-    private bool _showCollision;
+    private bool _showCollision = true;
+    internal bool BodyPathMode { get; private set; }
     private bool _showGroup;
     private bool _showAttach;
     private bool _showRrtSettings;
@@ -99,6 +100,14 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
     {
+        Menu_AppendItem(menu, "Body-path gait mode (legged robots)", (_, _) =>
+        {
+            RecordUndoEvent("Planning mode");
+            BodyPathMode = !BodyPathMode;
+            RequestCancellation();
+            InvalidateCachedPlan();
+            ExpireSolution(true);
+        }, true, BodyPathMode);
         Menu_AppendItem(menu, "Auto Plan", AutoPlanMenuClick, true, _autoPlan);
         if (IsOperationInProgress)
             Menu_AppendItem(menu, "Cancel planning", (_, _) => RequestCancellation());
@@ -113,6 +122,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     public override bool Write(GH_IWriter writer)
     {
         writer.SetBoolean("AutoPlan", _autoPlan);
+        writer.SetBoolean("BodyPathMode", BodyPathMode);
         writer.SetBoolean("ShowCollision", _showCollision);
         writer.SetBoolean("ShowGroup", _showGroup);
         writer.SetBoolean("ShowAttach", _showAttach);
@@ -122,6 +132,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
     public override bool Read(GH_IReader reader)
     {
+        BodyPathMode = reader.ItemExists("BodyPathMode") && reader.GetBoolean("BodyPathMode");
         if (reader.ItemExists("AutoPlan"))
             _autoPlan = reader.GetBoolean("AutoPlan");
         if (reader.ItemExists("ShowCollision"))
@@ -225,7 +236,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
             return;
         }
 
-        if (snapshot.LinStepMeters <= 0)
+        if (!double.IsFinite(snapshot.LinStepMeters) || snapshot.LinStepMeters <= 0)
         {
             InvalidateCachedPlan();
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Step must be positive for plane goals.");
@@ -238,7 +249,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
 
         GhExtract.RemarkIfDefaultStart(this, snapshot.UsedDefaultStart);
         var goals = snapshot.Goals;
-        var leggedBodyPath = snapshot.Context.Mechanism is not null
+        var leggedBodyPath = BodyPathMode && snapshot.Context.Mechanism is not null
             && goals.Count >= 2
             && goals.All(g => g.plane is not null && g.joints is null)
             && (Units.IsLegged(snapshot.Context.EffectiveModel.Preset)
@@ -444,7 +455,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
         if (_lastReachFingerprint == snapshot.Fingerprint)
             return _lastReachErrors;
 
-        var errors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, snapshot.Goals);
+        var errors = GhExtract.CollectPlaneGoalReachErrors(snapshot.Context, snapshot.Start, snapshot.Goals, BodyPathMode);
         _lastReachFingerprint = snapshot.Fingerprint;
         _lastReachErrors = errors;
         return errors;

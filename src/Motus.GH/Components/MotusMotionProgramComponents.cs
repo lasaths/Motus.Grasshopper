@@ -13,6 +13,8 @@ using Motus.Geometry;
 using Motus.GH.Data;
 using Motus.GH.Params;
 using Motus.GH.UI;
+using Motus.GH.Planning;
+using System.Threading;
 using Motus.GH.Rhino;
 using Rhino;
 using Rhino.Geometry;
@@ -713,6 +715,9 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     private string _progressButton = "Plan";
     private int _debounceGen;
     private string? _lastPlannedFingerprint;
+    private string? _activeFingerprint;
+    private CancellationTokenSource? _cancellation;
+    private bool _cancelled;
 
     public MotusProgramPlanComponent()
         : base(
@@ -740,6 +745,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     public override void AppendAdditionalMenuItems(ToolStripDropDown menu)
     {
         Menu_AppendItem(menu, "Auto Plan", AutoPlanMenuClick, true, _autoPlan);
+        Menu_AppendItem(menu, "Cancel planning", (_, _) => CancelPlanning(), _planning);
         base.AppendAdditionalMenuItems(menu);
     }
 
@@ -770,6 +776,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddParameter(new Param_MotusTrajectory(), "Prior", "Tr0", "Optional prior trajectory — last point supplies start joints and initial tool state when St0 is unwired", GH_ParamAccess.item);
         p[p.ParamCount - 1].Optional = true;
+        p.AddGenericParameter("Sampling Settings", "Rrt", "Optional Motus Sampling Settings for transfers", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -781,7 +789,8 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     private void RequestRun()
     {
-        if (_planning) return;
+        if (_planning) { CancelPlanning(); return; }
+        _cancelled = false;
         _run = true;
         DeferExpire();
     }
@@ -823,163 +832,95 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         });
     }
 
-    private static string ProgramFingerprint(
-        RobotModel model,
-        ToolDefinition? tool,
-        IReadOnlyList<MotionSegment> segments,
-        JointState start,
-        CollisionScene? scene,
-        PlanningGroup? group,
-        IReadOnlyList<AttachedBody> attached,
-        string? priorEndFp) =>
-        ProgramPlanFingerprint.Compute(model, tool, segments, start, scene, group, attached, priorEndFp);
-
-    private string ReadProgramFingerprint(
-        IGH_DataAccess da,
-        RobotModelGoo robotGoo,
-        RobotContext ctx,
-        IReadOnlyList<MotionSegment> segments)
+    private void CancelPlanning(bool expire = true)
     {
-        var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
-        var collision = GhExtract.ParseCollisionInput(da, 3);
-        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
-        TrajectoryGoo? priorGoo = null;
-        da.GetData(6, ref priorGoo);
-        var priorFp = ProgramPlanFingerprint.PriorEndFingerprint(priorGoo?.Value);
-        return ProgramFingerprint(
-            ctx.EffectiveModel,
-            robotGoo.Tool,
-            segments,
-            start,
-            collision.Scene,
-            planningContext.ActiveGroup,
-            planningContext.Attached,
-            priorFp);
+        _cancellation?.Cancel();
+        _cancellation = null; // worker owns disposal
+        _progressRun++;
+        _debounceGen++;
+        _planning = false;
+        _run = false;
+        _cancelled = true;
+        _cached = null;
+        _cachedGoo = null;
+        Message = "Cancelled";
+        if (expire) DeferExpire();
+    }
+
+    protected override void ReleasePreviewResources() => CancelPlanning(expire: false);
+
+    private void InvalidInputs(IGH_DataAccess da, string error)
+    {
+        CancelPlanning(expire: false);
+        _lastPlannedFingerprint = null;
+        AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
+        da.SetData(1, error);
+        da.SetDataList(2, new[] { error });
     }
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
-        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo)) return;
+        if (!GhExtract.TryRobotGoo(da, 0, out var robotGoo))
+        { InvalidInputs(da, "Supply a valid Robot."); return; }
         var ctx = RobotContext.FromGoo(robotGoo);
-
-        if (!_run)
-        {
-            if (GhExtract.TryMotionSegments(da, 1, out var pending, out _) && pending.Count > 0)
-            {
-                var pendingFp = ReadProgramFingerprint(da, robotGoo, ctx, pending);
-                var stale = pendingFp != _lastPlannedFingerprint;
-                if (stale && _autoPlan && !_planning && !Locked)
-                    ScheduleDebouncedPlan();
-                if (stale || _planning)
-                {
-                    // Keep previous Tr live (Motus Plan pattern) so Auto Plan debounce does not null Tr.
-                    if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
-                    AddRuntimeMessage(
-                        GH_RuntimeMessageLevel.Warning,
-                        _planning
-                            ? "Replanning — previous Trajectory is not current."
-                            : "Inputs changed — click Plan (or enable Auto Plan).");
-                    da.SetData(1, _planning || _autoPlan ? "Planning…" : "Inputs changed — click Plan.");
-                    if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
-                    return;
-                }
-            }
-
-            if (_cached is { Success: false })
-            {
-                Message = "Failed";
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, string.Join(Environment.NewLine, _cached.Errors));
-            }
-            if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
-            da.SetData(1, _cached is null
-                ? (_autoPlan ? "Auto Plan pending…" : "Press Plan to compute.")
-                : GhExtract.BuildProgramStatusMessage(_cached, true));
-            if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
-            return;
-        }
-
-        if (_planning)
-        {
-            // Keep previous Tr live while a worker is still running (Solve re-entry with _run).
-            if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Replanning — previous Trajectory is not current.");
-            da.SetData(1, "Planning…");
-            if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
-            _run = false;
-            return;
-        }
-
-        _run = false;
-
-        if (!GhExtract.TryMotionSegments(da, 1, out var segments, out var segmentErrors))
-        {
-            foreach (var error in segmentErrors)
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
-            if (_cachedGoo is not null)
-            {
-                da.SetData(0, _cachedGoo);
-                AddRuntimeMessage(
-                    GH_RuntimeMessageLevel.Warning,
-                    segmentErrors.Count > 0 && segmentErrors[0].Contains("empty", StringComparison.OrdinalIgnoreCase)
-                        ? "Segments list is empty — previous Trajectory is not current."
-                        : "Fix segment input errors — previous Trajectory is not current.");
-            }
-            da.SetData(1, segmentErrors.Count > 0 && segmentErrors[0].Contains("empty", StringComparison.OrdinalIgnoreCase)
-                ? "Segments list is empty."
-                : "Fix segment input errors.");
-            da.SetDataList(2, segmentErrors);
-            return;
-        }
-
-        var fp = ReadProgramFingerprint(da, robotGoo, ctx, segments);
-
+        if (!GhExtract.TryMotionSegments(da, 1, out var segments, out var segmentErrors) || segments.Count == 0)
+        { InvalidInputs(da, string.Join("; ", segmentErrors.Prepend("Supply valid program segments."))); return; }
+        var collision = GhExtract.ParseCollisionInput(da, 3);
+        if (collision.Error is not null) { InvalidInputs(da, collision.Error); return; }
         var toolCaps = robotGoo.Tool?.Capabilities;
-        var toolStateErrors = MotionProgramValidation.ValidateToolStates(segments, toolCaps).ToList();
-        if (toolStateErrors.Count > 0)
-        {
-            _lastPlannedFingerprint = fp;
-            _cached = null;
-            _cachedGoo = null;
-            foreach (var err in toolStateErrors)
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, err);
-            da.SetData(1, "Fix tool state errors.");
-            da.SetDataList(2, toolStateErrors);
-            return;
-        }
-
+        var toolStateErrors = MotionProgramValidation.ValidateToolStates(segments, toolCaps);
+        if (toolStateErrors.Count > 0) { InvalidInputs(da, string.Join("; ", toolStateErrors)); return; }
         var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out var usedDefaultStart);
         EndEffectorState? initialToolState = toolCaps?.DefaultState();
         TrajectoryGoo? priorGoo = null;
         if (da.GetData(6, ref priorGoo) && priorGoo?.Value is { Points.Count: > 0 } priorTraj)
         {
+            if (priorTraj.Robot.Preset.AxisCount != ctx.Model.Preset.AxisCount ||
+                priorTraj.Robot.Preset.ModelName != ctx.Model.Preset.ModelName ||
+                !(priorTraj.Robot.JointNames ?? []).SequenceEqual(ctx.Model.JointNames ?? []))
+            { InvalidInputs(da, "Prior trajectory must use the same robot and joint order."); return; }
             var priorEnd = priorTraj.Points[^1];
-            if (usedDefaultStart)
-            {
-                start = priorEnd.JointState;
-                usedDefaultStart = false;
-            }
-
-            if (priorEnd.ToolState is not null)
-                initialToolState = priorEnd.ToolState;
+            if (usedDefaultStart) { start = priorEnd.JointState; usedDefaultStart = false; }
+            initialToolState = priorEnd.ToolState ?? initialToolState;
         }
-
-        GhExtract.RemarkIfDefaultStart(this, usedDefaultStart);
-
-        var collision = GhExtract.ParseCollisionInput(da, 3);
-        if (collision.Error is not null)
+        if (start.AxisCount != ctx.Model.Preset.AxisCount || !start.Validate(ctx.Model.Preset.JointLimits).IsValid)
+        { InvalidInputs(da, "Start coordinates do not match the robot limits/count."); return; }
+        PlanningContext planningContext;
+        try { planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene); }
+        catch (Exception ex) { InvalidInputs(da, ex.Message); return; }
+        var settings = GhExtract.ResolveRrtSettings(da, 7, this);
+        var fp = ProgramInputFingerprint.Compute(ctx.EffectiveModel, robotGoo.BaseFrameOverride,
+            robotGoo.Tool, segments, start, initialToolState, planningContext,
+            ctx.Tree?.Fingerprint, ctx.Chain, settings.PlannerId, settings.MaxIterations,
+            settings.MaxPlanTimeSeconds, settings.GoalBias, settings.StepRadians);
+        if (_planning && fp != _activeFingerprint)
         {
-            _lastPlannedFingerprint = fp;
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, collision.Error);
-            _cached = null;
-            _cachedGoo = null;
-            da.SetData(1, "Fix Collision input errors.");
-            da.SetDataList(2, new[] { collision.Error });
+            CancelPlanning(expire: false);
+            _cancelled = false;
+        }
+        var stale = fp != _lastPlannedFingerprint;
+        if (!_run)
+        {
+            if (stale && _autoPlan && !_planning && !Locked && !_cancelled) ScheduleDebouncedPlan();
+            // Never publish a stale result as a current trajectory.
+            if (!stale && !_planning && _cachedGoo is not null) da.SetData(0, _cachedGoo);
+            da.SetData(1, _planning ? "Planning… (click button to cancel)" : _cancelled ? "Cancelled — click Plan to retry."
+                : stale ? "Inputs changed — click Plan." : _cached is null ? "Press Plan to compute."
+                : GhExtract.BuildProgramStatusMessage(_cached, true));
+            if (stale) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Trajectory unavailable until current inputs are planned.");
+            if (!stale && _cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
             return;
         }
-        else if (collision.Warning is not null)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, collision.Warning);
-
-        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
+        if (_planning) return;
+        _run = false;
+        _cancelled = false;
+        _activeFingerprint = fp;
+        var cancellation = new CancellationTokenSource();
+        _cancellation = cancellation;
+        var token = cancellation.Token;
+        GhExtract.RemarkIfDefaultStart(this, usedDefaultStart);
+        AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, collision.Scene?.Objects.Count > 0
+            ? "Collision scene active." : "No obstacles: collision scene is empty.");
         // Snapshot only on UI — mesh BVH / checker build + Plan run off-thread (20-brick pick-place freezes Rhino otherwise).
         var robotSnap = robotGoo;
         var modelSnap = ctx.EffectiveModel;
@@ -1009,7 +950,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                 var seconds = elapsed.Elapsed.TotalSeconds;
                 RhinoApp.InvokeOnUiThread((Action)(() =>
                 {
-                    if (!_planning || progressRun != _progressRun || OnPingDocument() is null) return;
+                    if (token.IsCancellationRequested || !_planning || progressRun != _progressRun || OnPingDocument() is null) return;
                     var active = Math.Min(current.CompletedSegments + 1, current.TotalSegments);
                     _progressButton = $"{current.CompletedSegments}/{current.TotalSegments}";
                     Message = $"{current.Phase} · {active}/{current.TotalSegments} · {seconds:0}s";
@@ -1020,6 +961,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             string? error = null;
             try
             {
+                token.ThrowIfCancellationRequested();
                 var robotOnly = GhExtract.TryCollisionChecker(modelSnap, chainSnap, sceneSnap, null, ctx: null);
                 if (robotOnly is not null && sceneSnap is not null)
                 {
@@ -1042,12 +984,12 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
                     });
                     var request = new MotionProgramRequest(modelSnap, startSnap, segmentsSnap, opts)
                     {
-                        ReportProgress = p => System.Threading.Volatile.Write(ref progress, p),
+                        ReportProgress = p => { token.ThrowIfCancellationRequested(); System.Threading.Volatile.Write(ref progress, p); },
                         InitialToolState = initialToolSnap,
                         ToolCapabilities = capsSnap,
                         SessionTool = toolSnap,
                         TransferPlannerFactory = c => SamplingPlanner.Create(c,
-                            new SamplingPlannerOptions { PlannerId = SamplingPlannerId.RrtConnect, RandomSeed = 42 })
+                            settings.ToOptions(token, null))
                     };
                     result = new IndustrialMotionPlanner(modelSnap.Preset, chainSnap).Plan(request);
                 }
@@ -1060,6 +1002,9 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             progressTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
             RhinoApp.InvokeOnUiThread((Action)(() =>
             {
+                if (ReferenceEquals(_cancellation, cancellation)) _cancellation = null;
+                cancellation.Dispose();
+                if (token.IsCancellationRequested || progressRun != _progressRun || OnPingDocument() is null) return;
                 _cached = error is not null
                     ? PlanningResult.Failed(new[] { error })
                     : result;
@@ -1072,8 +1017,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             }));
         });
 
-        if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
-        da.SetData(1, "Planning…");
+        da.SetData(1, "Planning… (click button to cancel)");
         if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
     }
 

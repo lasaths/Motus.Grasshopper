@@ -18,7 +18,8 @@ internal sealed record PlanRequest(
     PlanningContext PlanningContext,
     double LinStepMeters,
     bool CollisionInputWired,
-    RrtPlanSettings RrtSettings);
+    RrtPlanSettings RrtSettings,
+    bool BodyPathMode = false);
 
 internal sealed class PlanExecutionResult
 {
@@ -79,7 +80,7 @@ internal static class PlanExecutor
 
         reportActivity?.Invoke("Preparing path");
         // Family=legged body-path gait: one-shot over all plane goals (not per-plane TCP LIN).
-        if (TryPlanLeggedBodyPath(request, sharedChecker, cancellationToken, timings, out var leggedExec))
+        if (request.BodyPathMode && TryPlanLeggedBodyPath(request, sharedChecker, cancellationToken, timings, out var leggedExec))
             return leggedExec!;
 
         for (var goalIndex = 0; goalIndex < request.Goals.Count; goalIndex++)

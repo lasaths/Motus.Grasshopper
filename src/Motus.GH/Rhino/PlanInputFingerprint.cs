@@ -34,6 +34,19 @@ public static class PlanInputFingerprint
             .Append(rrtMaxPlanTimeSeconds.ToString("R", CultureInfo.InvariantCulture)).Append(',')
             .Append(rrtGoalBias.ToString("R", CultureInfo.InvariantCulture)).Append(',')
             .Append(rrtStepRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        sb.Append(System.Text.Json.JsonSerializer.Serialize(model.Preset)).Append('|');
+        sb.Append(System.Text.Json.JsonSerializer.Serialize(model.JointNames)).Append('|');
+        if (model.CollisionModel is { } collisionModel)
+        {
+            foreach (var link in collisionModel.Links)
+            {
+                sb.Append(link.LinkIndex).Append(':').Append(link.LinkName).Append('|');
+                AppendCollisionObject(sb, link.LocalGeometry);
+            }
+            if (collisionModel.ToolGeometry is { } toolGeometry) AppendCollisionObject(sb, toolGeometry);
+            sb.Append(collisionModel.ToolGeometryInFlangeFrame).Append('|');
+            AppendFrame(sb, "toolAttach", collisionModel.ToolGeometryAttachOffset);
+        }
         AppendFrame(sb, "base", baseFrameOverride);
         if (mobilityGoal is not null)
         {
@@ -47,6 +60,9 @@ public static class PlanInputFingerprint
             sb.Append("tree:").Append(tfp).Append('|');
         if (toolOverride is not null)
         {
+            sb.Append(System.Text.Json.JsonSerializer.Serialize(toolOverride.Capabilities)).Append('|');
+            sb.Append(toolOverride.GeometryInFlangeFrame).Append('|');
+            AppendFrame(sb, "toolGeometryOffset", toolOverride.GeometryAttachOffset);
             sb.Append("toolName:").Append(toolOverride.Name).Append('|');
             AppendFrame(sb, "toolTcp", toolOverride.Tcp);
             if (toolOverride.Geometry is { } geom)
@@ -79,6 +95,8 @@ public static class PlanInputFingerprint
         foreach (var obj in objects)
             AppendCollisionObject(sb, obj);
 
+        foreach (var pair in context.Scene.AllowedPairs.OrderBy(p => p.A).ThenBy(p => p.B))
+            sb.Append(System.Text.Json.JsonSerializer.Serialize(new[] { pair.A, pair.B })).Append('|');
         var group = context.ActiveGroup;
         if (group is not null)
         {

@@ -14,12 +14,12 @@ namespace Motus.GH.Preview;
 /// </summary>
 internal static class MechanismPreviewGeometry
 {
-    public static RobotCollisionModel? Build(RobotDescription mechanism)
+    public static RobotCollisionModel? Build(RobotDescription mechanism, bool collision = false)
     {
         var links = new List<LinkCollisionGeometry>();
         foreach (var link in mechanism.Links)
         {
-            foreach (var visual in link.Visuals)
+            foreach (var visual in collision ? link.Collisions : link.Visuals)
             {
                 if (ToCollisionObject(link.Name, visual) is { } obj)
                     // TreeLinkIndex sentinel: mesh is posed via TreeFK + LinkName lookup, since mechanism
