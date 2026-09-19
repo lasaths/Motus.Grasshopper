@@ -272,19 +272,16 @@ public sealed class MotusToolComponent : MotusDropDownComponentBase
         error = null;
         if (mechanism is null) return true;
 
+        // ponytail: Cap=None rejects Bd; Cap=Custom requires Bd — shared with qa-smoke via ToolCapContract.
+        var hasBd = !string.IsNullOrWhiteSpace(bindingJoint);
+        if (!ToolCapContract.TryValidateBinding(capNorm, hasBd, hasMechanism: true, out error))
+            return false;
         if (capNorm == ToolCapContract.None)
-        {
-            if (!string.IsNullOrWhiteSpace(bindingJoint))
-            {
-                error = "Cap=None cannot use Binding (Bd) — set Cap to Robotiq2F85 or Custom.";
-                return false;
-            }
             return true;
-        }
 
-        if (!string.IsNullOrWhiteSpace(bindingJoint))
+        if (hasBd)
         {
-            var joint = bindingJoint.Trim();
+            var joint = bindingJoint!.Trim();
             if (!MechanismHasDriver(mechanism, joint))
             {
                 error = $"Binding joint '{joint}' is not an actuated (non-mimic) driver on the Description.";
@@ -316,12 +313,7 @@ public sealed class MotusToolComponent : MotusDropDownComponentBase
             return true;
         }
 
-        if (capNorm == ToolCapContract.Custom)
-        {
-            error = "Cap=Custom with Description requires Binding (Bd) naming the width driver joint.";
-            return false;
-        }
-
+        // Cap=Custom without Bd already failed TryValidateBinding above.
         if (!ReferenceEquals(caps, ToolCapabilities.Robotiq2F85))
             return true;
 

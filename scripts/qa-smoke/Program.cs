@@ -666,7 +666,19 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
     if (!Motus.GH.ToolCapContract.TryResolveForToolState(customCapped, toolOrRobotWired: true, out var customOk, out _, out var customWarn)
         || customOk is null || customWarn is not null)
         Fail("Wired Cap=Custom Tool State must succeed silently");
-    Ok("Tool Cap contract: None|Robotiq|Custom; unknown fails; unwired warns");
+
+    // Regression matrix: Cap=None rejects Bd; Cap=Custom + mechanism requires Bd (Rhino-free).
+    if (Motus.GH.ToolCapContract.TryValidateBinding(Motus.GH.ToolCapContract.None, hasBinding: true, hasMechanism: true, out var noneBdErr)
+        || noneBdErr is null || !noneBdErr.Contains("Cap=None", StringComparison.Ordinal))
+        Fail("Cap=None + Bd must fail named");
+    if (!Motus.GH.ToolCapContract.TryValidateBinding(Motus.GH.ToolCapContract.None, hasBinding: false, hasMechanism: true, out _))
+        Fail("Cap=None without Bd must succeed");
+    if (Motus.GH.ToolCapContract.TryValidateBinding(Motus.GH.ToolCapContract.Custom, hasBinding: false, hasMechanism: true, out var customBdErr)
+        || customBdErr is null || !customBdErr.Contains("Cap=Custom", StringComparison.Ordinal))
+        Fail("Cap=Custom without Bd must fail named");
+    if (!Motus.GH.ToolCapContract.TryValidateBinding(Motus.GH.ToolCapContract.Custom, hasBinding: true, hasMechanism: true, out _))
+        Fail("Cap=Custom with Bd must succeed gate");
+    Ok("Tool Cap contract: None|Robotiq|Custom; Cap=None rejects Bd; Cap=Custom requires Bd");
 }
 
 // TL-009: Mechanism URDF XML round-trip (ToolGoo.Write/Read uses UrdfWriter.ToXml/TryParse)

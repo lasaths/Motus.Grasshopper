@@ -6,12 +6,12 @@ Host-readiness checklist for Motus.Grasshopper against Motus.NET **0.17.0** ([nu
 
 ## Non-Rhino (automatable)
 
-CI smoke already covers GHX regenerate/validate, planner-only fence, and QaSmoke **compile**. Also run:
+CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
 - [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **0.17.0**, nuget.org lists Motus.Core **0.17.0**, docs do not claim NuGet unreleased / UseLocal-only.
-- [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate).
+- [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
-
+- [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` via qa-smoke Cap block.
 ## Rhino (manual — required before Rhino-touching release)
 
 - [ ] Serial UR10e quick plan: plane LIN, joint-linear, and joint goal + collision RRT still succeed.
