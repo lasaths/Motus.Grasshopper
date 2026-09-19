@@ -15,8 +15,11 @@ const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';
 const csproj = fs.readFileSync(path.resolve(repoRoot, 'src/Motus.GH/Motus.GH.csproj'), 'utf8');
 const props = fs.readFileSync(path.resolve(repoRoot, 'build/MotusNetPackages.props'), 'utf8');
 const MOTUS_NET_VERSION = props.match(/<MotusNetVersion[^>]*>([^<]+)<\/MotusNetVersion>/)?.[1]?.trim() ?? '0.6.6';
-const PLUGIN_VERSION = csproj.match(/<Version>([^<]+)<\/Version>/)?.[1] ?? MOTUS_NET_VERSION;
-const PLUGIN_ASSEMBLY_VERSION = `${PLUGIN_VERSION}.0`;
+const PLUGIN_VERSION = csproj.match(/<Version>([^<]+)<\/Version>/)?.[1]?.trim() ?? MOTUS_NET_VERSION;
+/** Prefer csproj AssemblyVersion (4-part) so .ghx meta matches the built .gha. */
+const PLUGIN_ASSEMBLY_VERSION =
+  csproj.match(/<AssemblyVersion>([^<]+)<\/AssemblyVersion>/)?.[1]?.trim() ??
+  ( /^\d+\.\d+\.\d+$/.test(PLUGIN_VERSION) ? `${PLUGIN_VERSION}.0` : PLUGIN_VERSION);
 const absPath = (...parts) => path.resolve(repoRoot, ...parts);
 
 const GOAL_JOINTS = [1.2, -1, 1.2, -1.6, -1.5708, 0];
