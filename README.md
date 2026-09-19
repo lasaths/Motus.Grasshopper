@@ -5,7 +5,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **1.9.0**, UseLocal until published) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.0.0**, UseLocal until published) |
 
 **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
@@ -136,15 +136,15 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-- Motus.NET **1.9.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Until that version is on nuget.org, build with `./build.ps1 -UseLocal` (sibling project refs; CI does the same). Motus.Core **1.8.0** is live on nuget.org.
-- **Yak unpublished** — no Rhino Package Manager entry for `motus` yet; install from source (first public Yak target is Motus **2.0.0**)
+- Motus.NET **2.0.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Until that version is on nuget.org, build with `./build.ps1 -UseLocal` (sibling project refs; CI Prefer UseLocal). Motus.Core **1.8.0** is live on nuget.org (CI NuGet jobs override to **1.8.0**; **1.9.0** index may lag).
+- **Yak GA identity 2.0.0** — pack with `-Yak` / `pack-yak.sh`; production Package Manager push is a separate authenticated step (not automatic in this cut)
 
 ## Install from source
 
 **Windows**
 
 ```powershell
-./build.ps1                      # Release (NuGet Motus.NET 1.9.0 when published)
+./build.ps1                      # Release (NuGet Motus.NET 2.0.0 when published)
 ./build.ps1 -UseLocal            # sibling Motus.NET project refs (tip / CI)
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
 ./build.ps1 -Yak                 # pack only → dist/motus-*-rh8_*-any.yak (not published)
@@ -169,7 +169,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 |----------|---------|
 | `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
 | `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
-| `MotusNetVersion` | Override NuGet pin (default `1.9.0`; UseLocal until published) |
+| `MotusNetVersion` | Override NuGet pin (default `2.0.0`; UseLocal until published) |
 
 ## Common workflows
 

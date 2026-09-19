@@ -1,16 +1,16 @@
-# P8 / Milestone 1.9 Regression Matrix
+# P8 / Milestone 2.0 Regression Matrix
 
-Host-readiness checklist for Motus.Grasshopper against Motus.NET **1.9.0** (UseLocal until NuGet publish).
+Host-readiness checklist for Motus.Grasshopper against Motus.NET **2.0.0** (UseLocal until NuGet publish).
 
-**Default path (after publish):** NuGet pin (`build/MotusNetPackages.props`). **CI / tip / pre-publish path:** `-UseLocal` sibling Motus.NET (required in GitHub Actions until **1.9.0** is on nuget.org; NuGet CI jobs override to live **1.8.0**). **Yak:** pack-only — `motus` is **not** on Rhino Package Manager (first public Yak target is **2.0.0**).
+**Default path (after publish):** NuGet pin (`build/MotusNetPackages.props`). **CI / tip / pre-publish path:** `-UseLocal` sibling Motus.NET (required in GitHub Actions until **2.0.0** is on nuget.org; NuGet CI jobs override to live **1.8.0** while **1.9.0** may lag). **Yak:** identity **2.0.0** — pack OK; production push is a separate authenticated step ([packaging/yak/README.md](../packaging/yak/README.md)).
 
 ## Non-Rhino (automatable)
 
 CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
-- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **1.9.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **1.9.0** on nuget.org.
-- [ ] `node scripts/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree; icon + dual-TFM pack path present; first public Yak remains **2.0.0** (pre-GA pack OK, production push blocked).
-- [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
+- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **2.0.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **2.0.0** on nuget.org.
+- [ ] `node scripts/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree at **2.0.0**; icon + dual-TFM pack path present; do **not** claim Package Manager published until `yak push` succeeds.
+- [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate after Motus.NET **2.0.0** NuGet; CI `build-*-nuget` uses live **1.8.0** override until then).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
 - [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` + Pick Place `PickPlaceTouchContract.TryRequireTouch` + `FamilyHandoffWarnings` / `ExperimentalUrdfLoad` via qa-smoke.
 ## Rhino (manual — required before Rhino-touching release)
@@ -25,11 +25,11 @@ CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-mot
 - [ ] Motus Plan legged: Walk `Rb` (Mechanism) + ≥2 planes → full-driver gait `Tr` (`PlanBodyPath`, hard SSM, not TCP LIN); tip joint / 1-plane LIN unchanged; mixed plane+joint fails named.
 - [ ] Export: family warnings mirror Waypoints; `Retime` remains bool and optional `Retimer` defaults to `TotgLite`.
 - [ ] Example 10: Pick Place → one Program Auto Plan; SET 0.085/0.04; Preview holds Detach poses between cycles; plan ColScene = table only.
-- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect pin **1.9.0**; no Package Manager / Yak published claim.
+- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect pin **2.0.0**; no Package Manager / Yak published claim until push.
 
 ## Experimental mobility (Motus.NET tip — not GA)
 
-Experimental mobility (`HolonomicSE3`, Unitree H2/Go2 fixtures, catalog fixtures) ships in Motus.NET **1.9.0** package identity but remains **not** Motus.Grasshopper GA — do not market as Package Manager / 2.0 features.
+Experimental mobility (`HolonomicSE3`, Unitree H2/Go2 fixtures, catalog fixtures) ships in Motus.NET **2.0.0** package identity but remains **not** Motus.Grasshopper Supported Yak GA — see [supported-surface.md](supported-surface.md).
 
 - [ ] Motus.NET tests green on tip: catalog robot smoke, `UnitreeH2FixtureTests`, HolonomicSE3 / aerial fixture (sibling UseLocal).
 - [ ] Optional Motus Robot load of meshless H2 / free-flyer URDF from Motus.NET fixtures via UseLocal — Status / remarks must say **experimental** (LoadTree + FK scrub only; no Walk, no biped, no flight controller).

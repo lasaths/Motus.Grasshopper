@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 2.0.0 — Public product · Yak GA identity — 2026-09-19
+
+Aligned with **Motus.NET 2.0.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **2.0.0**). Motus.Core **1.8.0** remains the last confirmed published NuGet (CI `build-*-nuget` overrides to **1.8.0**; **1.9.0** index may lag). Yak `motus` identity is **2.0.0** — pack ready; **no production yak push in this cut**.
+
+### Added
+
+- Supported vs advanced surface: [`docs/supported-surface.md`](docs/supported-surface.md).
+
+### Changed
+
+- Plugin / yak manifest / `MotusNetVersion` pin aligned to **2.0.0**.
+- Docs (AGENTS, README, examples, regression matrix) describe **2.0.0** cut + UseLocal until Motus.NET **2.0.0** NuGet publish.
+- `scripts/verify-motus-net-pin.mjs` EXPECTED **2.0.0** (pre-publish UseLocal OK).
+
+### Motus.NET pin
+
+`MotusNetVersion` = **2.0.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). UseLocal until nuget.org lists Motus.Core **2.0.0**.
+
 ## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
 
 Aligned with **Motus.NET 1.9.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **1.9.0**). Motus.Core **1.8.0** remains the last published NuGet (CI `build-*-nuget` overrides to **1.8.0**). Yak still unpublished (Package Manager target **2.0.0**).
