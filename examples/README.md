@@ -9,10 +9,10 @@ node scripts/validate-ghx.mjs
 
 ## Prerequisite: Motus.GH installed
 
-Examples target the **current Motus.Grasshopper** build (Motus.NET **0.16.0**). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
+Examples target the **current Motus.Grasshopper** build (Motus.NET **0.17.0** pin; use `-UseLocal` until that NuGet is published). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
 
 ```powershell
-.\build.ps1 -Configuration Release -Install
+.\build.ps1 -Configuration Release -UseLocal -Install
 # → %APPDATA%\Grasshopper\Libraries\Motus\Motus.GH.gha
 ```
 
