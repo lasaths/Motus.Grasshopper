@@ -29,7 +29,8 @@ src/Motus.GH/
   Preview/ UI/    # Scrub, ButtonAttributes, FK preview
   Resources/icons/# Phosphor duotone PNGs (embedded)
 examples/         # 01–10 via generate-examples.mjs (10 with --only=10)
-scripts/          # build helpers, qa-smoke, validate-ghx
+packaging/yak/    # Package Manager manifest + icon (first public push = 2.0.0)
+scripts/          # build helpers, qa-smoke, validate-ghx, verify-yak-packaging
 ```
 
 Build: `./build.sh` (macOS) / `./build.ps1` (Windows). QA: `./scripts/verify-qa.ps1 -Configuration Release -Install`.

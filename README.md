@@ -156,6 +156,11 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 ```bash
 ./build.sh              # Release → src/Motus.GH/bin/Release/net8.0/
 INSTALL=1 ./build.sh
+# Dual-TFM + Yak pack (needs both TFMs built; pwsh preferred):
+#   pwsh ./build.ps1 -Configuration Release -Yak
+#   # or without pwsh after a dual-TFM Release build:
+#   ./scripts/pack-yak.sh
+node scripts/verify-yak-packaging.mjs   # identity + manifest anatomy (no Rhino)
 ```
 
 Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Verify: `./scripts/verify-install.ps1` (Windows).

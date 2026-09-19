@@ -17,6 +17,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $out = Join-Path $root "src\Motus.GH\bin\$Configuration\$Tfm"
+# First public Rhino Package Manager release — do not push earlier SemVers to production Yak.
+$script:FirstPublicYakVersion = "2.0.0"
 
 function Stage-MotusPlugin([string]$StageDir, [string]$OutputDir = $out) {
     if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
@@ -26,6 +28,42 @@ function Stage-MotusPlugin([string]$StageDir, [string]$OutputDir = $out) {
     $stageResources = Join-Path $StageDir "resources"
     New-Item -ItemType Directory -Force -Path $stageResources | Out-Null
     Copy-Item "$OutputDir\resources\*" $stageResources -Recurse
+}
+
+function Resolve-YakExe {
+    $cli = Get-Command yak -ErrorAction SilentlyContinue
+    if ($cli) { return $cli.Source }
+
+    $win = Join-Path ${env:ProgramFiles} "Rhino 8\System\Yak.exe"
+    if (Test-Path $win) { return $win }
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    if ($env:Rhino8App) {
+        $candidates.Add((Join-Path $env:Rhino8App "Contents/Resources/bin/yak"))
+    }
+    $candidates.Add("/Applications/Rhino 8.app/Contents/Resources/bin/yak")
+    $candidates.Add("/Volumes/Storage/00_Applications/Rhino 8.app/Contents/Resources/bin/yak")
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { return $c }
+    }
+
+    throw "yak not found — install Rhino 8, add yak to PATH, or set Rhino8App for a custom Mac install."
+}
+
+function Get-MotusPluginVersionString {
+    $plugin = Get-Content (Join-Path $root "src\Motus.GH\MotusGhPlugin.cs") -Raw
+    if ($plugin -notmatch 'public override string Version\s*=>\s*"([^"]+)"') {
+        throw "Could not read MotusGhPlugin.Version string."
+    }
+    return $Matches[1]
+}
+
+function Get-MotusNetPinVersion {
+    $props = Get-Content (Join-Path $root "build\MotusNetPackages.props") -Raw
+    if ($props -notmatch "<MotusNetVersion[^>]*>([^<]+)</MotusNetVersion>") {
+        throw "Could not read MotusNetVersion from MotusNetPackages.props."
+    }
+    return $Matches[1].Trim()
 }
 
 $msbuildProps = @()
@@ -85,17 +123,21 @@ if ($Zip) {
 }
 
 if ($Yak) {
-    $cli = Get-Command yak -ErrorAction SilentlyContinue
-    if ($cli) {
-        $yakExe = $cli.Source
-    } else {
-        $yakExe = Join-Path ${env:ProgramFiles} "Rhino 8\System\Yak.exe"
-        if (-not (Test-Path $yakExe)) { throw "yak not found — install Rhino 8 or add Yak.exe to PATH." }
-    }
+    $yakExe = Resolve-YakExe
 
     $csproj = Get-Content (Join-Path $root "src\Motus.GH\Motus.GH.csproj") -Raw
     if ($csproj -notmatch "<Version>([^<]+)</Version>") { throw "Could not read <Version> from Motus.GH.csproj" }
-    $version = $Matches[1]
+    $version = $Matches[1].Trim()
+    $pluginVersion = Get-MotusPluginVersionString
+    if ($pluginVersion -ne $version) {
+        throw "MotusGhPlugin.Version ($pluginVersion) != Motus.GH.csproj Version ($version)"
+    }
+    $netPin = Get-MotusNetPinVersion
+    if ($netPin -ne $version) {
+        throw "MotusNetVersion pin ($netPin) != plugin Version ($version) — Yak packs NuGet Motus.NET; align pin before packing."
+    }
+    $iconPath = Join-Path $root "packaging\yak\icon.png"
+    if (-not (Test-Path $iconPath)) { throw "Missing packaging/yak/icon.png (Package Manager icon)." }
 
     # Rhino 8 multi-target: Windows loads net8.0-windows, Mac loads net8.0.
     # manifest.yml must sit above the TFM folders (McNeel yak anatomy).
@@ -113,8 +155,13 @@ if ($Yak) {
     }
 
     Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE") -Force
+    Copy-Item $iconPath (Join-Path $stage "icon.png") -Force
     $manifest = Get-Content (Join-Path $root "packaging\yak\manifest.yml") -Raw
+    if ($manifest -notmatch "(?m)^name:\s*motus\s*$") { throw "packaging/yak/manifest.yml name must be motus" }
     $manifest = $manifest -replace "(?m)^version:\s*.*$", "version: $version"
+    if ($manifest -notmatch "(?m)^icon:\s*icon\.png\s*$") {
+        $manifest = $manifest.TrimEnd() + "`nicon: icon.png`n"
+    }
     Set-Content -Path (Join-Path $stage "manifest.yml") -Value $manifest -NoNewline
 
     Push-Location $stage
@@ -127,8 +174,13 @@ if ($Yak) {
             Write-Host "`nYak package (Win+Mac): $dest"
             Write-Host "  net8.0-windows/ → Rhino 8 Windows"
             Write-Host "  net8.0/         → Rhino 8 macOS"
-            Write-Host "Push when ready: yak push `"$dest`""
-            Write-Host "Test server:     yak push --source https://test.yak.rhino3d.com `"$dest`""
+            if ($version -eq $script:FirstPublicYakVersion) {
+                Write-Host "GA $version — after auth: yak push `"$dest`""
+                Write-Host "Verify:           yak search --all motus"
+            } else {
+                Write-Host "Pre-GA pack ($version): do NOT push production Yak until $($script:FirstPublicYakVersion)."
+                Write-Host "Test server only: yak push --source https://test.yak.rhino3d.com `"$dest`""
+            }
         }
     }
     finally {
