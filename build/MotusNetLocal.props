@@ -13,7 +13,7 @@
     <MotusNetSiblingRoot Condition="'$(MotusNetSiblingRoot)' == '' and Exists('$(MotusNetSiblingCandidateC)src\Motus.Core\Motus.Core.csproj')">$(MotusNetSiblingCandidateC)</MotusNetSiblingRoot>
     <MotusNetSiblingRoot Condition="'$(MotusNetSiblingRoot)' == ''">$(MotusNetSiblingCandidateB)</MotusNetSiblingRoot>
     <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == ''">false</UseMotusNetProjectReference>
-    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.14.0-local</MotusNetVersion>
+    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.17.0-local</MotusNetVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
