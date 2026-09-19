@@ -824,35 +824,38 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
     }
 
     private static string ProgramFingerprint(
+        RobotModel model,
+        ToolDefinition? tool,
         IReadOnlyList<MotionSegment> segments,
         JointState start,
-        CollisionScene? scene)
+        CollisionScene? scene,
+        PlanningGroup? group,
+        IReadOnlyList<AttachedBody> attached,
+        string? priorEndFp) =>
+        ProgramPlanFingerprint.Compute(model, tool, segments, start, scene, group, attached, priorEndFp);
+
+    private string ReadProgramFingerprint(
+        IGH_DataAccess da,
+        RobotModelGoo robotGoo,
+        RobotContext ctx,
+        IReadOnlyList<MotionSegment> segments)
     {
-        var parts = segments.Select(s => SegmentFingerprint(s) + ":contacts=" +
-                string.Join(";", s.AllowedCollisionPairs.Select(pair => $"{pair.A},{pair.B}")))
-            .Append(string.Join(",", start.Positions.Select(q => q.ToString("R"))))
-            .Append(scene is null
-                ? "scene=null"
-                : "scene=" + string.Join(";", scene.Objects.Select(o => $"{o.Name}:{o.ContentHash}:{FrameFp(o.Pose)}"))
-                    + "#pairs=" + string.Join(";", scene.AllowedPairs.Select(p => $"{p.A},{p.B}")));
-        return string.Join("|", parts);
+        var start = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
+        var collision = GhExtract.ParseCollisionInput(da, 3);
+        var planningContext = GhExtract.BuildPlanningContext(ctx.EffectiveModel, da, 3, 4, 5, collision.Scene);
+        TrajectoryGoo? priorGoo = null;
+        da.GetData(6, ref priorGoo);
+        var priorFp = ProgramPlanFingerprint.PriorEndFingerprint(priorGoo?.Value);
+        return ProgramFingerprint(
+            ctx.EffectiveModel,
+            robotGoo.Tool,
+            segments,
+            start,
+            collision.Scene,
+            planningContext.ActiveGroup,
+            planningContext.Attached,
+            priorFp);
     }
-
-    private static string FrameFp(Frame f) =>
-        $"{f.X:R},{f.Y:R},{f.Z:R},{f.Qw:R},{f.Qx:R},{f.Qy:R},{f.Qz:R}";
-
-    private static string SegmentFingerprint(MotionSegment s) => s switch
-    {
-        TransferSegment transfer => $"TRANSFER:{FrameFp(transfer.Goal.Tcp)}",
-        LinSegment lin => $"LIN:{lin.StepMeters:R}:{lin.BlendRadiusMeters:R}:{FrameFp(lin.Goal.Tcp)}",
-        CircSegment circ => $"CIRC:{circ.ArcSamples}:{circ.BlendRadiusMeters:R}:{FrameFp(circ.Via.Tcp)}:{FrameFp(circ.Goal.Tcp)}",
-        PtpSegment ptp => $"PTP:{ptp.BlendRadiusMeters:R}:{string.Join(",", ptp.Goal.Positions.Select(q => q.ToString("R")))}",
-        SetToolStateSegment set => $"SET:{set.DurationSeconds:R}:{string.Join(",", set.State.Values.Select(kv => $"{kv.Key}={kv.Value:R}"))}",
-        WaitSegment w => $"WAIT:{w.DurationSeconds:R}",
-        AttachSegment a => $"ATTACH:{a.Name}:{FrameFp(a.TcpLocal)}",
-        DetachSegment d => $"DETACH:{d.Name}:{FrameFp(d.WorldPose)}",
-        _ => s.GetType().Name
-    };
 
     protected override void SolveInstance(IGH_DataAccess da)
     {
@@ -863,10 +866,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         {
             if (GhExtract.TryMotionSegments(da, 1, out var pending, out _) && pending.Count > 0)
             {
-                var pendingFp = ProgramFingerprint(
-                    pending,
-                    GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _),
-                    GhExtract.ParseCollisionInput(da, 3).Scene);
+                var pendingFp = ReadProgramFingerprint(da, robotGoo, ctx, pending);
                 var stale = pendingFp != _lastPlannedFingerprint;
                 if (stale && _autoPlan && !_planning && !Locked)
                     ScheduleDebouncedPlan();
@@ -900,7 +900,11 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
         if (_planning)
         {
+            // Keep previous Tr live while a worker is still running (Solve re-entry with _run).
+            if (_cachedGoo is not null) da.SetData(0, _cachedGoo);
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Replanning — previous Trajectory is not current.");
             da.SetData(1, "Planning…");
+            if (_cached is not null) da.SetDataList(2, GhExtract.BuildProgramWarnings(_cached));
             _run = false;
             return;
         }
@@ -911,14 +915,23 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
         {
             foreach (var error in segmentErrors)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);
-            da.SetData(1, "Fix segment input errors.");
+            if (_cachedGoo is not null)
+            {
+                da.SetData(0, _cachedGoo);
+                AddRuntimeMessage(
+                    GH_RuntimeMessageLevel.Warning,
+                    segmentErrors.Count > 0 && segmentErrors[0].Contains("empty", StringComparison.OrdinalIgnoreCase)
+                        ? "Segments list is empty — previous Trajectory is not current."
+                        : "Fix segment input errors — previous Trajectory is not current.");
+            }
+            da.SetData(1, segmentErrors.Count > 0 && segmentErrors[0].Contains("empty", StringComparison.OrdinalIgnoreCase)
+                ? "Segments list is empty."
+                : "Fix segment input errors.");
             da.SetDataList(2, segmentErrors);
             return;
         }
 
-        var startForFp = GhExtract.StartOrHome(da, 2, ctx.EffectiveModel, out _);
-        var sceneForFp = GhExtract.ParseCollisionInput(da, 3).Scene;
-        var fp = ProgramFingerprint(segments, startForFp, sceneForFp);
+        var fp = ReadProgramFingerprint(da, robotGoo, ctx, segments);
 
         var toolCaps = robotGoo.Tool?.Capabilities;
         var toolStateErrors = MotionProgramValidation.ValidateToolStates(segments, toolCaps).ToList();

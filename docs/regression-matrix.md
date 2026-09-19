@@ -12,7 +12,7 @@ CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-mot
 - [ ] `node scripts/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree; icon + dual-TFM pack path present; first public Yak remains **2.0.0** (pre-GA pack OK, production push blocked).
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
-- [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` + Pick Place `PickPlaceTouchContract.TryRequireTouch` via qa-smoke.
+- [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` + Pick Place `PickPlaceTouchContract.TryRequireTouch` + `FamilyHandoffWarnings` / `ExperimentalUrdfLoad` via qa-smoke.
 ## Rhino (manual — required before Rhino-touching release)
 
 - [ ] Serial UR10e quick plan: plane LIN, joint-linear, and joint goal + collision RRT still succeed.
