@@ -41,8 +41,10 @@ public sealed class MotusDescriptionRobotComponent : RobotSourceComponentBase
         da.GetData(1, ref tipName); da.GetData(2, ref baseName); da.GetData(3, ref placement); da.GetData(4, ref all);
         try
         {
-            var (tree, tip) = RobotDescriptionSession.Project(description.Value, baseName, tipName);
-            if (tip is null) throw new ArgumentException("Choose a Tip link on Assemble or Robot From Description.");
+            var (tree, tipMaybe) = RobotDescriptionSession.Project(description.Value, baseName, tipName);
+            // SerialTipExtraction is a struct — unwrap SerialTipExtraction? before member access.
+            if (tipMaybe is not { } tip)
+                throw new ArgumentException("Choose a Tip link on Assemble or Robot From Description.");
             var resolvedTip = string.IsNullOrWhiteSpace(tipName) ? description.Value.TipLink! : tipName;
             var layout = PlanDofComposer.TipThenSideBranches(tree, tip.JointNames, resolvedTip);
             var count = all ? layout.JointNames.Count : tip.JointNames.Count;
