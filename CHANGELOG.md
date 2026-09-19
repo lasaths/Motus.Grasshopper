@@ -4,7 +4,7 @@
 
 ## 2.0.0 — Public product · Yak GA — 2026-09-19
 
-Aligned with **Motus.NET 2.0.0** (NuGet publish pending — Prefer UseLocal until nuget.org has **2.0.0**). Motus.Core **1.9.0** is live (CI `build-*-nuget` overrides to **1.9.0**). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak`; production `yak push` needs human Package Manager auth (no agent interactive login).
+Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/2.0.0). CI `build-*-nuget` uses the props pin (no last-published override). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak`; production `yak push` needs human Package Manager auth (no agent interactive login).
 
 ### Added
 
@@ -13,11 +13,11 @@ Aligned with **Motus.NET 2.0.0** (NuGet publish pending — Prefer UseLocal unti
 ### Changed
 
 - Plugin / yak manifest / `MotusNetVersion` pin aligned to **2.0.0**.
-- Docs (AGENTS, README, examples, regression matrix) describe **2.0.0** cut.
+- Docs (AGENTS, README, examples, regression matrix) describe **2.0.0** cut; CI NuGet jobs drop `MotusNetVersion=1.9.0` override.
 
 ### Motus.NET pin
 
-`MotusNetVersion` = **2.0.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). UseLocal until nuget.org lists Motus.Core **2.0.0**.
+`MotusNetVersion` = **2.0.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Default = NuGet; Prefer UseLocal optional for tip.
 
 ## 1.9.0 — Host product · Pick Place touch gate — 2026-09-19
 

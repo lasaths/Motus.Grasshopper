@@ -1,14 +1,14 @@
 # P8 / Milestone 1.9 Regression Matrix
 
-Host-readiness checklist for Motus.Grasshopper against Motus.NET **2.0.0** (UseLocal until NuGet publish).
+Host-readiness checklist for Motus.Grasshopper against Motus.NET **2.0.0** (nuget.org live).
 
-**Default path (after publish):** NuGet pin (`build/MotusNetPackages.props`). **CI / tip / pre-publish path:** `-UseLocal` sibling Motus.NET (required in GitHub Actions until **2.0.0** is on nuget.org; NuGet CI jobs override to live **1.8.0**). **Yak:** pack-only — `motus` is **not** on Rhino Package Manager (first public Yak target is **2.0.0**).
+**Default path:** NuGet pin (`build/MotusNetPackages.props`). **CI tip path:** `-UseLocal` sibling Motus.NET (Prefer UseLocal jobs; NuGet CI jobs use props **2.0.0**). **Yak:** pack-only — `motus` is **not** on Rhino Package Manager (first public Yak target is **2.0.0**).
 
 ## Non-Rhino (automatable)
 
 CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
-- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **2.0.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **2.0.0** on nuget.org.
+- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **2.0.0**; Motus.Core **2.0.0** on nuget.org; docs must not claim UseLocal-only / publish-pending.
 - [ ] `node scripts/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree; icon + dual-TFM pack path present; first public Yak remains **2.0.0** (pre-GA pack OK, production push blocked).
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
