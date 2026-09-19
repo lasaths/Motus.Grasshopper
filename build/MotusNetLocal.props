@@ -1,8 +1,9 @@
 <Project>
   <!--
     Opt-in local Motus.NET: -p:UseMotusNetProjectReference=true
-    (or ./build.ps1 -UseLocal). Default is NuGet MotusNetVersion (0.17.0 on
-    nuget.org) — VS cannot restore ProjectReferences outside Motus.Grasshopper.slnx.
+    (or ./build.ps1 -UseLocal). Default is NuGet MotusNetVersion (1.8.0 when
+    published on nuget.org; until then Prefer UseLocal). VS cannot restore
+    ProjectReferences outside Motus.Grasshopper.slnx.
     CI Prefer UseLocal so GH tracks Motus.NET master tip ahead of the pin.
   -->
   <PropertyGroup>
@@ -14,7 +15,7 @@
     <MotusNetSiblingRoot Condition="'$(MotusNetSiblingRoot)' == '' and Exists('$(MotusNetSiblingCandidateC)src\Motus.Core\Motus.Core.csproj')">$(MotusNetSiblingCandidateC)</MotusNetSiblingRoot>
     <MotusNetSiblingRoot Condition="'$(MotusNetSiblingRoot)' == ''">$(MotusNetSiblingCandidateB)</MotusNetSiblingRoot>
     <UseMotusNetProjectReference Condition="'$(UseMotusNetProjectReference)' == ''">false</UseMotusNetProjectReference>
-    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">0.17.0-local</MotusNetVersion>
+    <MotusNetVersion Condition="'$(UseMotusNetProjectReference)' == 'true'">1.8.0-local</MotusNetVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' == 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
