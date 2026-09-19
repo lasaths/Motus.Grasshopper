@@ -1,14 +1,14 @@
 # P8 / Milestone 1.8 Regression Matrix
 
-Host-readiness checklist for Motus.Grasshopper against Motus.NET **0.17.0** ([nuget.org](https://www.nuget.org/packages/Motus.Core/0.17.0)).
+Host-readiness checklist for Motus.Grasshopper against Motus.NET **1.8.0** (UseLocal until NuGet publish).
 
-**Default path:** NuGet pin (`build/MotusNetPackages.props`). **CI / tip path:** `-UseLocal` sibling Motus.NET (still required in GitHub Actions). **Yak:** pack-only — `motus` is **not** on Rhino Package Manager (first public Yak target is **2.0.0**).
+**Default path (after publish):** NuGet pin (`build/MotusNetPackages.props`). **CI / tip / pre-publish path:** `-UseLocal` sibling Motus.NET (required in GitHub Actions until **1.8.0** is on nuget.org). **Yak:** pack-only — `motus` is **not** on Rhino Package Manager (first public Yak target is **2.0.0**).
 
 ## Non-Rhino (automatable)
 
 CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
-- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **0.17.0**, nuget.org lists Motus.Core **0.17.0**, docs do not claim NuGet unreleased / UseLocal-only.
+- [ ] `node scripts/verify-motus-net-pin.mjs` — props pin = **1.8.0**; pre-publish allows UseLocal docs; post-publish requires Motus.Core **1.8.0** on nuget.org.
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
 - [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` via qa-smoke Cap block.
@@ -24,11 +24,11 @@ CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-mot
 - [ ] Motus Plan legged: Walk `Rb` (Mechanism) + ≥2 planes → full-driver gait `Tr` (`PlanBodyPath`, hard SSM, not TCP LIN); tip joint / 1-plane LIN unchanged; mixed plane+joint fails named.
 - [ ] Export: family warnings mirror Waypoints; `Retime` remains bool and optional `Retimer` defaults to `TotgLite`.
 - [ ] Example 10: Pick Place → one Program Auto Plan; SET 0.085/0.04; Preview holds Detach poses between cycles; plan ColScene = table only.
-- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect pin **0.17.0**; no Package Manager / Yak published claim.
+- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect pin **1.8.0**; no Package Manager / Yak published claim.
 
 ## Experimental mobility (Motus.NET tip — not GA)
 
-These land on Motus.NET **master** after the **0.17.0** NuGet cut (`HolonomicSE3`, Unitree H2 fixture, catalog fixtures). They are **not** Motus.Grasshopper GA and must not be marketed as Package Manager / 2.0 features.
+Experimental mobility (`HolonomicSE3`, Unitree H2/Go2 fixtures, catalog fixtures) ships in Motus.NET **1.8.0** package identity but remains **not** Motus.Grasshopper GA — do not market as Package Manager / 2.0 features.
 
 - [ ] Motus.NET tests green on tip: catalog robot smoke, `UnitreeH2FixtureTests`, HolonomicSE3 / aerial fixture (sibling UseLocal).
 - [ ] Optional Motus Robot load of meshless H2 / free-flyer URDF from Motus.NET fixtures via UseLocal — Status / remarks must say **experimental** (LoadTree + FK scrub only; no Walk, no biped, no flight controller).
