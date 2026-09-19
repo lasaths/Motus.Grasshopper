@@ -28,6 +28,8 @@ Model ──► Plan ──► Preview
 
 **Units:** joints default **radians** (toggle ° on Joint State `J`); geometry **meters**. Stewart plan `Q` = meters; serial/legged = radians. See [AGENTS.md](../AGENTS.md) for Family handoff.
 
+Product tiers (Supported / Advanced / Experimental) toward Yak GA **2.0.0**: [supported-surface.md](supported-surface.md).
+
 **Experimental (Motus.NET tip, not GH GA):** `HolonomicSE3` free-flyer mobility and Unitree H2 meshless fixture live on Motus.NET master ahead of some NuGet cuts. Motus.Grasshopper has **no** Aerial / H2 GA components — optional Motus Robot URDF load via `-UseLocal` only; Status must stay experimental. See [regression-matrix.md](regression-matrix.md).
 
 ## Model
