@@ -695,6 +695,51 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
         || !string.Equals(touchOk[0], "robotiq_2f85", StringComparison.Ordinal))
         Fail("Touch=robotiq_2f85 must succeed");
     Ok("Pick Place Touch contract: empty/blank Error; robotiq_2f85 ok");
+
+    // Milestone 1.9: Family handoff warnings (Rhino-free).
+    static RobotPreset Preset(string family, int axes, string model = "test") => new()
+    {
+        Manufacturer = RobotManufacturer.UniversalRobots,
+        ModelName = model,
+        Family = family,
+        AxisCount = axes
+    };
+    var stewartW = Motus.GH.FamilyHandoffWarnings.ForWaypoints(Preset(Units.StewartFamily, 6), 0, false, true, false, null);
+    if (stewartW.Count != 1 || stewartW[0] != Motus.GH.FamilyHandoffWarnings.StewartWaypoints)
+        Fail("Stewart Waypoints warning mismatch");
+    var aerialW = Motus.GH.FamilyHandoffWarnings.ForWaypoints(Preset("aerial", 0), 0, false, false, false, null);
+    if (aerialW.Count != 1 || aerialW[0] != Motus.GH.FamilyHandoffWarnings.AerialWaypoints)
+        Fail("Aerial Waypoints must warn HolonomicSE3 ≠ MoveJ");
+    var urdf0 = Motus.GH.FamilyHandoffWarnings.ForWaypoints(Preset("urdf", 0, "free_flyer"), 0, false, false, false, null);
+    if (urdf0.Count != 1 || urdf0[0] != Motus.GH.FamilyHandoffWarnings.UrdfZeroAxis)
+        Fail("Family=urdf AxisCount=0 must not use UR expect-6 warning");
+    var serial6 = Motus.GH.FamilyHandoffWarnings.ForWaypoints(Preset("serial", 6), 0, false, false, false, null);
+    if (serial6.Count != 0)
+        Fail("Serial 6R must not emit family handoff warning");
+    Ok("Family handoff: stewart/aerial/urdf-0/serial-6");
+
+    if (!Motus.GH.ExperimentalUrdfLoad.IsExperimentalPathOrModel("tests/fixtures/aerial/free_flyer_box.urdf"))
+        Fail("free_flyer path must be experimental");
+    var remarks = Motus.GH.ExperimentalUrdfLoad.RemarksFor("h2_minimal.urdf", "urdf", "h2_minimal", 0);
+    if (remarks.Count < 2
+        || !remarks.Contains(Motus.GH.ExperimentalUrdfLoad.ExperimentalRemark)
+        || !remarks.Contains(Motus.GH.ExperimentalUrdfLoad.ZeroAxisAddOn))
+        Fail("H2 AxisCount=0 must emit experimental + zero-axis remarks");
+    if (Motus.GH.ExperimentalUrdfLoad.RemarksFor("ur10e.urdf", "urdf", "UR10e", 6).Count != 0)
+        Fail("UR10e must not be marked experimental");
+    Ok("Experimental URDF load remarks: free-flyer/H2 vs UR10e");
+
+    // Program fingerprint includes Group/Attach/Robot (stale Tr when Attach changes).
+    var fpRobot = new RobotModel(Preset("serial", 6, "UR10e"));
+    var fpHome = new JointState(Enumerable.Repeat(0.0, 6).ToArray());
+    var fpGoal = new CartesianPose(new Frame(0.4, 0, 0.3));
+    var fpSegs = new MotionSegment[] { new LinSegment(fpGoal, 0.005) };
+    var fpNoGroup = Motus.GH.ProgramPlanFingerprint.Compute(fpRobot, null, fpSegs, fpHome, null, null, Array.Empty<AttachedBody>(), null);
+    var fpGroup = new PlanningGroup("arm", "base_link", "tool0", ["j0", "j1"]);
+    var fpWithGroup = Motus.GH.ProgramPlanFingerprint.Compute(fpRobot, null, fpSegs, fpHome, null, fpGroup, Array.Empty<AttachedBody>(), null);
+    if (fpNoGroup == fpWithGroup)
+        Fail("Program fingerprint must change when Group is set");
+    Ok("Program fingerprint includes Group");
 }
 
 // TL-009: Mechanism URDF XML round-trip (ToolGoo.Write/Read uses UrdfWriter.ToXml/TryParse)

@@ -435,6 +435,15 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
                     $"AllDrivers: Plan has {goo.Value.Preset.AxisCount} axes (tip {tipN} + side branches). Plane/LIN = tip IK (branches held); joint goals move DKP.");
             }
 
+            foreach (var remark in ExperimentalUrdfLoad.RemarksFor(
+                         path,
+                         goo.Value.Preset.Family,
+                         goo.Value.Preset.ModelName,
+                         goo.Value.Preset.AxisCount))
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, remark);
+            }
+
             ApplyPreview(goo, path);
             da.SetData(0, goo);
         }
@@ -788,52 +797,17 @@ public sealed class MotusWaypointsComponent : MotusComponentBase
 
         var indices = SelectDecimateIndices(t.Points.Count, decimate);
         var axisCount = t.Robot.Preset.AxisCount;
-        var stewart = Units.IsStewart(t.Robot.Preset) || ctx.Stewart is not null;
-        var legged = Units.IsLegged(t.Robot.Preset);
-        // Mirror Motus.NET Units.IsAerial / AerialFamily (string gate so NuGet 0.17.0 builds without tip API).
-        var aerial = string.Equals(t.Robot.Preset.Family, "aerial", StringComparison.OrdinalIgnoreCase);
         var treeDrivers = ctx.Tree?.DriverCount ?? 0;
         var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
-        if (stewart)
+        foreach (var warning in FamilyHandoffWarnings.ForWaypoints(
+                     t.Robot.Preset,
+                     treeDrivers,
+                     tipPathOnly,
+                     hasStewartContext: ctx.Stewart is not null,
+                     hasMechanism: ctx.Mechanism is not null,
+                     mechanismDriverCount: ctx.Mechanism?.DriverCount))
         {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "Stewart Family=stewart: Q values are leg lengths in meters — do not wire to UR MoveJ (radians).");
-        }
-        else if (legged)
-        {
-            if (ctx.Mechanism is not null && !tipPathOnly && axisCount == (ctx.Mechanism?.DriverCount ?? axisCount))
-            {
-                AddRuntimeMessage(
-                    GH_RuntimeMessageLevel.Warning,
-                    $"Family=legged full-driver gait: Q has {axisCount} joint(s) in radians (PlanBodyPath/Walk) — not UR MoveJ.");
-            }
-            else
-            {
-                AddRuntimeMessage(
-                    GH_RuntimeMessageLevel.Warning,
-                    tipPathOnly && treeDrivers > axisCount
-                        ? $"Family=legged tip-path: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
-                        : $"Family=legged: Q values are joint angles in radians (not Stewart meters) — do not wire full-driver gait to UR MoveJ.");
-            }
-        }
-        else if (aerial)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "Family=aerial: HolonomicSE3 body poses (m + RPY rad) — Q is not UR MoveJ radians. Prefer Motus Export bodyPose / Preview body scrub.");
-        }
-        else if (tipPathOnly && treeDrivers > axisCount)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                $"Tip-path robot: Q has {axisCount} joint(s) per waypoint (one serial chain) — not full mechanism ({treeDrivers} tree drivers). Do not wire to UR MoveJ for the whole robot.");
-        }
-        else if (axisCount != 6)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                $"Robot has {axisCount} axes; many UR controllers expect 6 joint values per waypoint.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, warning);
         }
 
         var tree = new GH_Structure<GH_Number>();
@@ -966,31 +940,15 @@ public sealed class MotusExportComponent : MotusComponentBase
     private void AddExportFamilyWarnings(Trajectory trajectory, RobotContext ctx)
     {
         var axisCount = trajectory.Robot.Preset.AxisCount;
-        var stewart = Units.IsStewart(trajectory.Robot.Preset) || ctx.Stewart is not null;
-        var legged = Units.IsLegged(trajectory.Robot.Preset);
-        // Mirror Motus.NET Units.IsAerial / AerialFamily (string gate so NuGet 0.17.0 builds without tip API).
-        var aerial = string.Equals(trajectory.Robot.Preset.Family, "aerial", StringComparison.OrdinalIgnoreCase);
         var treeDrivers = ctx.Tree?.DriverCount ?? 0;
         var tipPathOnly = treeDrivers > axisCount || ctx.TreeDriverHome is not null;
-        if (stewart)
+        foreach (var warning in FamilyHandoffWarnings.ForExport(
+                     trajectory.Robot.Preset,
+                     treeDrivers,
+                     tipPathOnly,
+                     hasStewartContext: ctx.Stewart is not null))
         {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "Family=stewart export: joint coordinates are leg lengths in meters — do not wire CSV/JSON Q values to UR MoveJ (radians).");
-        }
-        else if (legged)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                tipPathOnly && treeDrivers > axisCount
-                    ? $"Family=legged tip-path export: Q has {axisCount} joint(s) in radians (one leg) — not full mechanism ({treeDrivers} drivers). Do not wire to UR MoveJ."
-                    : "Family=legged export: Q values are joint angles in radians — not Stewart meters and not a UR MoveJ handoff for the whole mechanism.");
-        }
-        else if (aerial)
-        {
-            AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "Family=aerial export: bodyPose SE(3) (m + RPY rad) — not jointsRadians / UR MoveJ. Motus.NET JSON/CSV marks waypointsQ=not_ur_movej.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, warning);
         }
     }
 

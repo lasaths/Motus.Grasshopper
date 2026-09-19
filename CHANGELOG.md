@@ -5,6 +5,9 @@
 ### Fixed
 
 - Motus Pick Place: empty **Touch** is an Error and emits no `Seg` (fail-closed; avoids Program `Tr` null after Detach-at-place). qa-smoke covers `PickPlaceTouchContract`.
+- Motus Program: keep prior `Tr` on planning re-entry and empty Seg; Auto Plan fingerprint includes Group / Attach / Robot / Tool / Prior.
+- Motus Robot: experimental Remark for free-flyer / H2 / Go2 (and `Family=urdf` AxisCount=0) URDF loads.
+- Motus Waypoints / Export: shared `FamilyHandoffWarnings` (incl. `Family=urdf` AxisCount=0 ≠ MoveJ).
 
 
 ## 1.8.0 — Trust & polish · SemVer jump — 2026-09-19
