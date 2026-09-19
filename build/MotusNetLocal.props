@@ -1,9 +1,8 @@
 <Project>
   <!--
     Opt-in local Motus.NET: -p:UseMotusNetProjectReference=true
-    (or ./build.ps1 -UseLocal). Default is NuGet MotusNetVersion (1.8.0 when
-    published on nuget.org; until then Prefer UseLocal). VS cannot restore
-    ProjectReferences outside Motus.Grasshopper.slnx.
+    (or ./build.ps1 -UseLocal). Default is NuGet MotusNetVersion 1.8.0.
+    VS cannot restore ProjectReferences outside Motus.Grasshopper.slnx.
     CI Prefer UseLocal so GH tracks Motus.NET master tip ahead of the pin.
   -->
   <PropertyGroup>

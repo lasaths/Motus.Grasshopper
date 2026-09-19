@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- CI `build-*-nuget` jobs restore Motus.NET **1.8.0** (dropped `-p:MotusNetVersion=0.17.0` override); docs/AGENTS describe NuGet-default for the pin.
+
 ### Fixed
 
 - Motus Pick Place: empty **Touch** is an Error and emits no `Seg` (fail-closed; avoids Program `Tr` null after Detach-at-place). qa-smoke covers `PickPlaceTouchContract`.
@@ -9,22 +13,22 @@
 
 ## 1.8.0 — Trust & polish · SemVer jump — 2026-09-19
 
-Aligned with **Motus.NET 1.8.0** (NuGet publish pending — build with `-UseLocal` / `-p:UseMotusNetProjectReference=true` until nuget.org has **1.8.0**). Public package SemVer jumps **0.17.0 → 1.8.0** (no empty 1.0–1.7 line); Yak still unpublished (Package Manager target **2.0.0**).
+Aligned with **Motus.NET 1.8.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/1.8.0). Public package SemVer jumps **0.17.0 → 1.8.0** (no empty 1.0–1.7 line); Yak still unpublished (Package Manager target **2.0.0**). Default Release restores NuGet; `-UseLocal` remains for Motus.NET tip / CI.
 
 ### Added
 
-- CI `build-*-nuget` jobs alongside Prefer UseLocal (host-readiness for NuGet-default restore once **1.8.0** is published).
+- CI `build-*-nuget` jobs alongside Prefer UseLocal (NuGet-default restore for pin **1.8.0**).
 - Cap `ToolCapContract.TryValidateBinding` extraction + qa-smoke Cap block; regression matrix points at Motus.NET `RegressionMatrixLogicTests`.
-- `scripts/verify-motus-net-pin.mjs` — pin/docs/nuget.org honesty check (pre-publish mode allows UseLocal until **1.8.0** lands on nuget.org).
+- `scripts/verify-motus-net-pin.mjs` — pin/docs/nuget.org honesty check.
 
 ### Changed
 
 - Plugin / yak manifest / `MotusNetVersion` pin aligned to **1.8.0**.
-- Docs (AGENTS, README, examples, regression matrix) describe **1.8.0** cut + UseLocal until NuGet publish.
+- Docs (AGENTS, README, examples, regression matrix) describe **1.8.0** NuGet-default cut.
 
 ### Motus.NET pin
 
-`MotusNetVersion` = **1.8.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). UseLocal until nuget.org lists Motus.Core **1.8.0**.
+`MotusNetVersion` = **1.8.0** ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)). Local default = NuGet; CI Prefer UseLocal against sibling Motus.NET.
 
 ## 0.17.0 — Pick/place transfers + attachment timelines — 2026-09-19
 
