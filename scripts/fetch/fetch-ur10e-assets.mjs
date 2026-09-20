@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Download UR10e visual (DAE) and collision (STL) meshes from Universal Robots ROS2 description.
- * Populates examples/ur10e and resources/robots/ur10e_robotiq (plugin bundle).
- * Run from repo root: node scripts/fetch-ur10e-assets.mjs
+ * Populates examples/assets/ur10e and resources/robots/ur10e_robotiq (plugin bundle).
+ * Run from repo root: node scripts/fetch/fetch-ur10e-assets.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { fetchRobotiqAssets } from './fetch-robotiq-2f85-assets.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(__dirname, '../examples/ur10e');
-const bundleDir = path.resolve(__dirname, '../resources/robots/ur10e_robotiq');
+const outDir = path.resolve(__dirname, '../../examples/assets/ur10e');
+const bundleDir = path.resolve(__dirname, '../../resources/robots/ur10e_robotiq');
 const baseUrl =
   'https://raw.githubusercontent.com/UniversalRobots/Universal_Robots_ROS2_Description/rolling/meshes/ur10e';
 

@@ -160,10 +160,10 @@ INSTALL=1 ./build.sh
 #   pwsh ./build.ps1 -Configuration Release -Yak
 #   # or without pwsh after a dual-TFM Release build:
 #   ./scripts/pack-yak.sh
-node scripts/verify-yak-packaging.mjs   # identity + manifest anatomy (no Rhino)
+node scripts/verify/verify-yak-packaging.mjs   # identity + manifest anatomy (no Rhino)
 ```
 
-Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Verify: `./scripts/verify-install.ps1` (Windows).
+Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Verify: `./scripts/verify/verify-install.ps1` (Windows).
 
 | Variable | Purpose |
 |----------|---------|
@@ -204,10 +204,10 @@ Nine generated definitions in [`examples/`](examples/README.md) (**never hand-ed
 
 ```bash
 node scripts/generate-examples.mjs
-node scripts/validate-ghx.mjs
+node scripts/verify/validate-ghx.mjs
 ```
 
-Before Rhino-touching releases: `./scripts/verify-qa.ps1 -Configuration Release -Install` ([AGENTS.md](AGENTS.md) checklist).
+Before Rhino-touching releases: `./scripts/verify/verify-qa.ps1 -Configuration Release -Install` ([AGENTS.md](AGENTS.md) checklist).
 
 ## External plugins and safety
 

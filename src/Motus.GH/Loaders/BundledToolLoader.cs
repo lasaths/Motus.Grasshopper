@@ -151,7 +151,7 @@ internal static class BundledToolLoader
             if (vertices.Count < 3 || indices.Count < 3)
                 return $"Robotiq STL has no triangles: {path}";
             if (!MeshVerticesFinite(vertices))
-                return $"Robotiq STL has invalid (non-finite) vertices. Re-run: node scripts/fetch-ur10e-assets.mjs ({path})";
+                return $"Robotiq STL has invalid (non-finite) vertices. Re-run: node scripts/fetch/fetch-ur10e-assets.mjs ({path})";
             return null;
         }
         return "Robotiq gripper mesh not found beside the plugin. Reinstall Motus or rebuild with resources/tools deployed.";

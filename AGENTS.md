@@ -28,12 +28,12 @@ src/Motus.GH/
   Data/ Params/   # TrajectoryGoo, Param_Motus*
   Preview/ UI/    # Scrub, ButtonAttributes, FK preview
   Resources/icons/# Phosphor duotone PNGs (embedded)
-examples/         # 01–10 via generate-examples.mjs (10 with --only=10)
+examples/         # 01–10 GHX + assets/ (URDF/SRDF); 10 Cassis-authored
 packaging/yak/    # Package Manager manifest + icon (first public push = 2.0.0)
-scripts/          # build helpers, qa-smoke, validate-ghx, verify-yak-packaging
+scripts/          # generate-examples, fetch/, verify/, pack-yak, qa-smoke
 ```
 
-Build: `./build.sh` (macOS) / `./build.ps1` (Windows). QA: `./scripts/verify-qa.ps1 -Configuration Release -Install`.
+Build: `./build.sh` (macOS) / `./build.ps1` (Windows). QA: `./scripts/verify/verify-qa.ps1 -Configuration Release -Install`.
 
 After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
@@ -91,7 +91,7 @@ Icon name in component ctor maps to `{name}-duotone.png` (e.g. Waypoints → `pa
 
 GitHub-hosted CI **compiles** qa-smoke but **skips the run** (no Rhino 8). Before release / merge of Rhino-touching changes, run locally:
 
-`./scripts/verify-qa.ps1 -Configuration Release -Install`
+`./scripts/verify/verify-qa.ps1 -Configuration Release -Install`
 
 Also check in Rhino (full list: [docs/regression-matrix.md](docs/regression-matrix.md)):
 
@@ -107,3 +107,7 @@ Also check in Rhino (full list: [docs/regression-matrix.md](docs/regression-matr
 - `10_pick_place`: UR10e fingers-down home (Rhino TCP Z = world −Z); C# layout script (5×4 rotating destack → 5 columns × 4) + Collision Boxes + Pick Place → one Program (Auto Plan); SET open `0.085` / close `0.04`; Pick Place `Touch=robotiq_2f85` (**required** — empty Touch Errors, no Seg); plan ColScene = **empty** (Robotiq closed-envelope hull intersects the table at grasp — preview ColScene still has table+bricks); Cassis-authored (not `generate-examples.mjs --only=10`)
 - Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract
+
+## Example layout (agents)
+
+Canonical glossary + band layout rules live in [examples/README.md](examples/README.md) (Example layout). Edit `scripts/generate-examples.mjs` only — never hand-save `.ghx` as source of truth (exception: `10_pick_place.ghx`). Close stale open example tabs before Cassis reload.

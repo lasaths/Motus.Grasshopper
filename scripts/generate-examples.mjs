@@ -2292,7 +2292,7 @@ function graph02() {
     outRef(sphere.node, 'Object'),
     outRef(box.node, 'Object'),
   ]);
-  const srdfPanel = pathPanel(ex, cy + 300, repoRel('srdf', 'table_base.srdf'), 'Srdf', 280, 40);
+  const srdfPanel = pathPanel(ex, cy + 300, repoRel('assets', 'srdf', 'table_base.srdf'), 'Srdf', 280, 40);
   const scene = motusComponent('colScene', ex + 460, cy + 160, {
     Objects: [outRef(obstaclesMerge.node, 'Result')],
     Srdf: [outRef(srdfPanel.node, 'Text')],
@@ -2727,7 +2727,7 @@ function graph07() {
   const stateClosed = motusComponent('toolState', rx, yR + 160, {
     Tool: [outRef(tool.node, 'Tool')],
   }, { toolStatePreset: 'Closed' });
-  const urdfFile = pathPanel(rx + 200, yL, repoRel('ur10e', 'ur10e_minimal.urdf'), 'Urdf', 140, 36);
+  const urdfFile = pathPanel(rx + 200, yL, repoRel('assets', 'ur10e', 'ur10e_minimal.urdf'), 'Urdf', 140, 36);
   const robot = motusComponent('robot', rx + 360, yL, {
     Path: [outRef(urdfFile.node, 'Text')],
     Tool: [outRef(tool.node, 'Tool')],

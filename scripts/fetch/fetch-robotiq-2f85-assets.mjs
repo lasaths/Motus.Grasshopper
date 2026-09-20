@@ -11,8 +11,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..');
-const ur10eDir = path.join(repoRoot, 'examples', 'ur10e');
+const repoRoot = path.resolve(__dirname, '../..');
+const ur10eDir = path.join(repoRoot, 'examples', 'assets', 'ur10e');
 const toolsDir = path.join(repoRoot, 'resources', 'tools');
 const bundleUrdf = path.join(repoRoot, 'resources', 'robots', 'ur10e_robotiq', 'ur10e_robotiq.urdf');
 const exampleUrdf = path.join(ur10eDir, 'ur10e_robotiq.urdf');

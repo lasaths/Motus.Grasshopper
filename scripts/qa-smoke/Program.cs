@@ -974,7 +974,7 @@ var robotiqStl = FindExampleUrdf(Path.Combine("resources", "tools", "robotiq_2f8
 var (robotiqVerts, robotiqIndices) = ReadBinaryStl(robotiqStl);
 if (robotiqVerts.Count < 300 || robotiqIndices.Count < 300) Fail("Robotiq merged STL should have substantial triangle count");
 if (robotiqVerts.Any(v => v.Any(double.IsNaN) || v.Any(double.IsInfinity)))
-    Fail("Robotiq merged STL must have finite vertex coordinates (re-run fetch-ur10e-assets.mjs)");
+    Fail("Robotiq merged STL must have finite vertex coordinates (re-run scripts/fetch/fetch-ur10e-assets.mjs)");
 var robotiqGeom = CollisionObject.Mesh("robotiq_2f85", Frame.Identity, robotiqVerts, robotiqIndices);
 var robotiqTool = new ToolDefinition("robotiq_2f85", robotiqTcp, robotiqGeom, ToolCapabilities.Robotiq2F85)
 {

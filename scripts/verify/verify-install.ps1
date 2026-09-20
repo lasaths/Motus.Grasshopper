@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$out = Join-Path $PSScriptRoot "..\src\Motus.GH\bin\$Configuration\net8.0-windows"
+$out = Join-Path $PSScriptRoot "..\..\src\Motus.GH\bin\$Configuration\net8.0-windows"
 $required = @(
     "Motus.GH.gha",
     "Motus.Core.dll",

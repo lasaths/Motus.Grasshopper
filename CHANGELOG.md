@@ -51,7 +51,7 @@ Aligned with **Motus.NET 1.8.0** on [nuget.org](https://www.nuget.org/packages/M
 
 - CI `build-*-nuget` jobs alongside Prefer UseLocal (host-readiness for NuGet-default restore).
 - Cap `ToolCapContract.TryValidateBinding` extraction + qa-smoke Cap block; regression matrix points at Motus.NET `RegressionMatrixLogicTests`.
-- `scripts/verify-motus-net-pin.mjs` — pin/docs/nuget.org honesty check.
+- `scripts/verify/verify-motus-net-pin.mjs` — pin/docs/nuget.org honesty check.
 
 ### Changed
 

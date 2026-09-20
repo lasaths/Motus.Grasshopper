@@ -4,7 +4,7 @@
 
 ```bash
 node scripts/generate-examples.mjs
-node scripts/validate-ghx.mjs
+node scripts/verify/validate-ghx.mjs
 ```
 
 ## Prerequisite: Motus.GH installed
@@ -95,12 +95,35 @@ Drag Number Slider `N` (4–12) on **09** to change leg count.
 
 ## SRDF / URDF assets
 
-- `examples/srdf/table_base.srdf` — **02** allowed pairs + groups
+Under `examples/assets/` (paths in GHX are relative to `examples/`):
+
+- `assets/srdf/table_base.srdf` — **02** allowed pairs + groups
+- `assets/ur10e/` — URDFs; run `node scripts/fetch/fetch-ur10e-assets.mjs` for meshes
+- `assets/urdf/turntable_arm.urdf` — turntable-only URDF
 - `resources/robots/ur10e_robotiq/ur10e_with_turntable.xacro` — **06** (UR prefab + 1-DOF 8-spoke turntable)
-- `examples/ur10e/` — run `node scripts/fetch-ur10e-assets.mjs` for meshes
 
 ## Editing
 
-**Only:** edit `scripts/generate-examples.mjs`, then regenerate + validate. Layout: pipeline **Robot → Env + Traj → Plan → Play**, size-25 group scribbles, title + note scribbles ([CONTEXT.md](../CONTEXT.md)).
+**Only:** edit `scripts/generate-examples.mjs`, then regenerate + validate. Layout: pipeline **Robot → Env + Traj → Plan → Play**, size-25 group scribbles, title + note scribbles (see below).
 
 Controller handoff: [AGENTS.md](../AGENTS.md).
+
+## Example layout
+
+**Example definition** — a lean Grasshopper canvas under `examples/` that teaches one Motus workflow end-to-end. Avoid: demo file, sample script, tutorial document.
+
+**Example generator** — `scripts/generate-examples.mjs` is the only source of truth for layout, groups, scribbles, and wires. Hand-edits in Grasshopper are discarded on regenerate (exception: `10_pick_place.ghx`).
+
+**Canvas group** — a coloured GH Group for one stage. Groups must not overlap. Colours match Motus subcategory tints: Model emerald (robot/tool), Plan periwinkle (goals/moves), Collision peach (obstacles/attach/RRT), Preview lavender (plan/program + preview).
+
+**Band / pipeline layout** — stages left→right as **Robot → Env + Traj → Plan → Play**. Each stage is a coloured Group with a size-25 Scribble header. Wires stay short and mostly horizontal. Stage AABBs must not overlap.
+
+**Plan–Scrub–Preview** — Scrub between Plan and Preview (not stacked above Preview). Deltas from Plan origin: Scrub (+120,+88, w=200), Preview (+420,+9). Examples set Motus Preview `SS`/`ShowStart` on, and UR10e / Motus Robot viewport preview off (`Hidden`), so only Preview draws the robot.
+
+**Scribble title** — short canvas title (size 28, X≈0, Y≈−69). **Note scribble** — one-line hint under the title (size 14, X≈0, Y≈−31). Keep sparse; no README-on-canvas.
+
+**Layout QA (no Grasshopper)** — `node scripts/generate-examples.mjs` runs authored Bounds overlap checks and writes SVG maps to `.cassis-audit/layout/*.svg`. Optional Cassis `capture_canvas` / `canvas_snapshot` when Rhino is open.
+
+**Cassis reload** — before regenerating or re-opening an example, close every open `.ghx` except the Cassis host (`ListOpenDocuments` → `CloseDocument` with `saveFirst:false` until only `cassis:true` remains). Stale open tabs keep old InstanceGuids and ignore disk.
+
+**Trajectory** — Motus planned path (joint waypoints + timing) from Motus Plan or Motus Program. **Waypoints export** — controller-oriented joint tree `{waypoint → q[n]}` from Motus Waypoints; do not treat FK TCP planes as MoveL feed for joint-space / RRT paths.

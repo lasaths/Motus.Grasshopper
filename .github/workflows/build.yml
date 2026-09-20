@@ -105,13 +105,13 @@ jobs:
 
       # Grasshopper .gha build requires Rhino 8 on the machine — run ./build.ps1 locally.
       - name: Fetch UR10e example meshes
-        run: node scripts/fetch-ur10e-assets.mjs
+        run: node scripts/fetch/fetch-ur10e-assets.mjs
 
       - name: Regenerate + validate example GHX
         run: |
           node scripts/generate-examples.mjs
           git diff --exit-code -- examples/*.ghx
-          node scripts/validate-ghx.mjs
+          node scripts/verify/validate-ghx.mjs
 
       - name: Planner-only dependency fence
         shell: bash
@@ -122,10 +122,10 @@ jobs:
           fi
 
       - name: Verify Motus.NET NuGet pin + docs
-        run: node scripts/verify-motus-net-pin.mjs
+        run: node scripts/verify/verify-motus-net-pin.mjs
 
       - name: Verify Yak packaging anatomy (pre-2.0.0 GA)
-        run: node scripts/verify-yak-packaging.mjs
+        run: node scripts/verify/verify-yak-packaging.mjs
 
       # Compiles against NuGet RhinoCommon (ref-only). Runtime loads Rhino 8 System\RhinoCommon.dll.
       - name: Build QA smoke
@@ -139,7 +139,7 @@ jobs:
           $candidates += (Join-Path ${env:ProgramFiles} 'Rhino 8\System\RhinoCommon.dll')
           $rhino = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $rhino) {
-            Write-Host '::notice title=qa-smoke skipped::No Rhino 8 on this runner — validate-ghx + compile only. REQUIRED before Rhino-touching releases: ./scripts/verify-qa.ps1 -Configuration Release -Install (or dotnet run --project scripts/qa-smoke/QaSmoke.csproj -c Release) on a machine with Rhino 8 / Rhino8Dir.'
+            Write-Host '::notice title=qa-smoke skipped::No Rhino 8 on this runner — validate-ghx + compile only. REQUIRED before Rhino-touching releases: ./scripts/verify/verify-qa.ps1 -Configuration Release -Install (or dotnet run --project scripts/qa-smoke/QaSmoke.csproj -c Release) on a machine with Rhino 8 / Rhino8Dir.'
             exit 0
           }
           Write-Host "Using RhinoCommon: $rhino"

@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+$root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $motusNet = Join-Path $root "..\Motus.NET"
 
 Write-Host "=== Motus verify-qa ($Configuration) ==="
@@ -17,7 +17,7 @@ Write-Host "`n[1/4] Build..."
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`n[2/4] Install artifacts check..."
-& (Join-Path $root "scripts\verify-install.ps1") -Configuration $Configuration
+& (Join-Path $PSScriptRoot "verify-install.ps1") -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`n[3/4] Motus.NET unit tests..."

@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIRST_PUBLIC_YAK = "2.0.0";
 
 function fail(msg) {

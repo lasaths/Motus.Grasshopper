@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Validate Motus example .ghx files (XML + wire GUID integrity).
- * Run from repo root: node scripts/validate-ghx.mjs
+ * Run from repo root: node scripts/verify/validate-ghx.mjs
  *
  * When Rhino 8 is installed, also checks GH_IO.dll can deserialize each archive.
  */
@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const examplesDir = path.resolve(__dirname, '../examples');
+const examplesDir = path.resolve(__dirname, '../../examples');
 const ghIoDll = 'C:\\Program Files\\Rhino 8\\Plug-ins\\Grasshopper\\GH_IO.dll';
 
 const MOTUS_COMPONENTS = new Map([

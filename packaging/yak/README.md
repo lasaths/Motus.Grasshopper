@@ -46,7 +46,7 @@ Prerequisites (human / authenticated host):
 2. Clean tree (or stash WIP) — do not bake dirty WIP into the package
 3. Fresh dual-TFM Release build identity matches **2.0.0**
 4. Yak auth: `~/.mcneel/yak.yml` or `YAK_TOKEN` (`yak login` / `yak login --ci`)
-5. `node scripts/verify-yak-packaging.mjs` green
+5. `node scripts/verify/verify-yak-packaging.mjs` green
 
 ```bash
 # Prefer production only when Version == 2.0.0

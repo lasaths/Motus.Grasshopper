@@ -72,7 +72,7 @@ xacro urdf/ur.urdf.xacro ur_type:=ur10e name:=ur10e > ur10e.urdf
 
 
 
-**Meshes:** run `node scripts/fetch-ur10e-assets.mjs` from the repo root (~10 MB arm meshes + Robotiq collision STLs under `meshes/`).
+**Meshes:** run `node scripts/fetch/fetch-ur10e-assets.mjs` from the repo root (~10 MB arm meshes + Robotiq collision STLs under `meshes/`).
 
 **Robotiq URDF sources:** collision meshes are merged from [PickNik `ros2_robotiq_gripper`](https://github.com/PickNikRobotics/ros2_robotiq_gripper) (`robotiq_description`). Alternatives: [ros-industrial/robotiq](https://github.com/ros-industrial/robotiq), [a-price/robotiq_arg85_description](https://github.com/a-price/robotiq_arg85_description). Re-run the fetch script after cloning those repos if you replace part STLs.
 
