@@ -184,6 +184,19 @@ internal static class GhExtract
 
         if (goo.CastTo<Plane>(out var plane))
         {
+            // HolonomicSE3 free-flyer: Start plane = body pose (not serial TCP IK).
+            if (Units.IsAerial(session.Preset) || Units.IsAerial(ctx.Model.Preset) || session.Preset.AxisCount == 0)
+            {
+                if (!MobilityModel.HolonomicSE3.TryFromFrame(
+                        FrameConversion.FromPlanePlate(plane), out _, out var se3Status))
+                {
+                    error = $"Start: {se3Status ?? "HolonomicSE3 invalid (RPY singularity or non-finite)."}";
+                    return false;
+                }
+                start = new JointState(Array.Empty<double>());
+                return true;
+            }
+
             if (ctx.IsStewart || Units.IsStewart(session.Preset))
             {
                 if (ctx.Stewart is null)
@@ -607,6 +620,14 @@ internal static class GhExtract
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
+            // AxisCount=0 aerial free-flyer — sphere/mesh factory cannot build; use hull.
+            if (Units.IsAerial(robot.Preset) || robot.Preset.AxisCount == 0)
+            {
+                IBaseFrameCollisionChecker hull = FreeFlyerHullCollisionChecker.ForFreeFlyerBox(robot.Preset.BaseFrame);
+                if (attached is { Count: > 0 })
+                    hull = new BaseFrameAttachCollisionChecker(hull, attached, robot.Preset.BaseFrame);
+                return hull;
+            }
             return null;
         }
     }
@@ -664,6 +685,23 @@ internal static class GhExtract
                 var result = ik.TrySolveDetailed(new CartesianPose(FrameConversion.FromPlanePlate(plane)));
                 if (!result.Success)
                     errors.Add($"Goal[{i}]: {result}");
+            }
+            return errors;
+        }
+
+        // Family=aerial / AxisCount=0 free-flyer: HolonomicSE3 Plan — no serial tip IK preflight.
+        if (Units.IsAerial(session.Preset) || Units.IsAerial(ctx.Model.Preset) || session.Preset.AxisCount == 0)
+        {
+            for (var i = 0; i < goals.Count; i++)
+            {
+                if (goals[i].plane is not { } plane)
+                    continue;
+                var o = plane.Origin;
+                if (!double.IsFinite(o.X) || !double.IsFinite(o.Y) || !double.IsFinite(o.Z))
+                    errors.Add($"Goal[{i}]: plane origin NaN/Inf (m).");
+                else if (!MobilityModel.HolonomicSE3.TryFromFrame(
+                             FrameConversion.FromPlanePlate(plane), out _, out var status))
+                    errors.Add($"Goal[{i}]: {status ?? "HolonomicSE3 invalid (RPY singularity or non-finite)."}");
             }
             return errors;
         }
@@ -792,6 +830,8 @@ internal static class GhExtract
         JointState? goalState = goal.joints;
         if (goal.plane is { } plane)
         {
+            if (Units.IsAerial(ctx.EffectiveModel.Preset) || Units.IsAerial(ctx.Model.Preset))
+                return null; // HolonomicSE3 — no serial IK preflight
             if (ctx.IsStewart || Units.IsStewart(ctx.EffectiveModel.Preset))
             {
                 if (ctx.Stewart is null)

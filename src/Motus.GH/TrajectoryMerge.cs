@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Grasshopper.Kernel;
 using Motus.Core;
@@ -60,11 +61,96 @@ internal static class TrajectoryMerge
             return true;
         }
 
+        if (valid.Any(g => !SameAgent(g.Value!, valid[0].Value!)))
+        {
+            goo = ConcatenateSequence(valid);
+            owner.AddRuntimeMessage(
+                multiLevel,
+                $"One Play: concatenated {valid.Count} agents (shared scrub; hold outside each window).");
+            return true;
+        }
+
         goo = Concatenate(valid);
         owner.AddRuntimeMessage(
             multiLevel,
             $"Concatenated {valid.Count} trajectories from Motus Plan (sequential goals).");
         return true;
+    }
+
+    private static bool SameAgent(Trajectory a, Trajectory b) =>
+        a.Robot.Preset.AxisCount == b.Robot.Preset.AxisCount
+        && string.Equals(a.Robot.Preset.Family, b.Robot.Preset.Family, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(a.Robot.Preset.ModelName, b.Robot.Preset.ModelName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Dual-agent pass-off clock: scrub duration = sum of segment times; <see cref="TrajectoryGoo.SequenceAgents"/>
+    /// holds the real robots. Clock <see cref="Trajectory"/> uses the last agent (arm) for pin outputs.
+    /// </summary>
+    public static TrajectoryGoo ConcatenateSequence(IReadOnlyList<TrajectoryGoo> goos)
+    {
+        var agents = new List<TrajectorySequenceAgent>(goos.Count);
+        var clockPoints = new List<TrajectoryPoint>();
+        var timeOffset = 0.0;
+        var mergedSpans = new List<AttachPreviewSpan>();
+
+        for (var i = 0; i < goos.Count; i++)
+        {
+            var traj = goos[i].Value!;
+            if (traj.Points.Count == 0)
+                continue;
+
+            var start = timeOffset;
+            var end = timeOffset + traj.Points[^1].TimeSeconds;
+            agents.Add(new TrajectorySequenceAgent(goos[i], start, end));
+
+            if (goos[i].AttachSpans is { Count: > 0 } spans)
+            {
+                foreach (var span in spans)
+                {
+                    mergedSpans.Add(new AttachPreviewSpan
+                    {
+                        StartSeconds = start + span.StartSeconds,
+                        EndSeconds = start + span.EndSeconds,
+                        Bodies = span.Bodies,
+                        ReleaseWorldPose = span.ReleaseWorldPose
+                    });
+                }
+            }
+
+            // Clock samples at each agent boundary (times only — Preview poses via SequenceAgents).
+            var last = goos[^1].Value!.Points[^1];
+            clockPoints.Add(new TrajectoryPoint(start, last.JointState, last.MotionType, last.SegmentIndex,
+                last.BlendRadiusMeters, last.ToolState, last.BaseFrameOverride));
+            clockPoints.Add(new TrajectoryPoint(end, last.JointState, last.MotionType, last.SegmentIndex,
+                last.BlendRadiusMeters, last.ToolState, last.BaseFrameOverride));
+            timeOffset = end;
+        }
+
+        if (clockPoints.Count == 0)
+            return goos[0];
+
+        var lastGoo = goos[^1];
+        var clock = new Trajectory(lastGoo.Value!.Robot, clockPoints, mergedSpans.Select(s =>
+            new AttachTimeSpan(s.StartSeconds, s.EndSeconds, s.Bodies, s.ReleaseWorldPose)).ToArray());
+        return new TrajectoryGoo(clock)
+        {
+            Chain = lastGoo.Chain,
+            Tree = lastGoo.Tree,
+            Stewart = lastGoo.Stewart,
+            PreviewGeometry = lastGoo.PreviewGeometry,
+            PreviewMeshColors = lastGoo.PreviewMeshColors,
+            BaseFrameOverride = lastGoo.BaseFrameOverride,
+            MobilityGoal = lastGoo.MobilityGoal,
+            ToolSnapshot = lastGoo.ToolSnapshot,
+            ToolCapabilitiesSnapshot = lastGoo.ToolCapabilitiesSnapshot,
+            DiagnosticsSnapshot = lastGoo.DiagnosticsSnapshot,
+            ProvenanceSnapshot = lastGoo.ProvenanceSnapshot,
+            TreeDriverHome = lastGoo.TreeDriverHome,
+            BasePath = lastGoo.BasePath,
+            TerrainSampler = lastGoo.TerrainSampler,
+            AttachSpans = mergedSpans.Count > 0 ? mergedSpans : null,
+            SequenceAgents = agents
+        };
     }
 
     public static TrajectoryGoo Concatenate(IReadOnlyList<TrajectoryGoo> goos)

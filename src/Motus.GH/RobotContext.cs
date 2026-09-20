@@ -21,7 +21,7 @@ public readonly struct RobotContext
     public double FemurStanceRadians { get; }
     public double TibiaStanceRadians { get; }
     public JointState? TreeDriverHome { get; }
-    public MobilityModel.HolonomicSE2? MobilityGoal { get; }
+    public MobilityModel? MobilityGoal { get; }
 
     public RobotContext(
         RobotModel model,
@@ -34,7 +34,7 @@ public readonly struct RobotContext
         KinematicTree? tree = null,
         StewartPlatform? stewart = null,
         JointState? treeDriverHome = null,
-        MobilityModel.HolonomicSE2? mobilityGoal = null,
+        MobilityModel? mobilityGoal = null,
         LeggedMechanism? mechanism = null,
         double hipStanceRadians = LeggedGait.DefaultHipStanceRadians,
         double femurStanceRadians = LeggedGait.DefaultFemurStanceRadians,

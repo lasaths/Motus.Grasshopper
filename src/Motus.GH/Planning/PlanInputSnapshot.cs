@@ -1,4 +1,5 @@
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
 using Motus.Core;
 using Motus.Geometry;
 using Motus.GH.Components;
@@ -26,6 +27,8 @@ internal sealed class PlanInputSnapshot
     public string Fingerprint { get; init; } = string.Empty;
     public bool IsAutoPlan { get; init; }
     public bool BodyPathMode { get; init; }
+    /// <summary>HolonomicSE3 Start body plane when Start pin is a Plane (Family=aerial).</summary>
+    public Plane? AerialStartPlane { get; init; }
 
     public SerialJointChain? Chain { get; init; }
     public KinematicTree? Tree { get; init; }
@@ -37,7 +40,7 @@ internal sealed class PlanInputSnapshot
     public RobotCollisionModel? PreviewGeometry { get; init; }
     public Color?[]? PreviewMeshColors { get; init; }
     public Frame? BaseFrameOverride { get; init; }
-    public MobilityModel.HolonomicSE2? MobilityGoal { get; init; }
+    public MobilityModel? MobilityGoal { get; init; }
     public ToolDefinition? ToolSnapshot { get; init; }
     public JointState? TreeDriverHome { get; init; }
 
@@ -91,6 +94,16 @@ internal sealed class PlanInputSnapshot
 
         if (!GhExtract.TryStartOrHome(da, startIdx, context, out var start, out var usedDefaultStart, out error))
             return false;
+        Plane? aerialStartPlane = null;
+        var aerial = Units.IsAerial(context.EffectiveModel.Preset)
+                     || Units.IsAerial(context.Model.Preset)
+                     || context.EffectiveModel.Preset.AxisCount == 0;
+        if (aerial && startIdx >= 0)
+        {
+            IGH_Goo? startGoo = null;
+            if (da.GetData(startIdx, ref startGoo) && startGoo is not null && startGoo.CastTo<Plane>(out var startPl))
+                aerialStartPlane = startPl;
+        }
         var linStep = MotusPlanComponent.DefaultLinStepMeters;
         var stepInput = linStep;
         if (stepIdx >= 0 && da.GetData(stepIdx, ref stepInput))
@@ -144,6 +157,7 @@ internal sealed class PlanInputSnapshot
             CollisionWarning = collisionParse.Warning,
             Fingerprint = fingerprint + ":bodyPath=" + owner.BodyPathMode,
             BodyPathMode = owner.BodyPathMode,
+            AerialStartPlane = aerialStartPlane,
             IsAutoPlan = owner.AutoPlanEnabled,
             Chain = robotGoo.Chain,
             Tree = robotGoo.Tree,

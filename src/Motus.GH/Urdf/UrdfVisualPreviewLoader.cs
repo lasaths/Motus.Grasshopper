@@ -65,6 +65,14 @@ internal static class UrdfVisualPreviewLoader
     {
         if (robotRoot is null) return null;
         var chainLinkNames = BuildActuatedChainLinkNames(robotRoot, baseLink, tipLink);
+        // Free-flyer / single-link (base==tip, no joints): actuated chain is empty — still load body visuals.
+        if (chainLinkNames.Count == 0
+            && string.Equals(baseLink, tipLink, StringComparison.OrdinalIgnoreCase)
+            && robotRoot.Elements("link").Any(l =>
+                string.Equals(l.Attribute("name")?.Value, baseLink, StringComparison.OrdinalIgnoreCase)))
+        {
+            chainLinkNames = new List<string> { baseLink };
+        }
         if (chainLinkNames.Count == 0) return null;
 
         var materials = UrdfMaterialParser.ParseRobotMaterials(robotRoot);

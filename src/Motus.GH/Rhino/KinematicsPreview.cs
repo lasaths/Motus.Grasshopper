@@ -275,6 +275,9 @@ public static class KinematicsPreview
                 return FrameConversion.ToPlanePlate(baseF.Frame);
             return FrameConversion.ToPlanePlate(fk.Pose.Tcp);
         }
+        // Free-flyer / aerial: body = plate axes (not serial Z→X remap).
+        if (Units.IsAerial(robot.Preset) || robot.Preset.AxisCount == 0)
+            return FrameConversion.ToPlanePlate(baseF.Frame);
         if (TryFk(robot, chain) is not { } serialFk)
             return FrameConversion.ToPlane(baseF.Frame);
         var tool = toolFrame ?? robot.Preset.ToolFrame;
@@ -1040,9 +1043,20 @@ public static class KinematicsPreview
         KinematicTree? tree,
         IReadOnlyList<string>? armJointNames,
         IReadOnlyList<double>? treeDriverHome,
-        out Transform world)
+        out Transform world,
+        Frame? baseFrameOverride = null)
     {
         world = Transform.Unset;
+        // Free-flyer / aerial: AttachedBody.TcpLocalPose is base-local (ADR 0002), not TCP-local.
+        if (baseFrameOverride is not null || Units.IsAerial(model.Preset) || model.Preset.AxisCount == 0)
+        {
+            var parent = baseFrameOverride ?? baseFrame.Frame;
+            world = ToRhinoXform(Transforms.Multiply(
+                Transforms.FromFrame(parent),
+                Transforms.FromFrame(body.TcpLocalPose)));
+            return true;
+        }
+
         if (!TryComputeTcpTransformMatrix(
                 model, state, chain, baseFrame, toolFrame, tree, armJointNames, treeDriverHome, out var tcpM))
             return false;

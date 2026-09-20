@@ -264,7 +264,7 @@ const MOTUS = {
       { name: 'Prefix', nick: 'N', desc: 'Name prefix → N00, N01, …', optional: false, text: 'b' },
     ],
     outputs: [{ name: 'Objects', nick: 'O', desc: 'Collision objects', access: 1 }] },
-  pickPlace: { guid: 'b5c6d7e8-f9a0-4123-c456-789abcdef012', name: 'Motus Pick Place', nick: 'PickPlace', w: 74, h: 144,
+  pickPlace: { guid: 'b5c6d7e8-f9a0-4123-c456-789abcdef012', name: 'Motus Pick Place', nick: 'PickPlace', w: 74, h: 164,
     inputs: [
       { name: 'Grasp', nick: 'G', desc: 'Grasp TCP planes (visit order)', optional: false, access: 1 },
       { name: 'Place', nick: 'Pl', desc: 'Place TCP planes', optional: false, access: 1 },
@@ -273,6 +273,8 @@ const MOTUS = {
       { name: 'Open', nick: 'Wopen', desc: 'Open jaw width (m)', optional: false, number: 0.085 },
       { name: 'Close', nick: 'Wclose', desc: 'Close jaw width (m)', optional: false, number: 0.04 },
       { name: 'Step', nick: 'St', desc: 'LIN step (m)', optional: true, number: 0.005 },
+      { name: 'Sampling Transfers', nick: 'RRT', desc: 'RRT between hover poses', optional: true, bool: false },
+      { name: 'Touch Bodies', nick: 'Touch', desc: 'Gripper collision body names (required)', optional: false, access: 1, text: 'robotiq_2f85' },
     ],
     outputs: [{ name: 'Segments', nick: 'Seg', desc: 'Motion segments for Motus Program', access: 1 }] },
   colMesh: { guid: 'f4d5e6f7-a8b9-4012-d345-6789abcdef01', name: 'Motus Collision Mesh', nick: 'ColMesh', w: 74, h: 54,
@@ -1119,8 +1121,17 @@ function belowPreview(planY, gap = STACK_GAP) {
 function previewWithScrub(planX, planY, trajectoryRef, options = {}) {
   const scrubW = options.scrubWidth ?? PLAN_SCRUB_W;
   const scrub = motusScrub(planX + PLAN_SCRUB_DX, planY + PLAN_SCRUB_DY, options.scrubValue ?? 0, scrubW);
+  const trajRefs = Array.isArray(trajectoryRef) ? trajectoryRef : [trajectoryRef];
+  let merge = null;
+  let trajWire;
+  if (trajRefs.length > 1) {
+    merge = nativeMerge(planX + PLAN_SCRUB_DX, planY + PLAN_SCRUB_DY + 36, trajRefs);
+    trajWire = outRef(merge.node, 'Result');
+  } else {
+    trajWire = trajRefs[0];
+  }
   const previewInputs = {
-    Trajectory: [trajectoryRef],
+    Trajectory: [trajWire],
     Position: [outRef(scrub.node, 'Number')],
     ...(options.inputs ?? {}),
   };
@@ -1136,7 +1147,7 @@ function previewWithScrub(planX, planY, trajectoryRef, options = {}) {
     previewInputs,
     previewOpts,
   );
-  return { scrub, preview };
+  return { scrub, preview, merge };
 }
 
 function nativePanel(x, y, text, nick = '', w = NATIVE.panel.w, h = NATIVE.panel.h, colourArgb = '255;255;250;90') {
@@ -2025,7 +2036,8 @@ function outRef(node, outputName) {
 function instanceOf(obj) {
   if (obj?.node?.instance) return obj.node.instance;
   if (obj?.instance) return obj.instance;
-  throw new Error('object missing InstanceGuid');
+  const hint = obj?.node?.key || obj?.key || (obj?.xml ? 'xml-only' : typeof obj);
+  throw new Error('object missing InstanceGuid: ' + hint);
 }
 
 /** Merge N streams — one wire per Data pin (never multi-source a Motus list pin). */
@@ -2968,7 +2980,73 @@ function graph10() {
   );
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09];
+/**
+ * 11 — free-flyer HolonomicSE3 hover (Motus 2.1 foundation).
+ * Drone-only: Motus Robot (Family→aerial) + Start/Goal WorldXY planes → Plan → Preview.
+ * Pass-off with arm is deferred until this path is solid in Rhino.
+ */
+function graph11() {
+  const { title, note } = exampleHeader(
+    '11 · Aerial hover',
+    'Free-flyer HolonomicSE3 Start→Goal. Auto Plan. bodyPose ≠ MoveJ.',
+  );
+  const hy = PIPE.y0;
+  const cy = stageContentY(hy);
+  const rx = PIPE.x0;
+  const ex = rx + 360;
+  const planX = ex + 280;
+
+  const flyerPath = pathPanel(rx, cy, repoRel('assets', 'aerial', 'free_flyer_box.urdf'), 'FlyerUrdf', 240, 36);
+  const drone = motusComponent('robot', rx, cy + 80, {
+    Path: [outRef(flyerPath.node, 'Text')],
+  }, { text: { BaseLink: 'body', TipLink: 'body' }, hidden: true });
+
+  // WorldXY body planes (Z up) — FromPlanePlate → Motus identity; not serial Z→X remap.
+  const uz = nativeUnitZ(ex, cy);
+  const ptStart = nativeConstructPoint(ex, cy + 60, [-0.5, 0.35, 0.55]);
+  const plStart = nativePlane(ex + 140, cy + 60, ptStart.node.outputs[0], uz.node.outputs[0]);
+  const ptGoal = nativeConstructPoint(ex, cy + 140, [0.45, -0.25, 1.05]);
+  const plGoal = nativePlane(ex + 140, cy + 140, ptGoal.node.outputs[0], uz.node.outputs[0]);
+
+  const plan = motusComponent('plan', planX, cy, {
+    Robot: [outRef(drone.node, 'Robot')],
+    Goal: [outRef(plGoal.node, 'Plane')],
+    Start: [outRef(plStart.node, 'Plane')],
+  });
+  const { scrub, preview } = previewWithScrub(planX, cy, outRef(plan.node, 'Trajectory'));
+  const stackX = planX + PLAN_PREVIEW_DX;
+  const waypoints = motusComponent('waypoints', stackX, belowPreview(cy), {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+  const exp = motusComponent('export', stackX, belowPreview(cy) + 100, {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+
+  const gRobot = stageGroup('Robot', [flyerPath, drone], GROUP_COLOUR.robot, rx, hy);
+  const gEnv = stageGroup('Env + Traj', [
+    { xml: uz.xml, node: uz.node }, ptStart, plStart, ptGoal, plGoal,
+  ], GROUP_COLOUR.goals, ex, hy);
+  const gPlan = stageGroup('Plan', [plan], GROUP_COLOUR.plan, planX, hy);
+  const gPlay = stageGroup('Play', [scrub, preview, waypoints, exp], GROUP_COLOUR.play, planX + PIPE.playHeaderDx, hy);
+
+  const objs = [
+    title, note, flyerPath, drone,
+    { xml: uz.xml }, { xml: ptStart.xml }, { xml: plStart.xml },
+    { xml: ptGoal.xml }, { xml: plGoal.xml },
+    plan, scrub, preview, waypoints, exp,
+    gRobot.header, gEnv.header, gPlan.header, gPlay.header,
+    gRobot.group, gEnv.group, gPlan.group, gPlay.group,
+  ];
+  objs._meta = {
+    fileName: '11_aerial_hover.ghx',
+    description:
+      'Free-flyer HolonomicSE3: Motus Robot (assets/aerial/free_flyer_box.urdf) Start/Goal WorldXY planes → Plan → Preview / Export / Waypoints. Auto Plan. Motus 2.1 ADR 0006.',
+    view: { x: 520, y: 220, zoom: 0.7 },
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11];
 // graph10 (10_pick_place.ghx) is Cassis-authored — not in default regen list.
 const legacy = [
   '01_basic_planning.ghx',
@@ -2997,7 +3075,7 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const onlyGraph = onlyArg?.slice('--only='.length);
 const onlyBuilders = {
   1: graph01, 2: graph02, 3: graph03, 4: graph04, 5: graph05,
-  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10,
+  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11,
 };
 
 const buildList = onlyGraph

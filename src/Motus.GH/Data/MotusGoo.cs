@@ -315,6 +315,21 @@ public sealed class AttachPreviewSpan
     public Frame? ReleaseWorldPose { get; init; }
 }
 
+/// <summary>One agent window on a multi-robot Preview scrub (aerial → arm pass-off).</summary>
+public sealed class TrajectorySequenceAgent
+{
+    public TrajectoryGoo Goo { get; }
+    public double StartSeconds { get; }
+    public double EndSeconds { get; }
+
+    public TrajectorySequenceAgent(TrajectoryGoo goo, double startSeconds, double endSeconds)
+    {
+        Goo = goo;
+        StartSeconds = startSeconds;
+        EndSeconds = endSeconds;
+    }
+}
+
 public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
 {
     public SerialJointChain? Chain { get; set; }
@@ -327,7 +342,7 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
     public RobotCollisionModel? PreviewGeometry { get; set; }
     public Color?[]? PreviewMeshColors { get; set; }
     public Frame? BaseFrameOverride { get; set; }
-    public MobilityModel.HolonomicSE2? MobilityGoal { get; set; }
+    public MobilityModel? MobilityGoal { get; set; }
     public ToolDefinition? ToolSnapshot { get; set; }
     public ToolCapabilities? ToolCapabilitiesSnapshot { get; set; }
     public IReadOnlyList<PlanningMessage>? DiagnosticsSnapshot { get; set; }
@@ -349,6 +364,12 @@ public sealed class TrajectoryGoo : MotusGooBase<Trajectory>
             }).ToArray() : null);
         set => _attachSpans = value;
     }
+
+    /// <summary>
+    /// Sequential multi-agent Play (aerial → arm): shared scrub clock on <see cref="Value"/>,
+    /// each agent holds outside its window. Null = single-robot concat.
+    /// </summary>
+    public IReadOnlyList<TrajectorySequenceAgent>? SequenceAgents { get; set; }
 
     /// <summary>Keep preview/session metadata while replacing points and the attachment clock.</summary>
     internal TrajectoryGoo WithTrajectory(Trajectory trajectory)

@@ -19,7 +19,8 @@ internal sealed record PlanRequest(
     double LinStepMeters,
     bool CollisionInputWired,
     RrtPlanSettings RrtSettings,
-    bool BodyPathMode = false);
+    bool BodyPathMode = false,
+    Plane? AerialStartPlane = null);
 
 internal sealed class PlanExecutionResult
 {
@@ -126,9 +127,14 @@ internal static class PlanExecutor
             else
             {
                 var useSampling = needsCollision || request.Context.MobilityGoal is not null;
-                var method = goal.plane is not null ? "TCP LIN" : useSampling ? "RRT" : "Joint motion";
+                var aerialBody = Units.IsAerial(session.Preset) || session.Preset.AxisCount == 0;
+                var method = aerialBody && goal.plane is not null
+                    ? "Aerial SE3"
+                    : goal.plane is not null ? "TCP LIN" : useSampling ? "RRT" : "Joint motion";
                 reportActivity?.Invoke($"{method} · goal {goalIndex + 1}/{goalCount}");
-                result = goal.plane is { } plane
+                result = aerialBody && goal.plane is { } aerialPlane
+                    ? PlanAerialSe3(request, aerialPlane, cancellationToken, goalProgress, sharedChecker)
+                    : goal.plane is { } plane
                     ? PlanCartesianLin(request, currentStart, plane, cancellationToken, goalProgress, sharedChecker,
                         phase => reportActivity?.Invoke($"{phase} · goal {goalIndex + 1}/{goalCount}"))
                     : useSampling
@@ -178,7 +184,7 @@ internal static class PlanExecutor
     {
         if (segment.Points.Count == 0) return acc;
         if (acc is null)
-            return new Trajectory(robot, segment.Points);
+            return new Trajectory(robot, segment.Points, segment.AttachSpans);
 
         // Mutate via new list sized for growth — avoid O(N²) ToList() on every goal append.
         var points = new List<TrajectoryPoint>(acc.Points.Count + segment.Points.Count);
@@ -187,10 +193,140 @@ internal static class PlanExecutor
         for (var i = 1; i < segment.Points.Count; i++)
         {
             var pt = segment.Points[i];
-            points.Add(new TrajectoryPoint(timeOffset + pt.TimeSeconds, pt.JointState));
+            points.Add(new TrajectoryPoint(
+                timeOffset + pt.TimeSeconds,
+                pt.JointState,
+                pt.MotionType,
+                pt.SegmentIndex,
+                pt.BlendRadiusMeters,
+                pt.ToolState,
+                pt.BaseFrameOverride));
         }
 
-        return new Trajectory(robot, points);
+        return new Trajectory(robot, points, MergeAttachSpans(acc.AttachSpans, segment.AttachSpans, timeOffset));
+    }
+
+    private static IReadOnlyList<AttachTimeSpan>? MergeAttachSpans(
+        IReadOnlyList<AttachTimeSpan> a,
+        IReadOnlyList<AttachTimeSpan> b,
+        double timeOffset)
+    {
+        if (a.Count == 0 && b.Count == 0) return null;
+        if (b.Count == 0) return a;
+        if (a.Count == 0)
+        {
+            if (timeOffset == 0) return b;
+            return b.Select(s => new AttachTimeSpan(
+                s.StartSeconds + timeOffset,
+                s.EndSeconds + timeOffset,
+                s.Bodies,
+                s.ReleaseWorldPose)).ToArray();
+        }
+
+        var merged = new List<AttachTimeSpan>(a.Count + b.Count);
+        merged.AddRange(a);
+        foreach (var s in b)
+        {
+            merged.Add(new AttachTimeSpan(
+                s.StartSeconds + timeOffset,
+                s.EndSeconds + timeOffset,
+                s.Bodies,
+                s.ReleaseWorldPose));
+        }
+        return merged;
+    }
+
+    private static PlanningResult PlanAerialSe3(
+        PlanRequest request,
+        Plane plane,
+        CancellationToken cancellationToken,
+        Action<double>? goalProgress,
+        ICollisionChecker? sharedChecker)
+    {
+        // Body frame = plate mapping (WorldXY ≡ Motus identity). Serial FromPlane remaps
+        // Rhino Z→Motus X and turns level hover into pitch≈±π/2 singularity.
+        var frame = FrameConversion.FromPlanePlate(plane);
+        if (!MobilityModel.HolonomicSE3.TryFromFrame(frame, out var se3, out var status))
+        {
+            return PlanningResult.Failed(new[]
+            {
+                new PlanningMessage(
+                    PlanningMessageCodes.InvalidOptions,
+                    status ?? "HolonomicSE3: invalid plane (RPY singularity or non-finite).",
+                    PlanningMessageSeverity.Error)
+            });
+        }
+
+        var robot = request.Context.Model;
+        // SamplingPlanner starts HolonomicSE3 from Preset.BaseFrame — park the free-flyer
+        // at the Start plane when wired (ADR 0002 sequential pass-off).
+        if (request.AerialStartPlane is { } startPl
+            && MobilityModel.HolonomicSE3.TryFromFrame(
+                FrameConversion.FromPlanePlate(startPl), out var startSe3, out _))
+        {
+            var p = robot.Preset;
+            robot = new RobotModel(
+                new RobotPreset
+                {
+                    Manufacturer = p.Manufacturer,
+                    ModelName = p.ModelName,
+                    Family = p.Family,
+                    AxisCount = p.AxisCount,
+                    JointLimits = p.JointLimits,
+                    ReachMeters = p.ReachMeters,
+                    PayloadKg = p.PayloadKg,
+                    BaseFrame = new BaseFrame(startSe3.BaseFrame),
+                    ToolFrame = p.ToolFrame,
+                    Notes = p.Notes,
+                    SourceNote = p.SourceNote,
+                    Disclaimer = p.Disclaimer
+                },
+                robot.CollisionModel,
+                robot.JointNames);
+        }
+
+        var empty = new JointState(Array.Empty<double>());
+        var attached = request.PlanningContext.Attached;
+        // Aerial always uses FreeFlyerHull (+ attach wrap). Shared arm mesh checkers are wrong here.
+        ICollisionChecker checker = sharedChecker is IBaseFrameCollisionChecker
+            ? sharedChecker
+            : FreeFlyerHullCollisionChecker.ForFreeFlyerBox(robot.Preset.BaseFrame);
+        if (attached.Count > 0 && checker is IBaseFrameCollisionChecker baseChecker and not BaseFrameAttachCollisionChecker)
+            checker = new BaseFrameAttachCollisionChecker(baseChecker, attached, robot.Preset.BaseFrame);
+
+        var opts = request.RrtSettings.ToOptions(cancellationToken, goalProgress);
+        var planner = SamplingPlanner.Create(checker, opts);
+        var result = planner.Plan(new PlanningRequest(
+            robot,
+            empty,
+            empty,
+            new PlanningOptions
+            {
+                Mobility = se3,
+                MobilityBoundsSE3 = MobilityBoundsSE3.HoverHandoff,
+                CollisionScene = request.PlanningContext.Scene,
+                CollisionChecker = checker,
+                AttachedBodies = attached.Count > 0 ? attached : null,
+                MaxJointStepRadians = request.RrtSettings.StepRadians
+            }));
+        if (!result.Success || result.Trajectory is null)
+            return result;
+
+        // Pass-off only: dwell at hover + carry Attach for the aerial scrub window.
+        // Bare HolonomicSE3 Plan (example 11 hover) returns the SE3 path as-is.
+        var traj = result.Trajectory;
+        if (attached.Count > 0)
+        {
+            traj = AerialStationHold.AppendHold(traj, 1.0);
+            var tEnd = traj.Points[^1].TimeSeconds;
+            traj = new Trajectory(traj.Robot, traj.Points, new[]
+            {
+                new AttachTimeSpan(0, tEnd, attached.ToList())
+            });
+        }
+
+        goalProgress?.Invoke(1.0);
+        return PlanningResult.Succeeded(traj, result.Messages);
     }
 
     private static PlanningResult PlanCartesianLin(

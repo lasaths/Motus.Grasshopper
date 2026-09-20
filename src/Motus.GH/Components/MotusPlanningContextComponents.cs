@@ -124,13 +124,16 @@ public sealed class MotusAttachBodyComponent : MotusComponentBase
         Frame tcpLocal;
         if (graspTcp.IsValid)
         {
-            tcpLocal = AttachBodyGeometry.TcpLocalFromGrasp(
-                FrameConversion.FromPlane(graspTcp),
-                objGoo.Value.Pose);
+            // WorldXY / body frames (Z≈+world Z) use plate mapping; serial TCP (Z≈−world Z) uses tool remap.
+            var graspFrame = graspTcp.ZAxis * Vector3d.ZAxis > 0.5
+                ? FrameConversion.FromPlanePlate(graspTcp)
+                : FrameConversion.FromPlane(graspTcp);
+            tcpLocal = AttachBodyGeometry.TcpLocalFromGrasp(graspFrame, objGoo.Value.Pose);
         }
         else
         {
-            tcpLocal = FrameConversion.FromPlane(tcp);
+            // Manual TcpLocal is Motus XYZ (plate) — aerial base-local hang uses this.
+            tcpLocal = FrameConversion.FromPlanePlate(tcp);
             if (tcp.IsValid && Math.Abs(tcp.OriginX) + Math.Abs(tcp.OriginY) + Math.Abs(tcp.OriginZ) > 1e-6
                 && tcp.Origin.DistanceTo(Point3d.Origin) > 1e-6)
             {

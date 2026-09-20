@@ -1,6 +1,6 @@
 # Example Grasshopper Definitions
 
-**Never hand-edit generated `examples/*.ghx`.** Change `scripts/generate-examples.mjs`, then regenerate. Exception: `10_pick_place.ghx` is Cassis-authored (C# tower layout); do not regenerate with `--only=10`.
+**Never hand-edit generated `examples/*.ghx`.** Change `scripts/generate-examples.mjs`, then regenerate. Exception: `10_pick_place.ghx` is Cassis-authored (C# tower layout); do not regenerate with `--only=10`. Example `11_aerial_hover.ghx` is generated (`--only=11`).
 
 ```bash
 node scripts/generate-examples.mjs
@@ -38,6 +38,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `08_stewart_tcp_path.ghx` | Motus Stewart → Plan TCP path (leg lengths in meters) |
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 | `10_pick_place.ghx` | UR10e destack: C# layout (5×4 tower → 5 columns × 4) + Collision Boxes + Pick Place (`Touch=robotiq_2f85`) → one Program; plan ColScene empty; preview ColScene = table+bricks |
+| `11_aerial_hover.ghx` | Motus 2.1: free-flyer HolonomicSE3 Start→Goal (WorldXY body); Preview / Export bodyPose; `assets/aerial/free_flyer_box.urdf` (arm pass-off deferred) |
 
 ## Component coverage (01–06 core)
 

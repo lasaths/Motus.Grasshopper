@@ -54,6 +54,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     private List<Mesh> _currentMeshes = new();
     private List<Mesh> _startMeshes = new();
     private List<Mesh> _obstacleMeshes = new();
+    private List<Mesh> _sequenceMeshes = new();
     // Draw immutable local meshes with world transforms during Play to avoid
     // invalidating mesh display buffers on every timer tick.
     private Transform[]? _playWorldTransforms;
@@ -214,6 +215,8 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                 bb.Union(c.BoundingBox);
             foreach (var mesh in _obstacleMeshes)
                 bb.Union(mesh.GetBoundingBox(false));
+            foreach (var mesh in _sequenceMeshes)
+                bb.Union(mesh.GetBoundingBox(false));
             return bb.IsValid ? bb : BoundingBox.Unset;
         }
     }
@@ -222,6 +225,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
     {
         if (Locked) return;
         DrawColoredMeshes(args, _currentMeshes, isStartGhost: false, _playWorldTransforms);
+        DrawColoredMeshes(args, _sequenceMeshes, isStartGhost: false);
         if (_showStart)
             DrawColoredMeshes(args, _startMeshes, isStartGhost: true);
         CollisionViewportPreview.DrawMeshes(args, _obstacleMeshes);
@@ -524,7 +528,14 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         Frame? dynamicBase = null;
         if (_trajGoo?.BasePath is { Count: > 0 } bp)
             dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), elapsed);
-        var duration = _trajectory.DurationSeconds;
+        else if (_trajectory is not null && TrajectorySampler.AtTimeBaseFrame(_trajectory, elapsed) is { } bf)
+            dynamicBase = bf.Frame;
+        var duration = _trajectory!.DurationSeconds;
+        if (_trajGoo?.SequenceAgents is { Count: > 0 } agents)
+        {
+            RebuildSequenceMeshes(agents, elapsed);
+            _playWorldTransforms = null;
+        }
         if (elapsed >= duration - 1e-6)
         {
             // ponytail: snap to exact end so the last frame is not skipped by timer jitter
@@ -534,6 +545,10 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             ResolveFrame(out state, out _, out _, out toolState);
             if (_trajGoo?.BasePath is { Count: > 0 } bp2)
                 dynamicBase = BasePathSampler.AtTime(bp2, PreviewTrajectory(), duration);
+            else if (TrajectorySampler.AtTimeBaseFrame(_trajectory, duration) is { } bfEnd)
+                dynamicBase = bfEnd.Frame;
+            if (_trajGoo?.SequenceAgents is { Count: > 0 } agentsEnd)
+                RebuildSequenceMeshes(agentsEnd, duration);
             if (_meshCache is not null && _currentMeshes.Count > 0)
                 _meshCache.UpdateMeshes(state, _currentMeshes, toolState, dynamicBase);
             _playWorldTransforms = null;
@@ -736,8 +751,33 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _previewTrajectory = new Trajectory(ctx.Model, previewPoints);
         ResolveFrame(out var state, out var timeSeconds, out _index, out var toolState);
         Frame? dynamicBase = null;
-        if (_trajGoo?.BasePath is { Count: > 0 } bp)
-            dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), timeSeconds);
+        if (_trajGoo?.SequenceAgents is { Count: > 0 } agents)
+        {
+            RebuildSequenceMeshes(agents, timeSeconds);
+            _playWorldTransforms = null; // multi-agent: skip play transform fast-path
+            var last = agents[^1];
+            var lastTraj = last.Goo.Value;
+            if (lastTraj is not null)
+            {
+                var local = timeSeconds - last.StartSeconds;
+                if (local < 0) local = 0;
+                var lastDur = last.EndSeconds - last.StartSeconds;
+                if (local > lastDur) local = lastDur;
+                if (last.Goo.BasePath is { Count: > 0 } bpLast)
+                    dynamicBase = BasePathSampler.AtTime(bpLast, lastTraj, local);
+                else if (TrajectorySampler.AtTimeBaseFrame(lastTraj, local) is { } bfLast)
+                    dynamicBase = bfLast.Frame;
+            }
+        }
+        else
+        {
+            DisposeMeshes(_sequenceMeshes);
+            if (_trajGoo?.BasePath is { Count: > 0 } bp)
+                dynamicBase = BasePathSampler.AtTime(bp, PreviewTrajectory(), timeSeconds);
+            else if (TrajectorySampler.AtTimeBaseFrame(_trajectory, timeSeconds) is { } bf)
+                dynamicBase = bf.Frame;
+        }
+
         // Concatenate() allocates a new Trajectory each solve — compare content, not reference.
         var staticsDirty = trajectoryChanged || _staticsFor is null;
         if (staticsDirty)
@@ -819,7 +859,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
             RedrawPlayFrame();
             return;
         }
-        da.SetDataList(0, _currentMeshes);
+        da.SetDataList(0, CloneMeshesForOutput(_currentMeshes));
         if (ctx.Stewart is not null)
             da.SetDataList(1, KinematicsPreview.StewartLegLines(ctx.Stewart, state).ToList());
         else
@@ -873,6 +913,31 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         var hidden = new HashSet<string>(StringComparer.Ordinal);
         var activeBodyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var attachedCount = 0;
+        // One Play: pose aerial carry with the free-flyer's BaseFrameOverride, not the arm TCP.
+        Frame? attachParentBase = null;
+        RobotContext attachCtx = ctx;
+        JointState attachState = state;
+        if (_trajGoo?.SequenceAgents is { Count: > 0 } agents)
+        {
+            foreach (var agent in agents)
+            {
+                if (timeSeconds + 1e-9 < agent.StartSeconds || timeSeconds > agent.EndSeconds + 1e-9)
+                    continue;
+                var traj = agent.Goo.Value;
+                if (traj is null) break;
+                var local = Math.Clamp(timeSeconds - agent.StartSeconds, 0, agent.EndSeconds - agent.StartSeconds);
+                attachCtx = agent.Goo.Context();
+                attachState = TrajectorySampler.AtTime(traj, local, out _);
+                if (TrajectorySampler.AtTimeBaseFrame(traj, local) is { } bf)
+                    attachParentBase = bf.Frame;
+                break;
+            }
+        }
+        else if (_trajectory is not null && TrajectorySampler.AtTimeBaseFrame(_trajectory, timeSeconds) is { } bfSolo)
+        {
+            attachParentBase = bfSolo.Frame;
+        }
+
         if (activeSpan is not null)
         {
             foreach (var body in activeSpan.Bodies)
@@ -882,8 +947,9 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
                     hidden.Add(sourceName);
 
                 if (!KinematicsPreview.TryAttachedWorldXform(
-                        body, state, ctx.EffectiveModel, ctx.Chain, ctx.Base, ctx.Tool,
-                        ctx.Tree, ctx.Model.JointNames, ctx.TreeDriverHome?.Positions, out var world))
+                        body, attachState, attachCtx.EffectiveModel, attachCtx.Chain, attachCtx.Base, attachCtx.Tool,
+                        attachCtx.Tree, attachCtx.Model.JointNames, attachCtx.TreeDriverHome?.Positions, out var world,
+                        attachParentBase))
                     continue;
                 if (!_attachedLocalCache.TryGetValue(body.Name, out var local))
                 {
@@ -1045,6 +1111,7 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _obstacleMeshes.Clear();
         DisposeMeshes(_currentMeshes);
         DisposeMeshes(_startMeshes);
+        DisposeMeshes(_sequenceMeshes);
         DisposeMeshes(_activeAttachedMeshes);
         _activeAttachedLast.Clear();
         _activeAttachedNames.Clear();
@@ -1070,6 +1137,29 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         foreach (var mesh in meshes)
             mesh.Dispose();
         meshes.Clear();
+    }
+
+    /// <summary>
+    /// GH VolatileData keeps the Mesh refs from SetDataList; later DisposeMeshes/_meshCache.Dispose
+    /// must not kill those. Emit duplicates so Cassis/downstream can read outputs safely.
+    /// </summary>
+    private static List<Mesh> CloneMeshesForOutput(IReadOnlyList<Mesh> source)
+    {
+        var list = new List<Mesh>(source.Count);
+        foreach (var mesh in source)
+        {
+            if (mesh is null) continue;
+            try
+            {
+                if (!mesh.IsValid) continue;
+                list.Add(mesh.DuplicateMesh());
+            }
+            catch (ObjectDisposedException)
+            {
+                // Skip already-disposed (should not happen if we own _currentMeshes alone).
+            }
+        }
+        return list;
     }
 
     private static void DisposeMeshValues<TKey>(Dictionary<TKey, Mesh> dict) where TKey : notnull
@@ -1108,6 +1198,52 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         _customColors = colors.Select(c => c.Value).ToList();
     }
 
+    private void RebuildSequenceMeshes(IReadOnlyList<TrajectorySequenceAgent> agents, double globalTimeSeconds)
+    {
+        DisposeMeshes(_sequenceMeshes);
+        // Last agent owns _currentMeshes / pin outputs; companions fill _sequenceMeshes.
+        for (var i = 0; i < agents.Count - 1; i++)
+        {
+            var agent = agents[i];
+            var traj = agent.Goo.Value;
+            if (traj is null || traj.Points.Count == 0) continue;
+
+            var local = globalTimeSeconds - agent.StartSeconds;
+            if (local < 0) local = 0;
+            var dur = agent.EndSeconds - agent.StartSeconds;
+            if (local > dur) local = dur;
+
+            var ctx = agent.Goo.Context();
+            var previewGeometry = RobotPreviewGeometry.ForViewport(
+                ctx.PreviewGeometry ?? ctx.EffectiveModel.CollisionModel,
+                agent.Goo.ToolSnapshot);
+            if (previewGeometry is null) continue;
+
+            var state = TrajectorySampler.AtTime(traj, local, out _);
+            var toolState = TrajectorySampler.AtTimeToolState(traj, local);
+            Frame? dynamicBase = null;
+            if (agent.Goo.BasePath is { Count: > 0 } bp)
+                dynamicBase = BasePathSampler.AtTime(bp, traj, local);
+            else if (TrajectorySampler.AtTimeBaseFrame(traj, local) is { } bf)
+                dynamicBase = bf.Frame;
+
+            using var cache = KinematicsPreview.PreviewMeshCache.TryCreate(
+                ctx.EffectiveModel,
+                previewGeometry,
+                ctx.Chain,
+                ctx.Base,
+                ctx.Tool,
+                agent.Goo.ToolCapabilitiesSnapshot,
+                ctx.PreviewMeshColors,
+                ctx.Tree,
+                ctx.Model.JointNames,
+                agent.Goo.ToolSnapshot?.Bindings,
+                ctx.TreeDriverHome);
+            if (cache is null) continue;
+            _sequenceMeshes.AddRange(cache.MeshesFor(state, toolState, dynamicBase));
+        }
+    }
+
     private void ResolveFrame(out JointState state, out double timeSeconds, out int index, out EndEffectorState? toolState)
     {
         var duration = _trajectory!.DurationSeconds;
@@ -1120,6 +1256,22 @@ public sealed class MotusPreviewComponent : MotusComponentBase, IGH_VariablePara
         }
         else
             elapsed = _position * duration;
+
+        // Multi-agent One Play: pin/FK outputs track the last agent (arm), held before its window.
+        if (_trajGoo?.SequenceAgents is { Count: > 0 } agents)
+        {
+            var last = agents[^1];
+            var lastTraj = last.Goo.Value ?? _trajectory;
+            var local = elapsed - last.StartSeconds;
+            if (local < 0) local = 0;
+            var lastDur = last.EndSeconds - last.StartSeconds;
+            if (local > lastDur) local = lastDur;
+            state = TrajectorySampler.AtTime(lastTraj, local, out index);
+            toolState = TrajectorySampler.AtTimeToolState(lastTraj, local);
+            timeSeconds = elapsed;
+            _index = index;
+            return;
+        }
 
         state = TrajectorySampler.AtTime(PreviewTrajectory(), elapsed, out index);
         toolState = TrajectorySampler.AtTimeToolState(_trajectory, elapsed);

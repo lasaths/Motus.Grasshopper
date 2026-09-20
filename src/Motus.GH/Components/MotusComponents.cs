@@ -358,6 +358,7 @@ public sealed class MotusRobotComponent : RobotSourceComponentBase
         try
         {
             var goo = UrdfRobotLoad.Load(path, baseLink, tipLink, allDrivers);
+            goo.Value = ExperimentalUrdfLoad.PromoteFreeFlyerFamily(goo.Value!, path);
             // PreviewGeometry/Tree come from a shared URDF cache — clone preview before Tl-merge mutates the goo.
             goo.PreviewGeometry = ClonePreview(goo.PreviewGeometry);
             if (basePl.IsValid) goo.BaseFrameOverride = FrameConversion.FromPlane(basePl);

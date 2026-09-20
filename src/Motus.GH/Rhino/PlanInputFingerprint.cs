@@ -24,7 +24,7 @@ public static class PlanInputFingerprint
         double rrtGoalBias = 0.08,
         double rrtStepRadians = 0.12,
         long? treeFingerprint = null,
-        MobilityModel.HolonomicSE2? mobilityGoal = null)
+        MobilityModel? mobilityGoal = null)
     {
         var sb = new StringBuilder(512);
         sb.Append("model:").Append(model.Preset.ModelName).Append('|');
@@ -48,13 +48,23 @@ public static class PlanInputFingerprint
             AppendFrame(sb, "toolAttach", collisionModel.ToolGeometryAttachOffset);
         }
         AppendFrame(sb, "base", baseFrameOverride);
-        if (mobilityGoal is not null)
+        if (mobilityGoal is MobilityModel.HolonomicSE2 se2)
         {
             sb.Append("mobility:se2:")
-                .Append(mobilityGoal.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(mobilityGoal.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(mobilityGoal.Z.ToString("R", CultureInfo.InvariantCulture)).Append(',')
-                .Append(mobilityGoal.YawRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+                .Append(se2.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se2.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se2.Z.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se2.YawRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        }
+        else if (mobilityGoal is MobilityModel.HolonomicSE3 se3)
+        {
+            sb.Append("mobility:se3:")
+                .Append(se3.X.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se3.Y.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se3.Z.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se3.RollRadians.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se3.PitchRadians.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                .Append(se3.YawRadians.ToString("R", CultureInfo.InvariantCulture)).Append('|');
         }
         if (treeFingerprint is { } tfp)
             sb.Append("tree:").Append(tfp).Append('|');

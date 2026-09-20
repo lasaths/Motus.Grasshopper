@@ -87,7 +87,7 @@ UrdfRobotLoader.Load(bundledUrdfPath, new UrdfLoadOptions
 });
 Ok("Bundled UR10e Robotiq URDF loads from resources");
 
-var ur10eUrdfPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e.urdf"));
+var ur10eUrdfPath = FindExampleUrdf(Path.Combine("examples", "assets", "ur10e", "ur10e_minimal.urdf"));
 var urdfBundle = UrdfRobotLoader.Load(ur10eUrdfPath, new UrdfLoadOptions
 {
     BaseLink = "base_link",
@@ -104,21 +104,24 @@ var jointResult = new JointLinearPlanner().Plan(new PlanningRequest(urRobot, sta
 if (!jointResult.Success) Fail($"UR10e joint plan: {string.Join("; ", jointResult.Errors)}");
 Ok("UR10e URDF joint plan produces trajectory");
 // Additional URDF loads (examples folder)
-var urdfPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e_minimal.urdf"));
+var urdfPath = FindExampleUrdf(Path.Combine("examples", "assets", "ur10e", "ur10e_minimal.urdf"));
 var urdf = UrdfRobotLoader.Load(urdfPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0" });
 var urdfModel = urdf.ToModel();
 if (urdfModel.Preset.AxisCount < 6) Fail("UR10e minimal URDF should have 6 axes");
 Ok("URDF load (ur10e_minimal) produces robot model");
 
-var ur10eFullPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e.urdf"));
+// Full mesh URDF lives under bundled resources (assets/ur10e has no package meshes).
+var ur10eFullPath = Path.Combine(
+    Path.GetDirectoryName(typeof(Program).Assembly.Location)!,
+    "resources", "robots", "ur10e_robotiq", "ur10e_robotiq.urdf");
+if (!File.Exists(ur10eFullPath))
+    ur10eFullPath = FindExampleUrdf(Path.Combine("resources", "robots", "ur10e_robotiq", "ur10e_robotiq.urdf"));
 var ur10eFull = UrdfRobotLoader.Load(ur10eFullPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "UR10e" });
 if (ur10eFull.ToModel().Preset.AxisCount != 6) Fail("UR10e full URDF should have 6 axes");
-Ok("URDF load (ur10e) produces robot model");
+Ok("URDF load (ur10e_robotiq bundled) produces robot model");
 
-var ur10eRobotiqPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e_robotiq.urdf"));
-var ur10eRobotiq = UrdfRobotLoader.Load(ur10eRobotiqPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0", ModelName = "UR10e" });
-if (ur10eRobotiq.ToModel().Preset.AxisCount != 6) Fail("UR10e+Robotiq URDF should have 6 axes");
-Ok("URDF load (ur10e_robotiq) produces robot model");
+var ur10eRobotiqPath = ur10eFullPath;
+var ur10eRobotiq = ur10eFull;
 
 var robotiqTcp = new Frame(0, 0, 0.1633, 0.7071067811865476, 0, 0.7071067811865476, 0);
 
@@ -722,11 +725,29 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
 
     if (!Motus.GH.ExperimentalUrdfLoad.IsExperimentalPathOrModel("tests/fixtures/aerial/free_flyer_box.urdf"))
         Fail("free_flyer path must be experimental");
+    if (!Motus.GH.ExperimentalUrdfLoad.IsFreeFlyerPathOrModel("tests/fixtures/aerial/free_flyer_box.urdf"))
+        Fail("free_flyer path must match IsFreeFlyerPathOrModel");
     var remarks = Motus.GH.ExperimentalUrdfLoad.RemarksFor("h2_minimal.urdf", "urdf", "h2_minimal", 0);
     if (remarks.Count < 2
         || !remarks.Contains(Motus.GH.ExperimentalUrdfLoad.ExperimentalRemark)
         || !remarks.Contains(Motus.GH.ExperimentalUrdfLoad.ZeroAxisAddOn))
         Fail("H2 AxisCount=0 must emit experimental + zero-axis remarks");
+    var flyerRemarks = Motus.GH.ExperimentalUrdfLoad.RemarksFor(
+        "tests/fixtures/aerial/free_flyer_box.urdf", Units.AerialFamily, "free_flyer_box", 0);
+    if (!flyerRemarks.Contains(Motus.GH.ExperimentalUrdfLoad.AerialPromotedRemark))
+        Fail("free_flyer aerial Family must emit AerialPromotedRemark");
+    var promoted = Motus.GH.ExperimentalUrdfLoad.PromoteFreeFlyerFamily(
+        new RobotModel(new RobotPreset
+        {
+            Manufacturer = RobotManufacturer.Unknown,
+            ModelName = "free_flyer_box",
+            Family = "urdf",
+            AxisCount = 0,
+            JointLimits = Array.Empty<JointLimit>()
+        }),
+        "tests/fixtures/aerial/free_flyer_box.urdf");
+    if (!Units.IsAerial(promoted.Preset))
+        Fail("PromoteFreeFlyerFamily must set Family=aerial");
     if (Motus.GH.ExperimentalUrdfLoad.RemarksFor("ur10e.urdf", "urdf", "UR10e", 6).Count != 0)
         Fail("UR10e must not be marked experimental");
     Ok("Experimental URDF load remarks: free-flyer/H2 vs UR10e");
@@ -817,7 +838,7 @@ Ok("Motion program PTP/LIN/CIRC produces trajectory with motion metadata");
                 mimicJoint: "j_left", mimicMultiplier: -1),
         },
         tipLink: "palm");
-    var armPath = FindExampleUrdf(Path.Combine("examples", "ur10e", "ur10e_minimal.urdf"));
+    var armPath = FindExampleUrdf(Path.Combine("examples", "assets", "ur10e", "ur10e_minimal.urdf"));
     var armTree = UrdfRobotLoader.LoadTree(armPath, new UrdfLoadOptions { BaseLink = "base_link", TipLink = "tool0" });
     var merged = armTree.Attach("tool0", gripDesc.ToKinematicTree(), "palm", Frame.Identity);
     if (merged.DriverCount <= armTree.DriverCount)

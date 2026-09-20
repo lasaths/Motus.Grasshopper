@@ -6,8 +6,8 @@ namespace Motus.GH.Rhino;
 
 /// <summary>
 /// Motus FK frames use local X as the tool approach axis; Rhino planes use Z as the normal.
-/// Stewart platform poses use axis-aligned plate mapping (<see cref="FromPlanePlate"/>) — Motus.NET
-/// Stewart IK expects Motus XYZ ≈ world/plate axes, not the serial tool-approach remap.
+/// Stewart platform and HolonomicSE3 free-flyer body poses use axis-aligned plate mapping
+/// (<see cref="FromPlanePlate"/>) — Motus XYZ ≈ world/plate axes, not the serial tool-approach remap.
 /// </summary>
 public static class FrameConversion
 {
@@ -46,7 +46,7 @@ public static class FrameConversion
         return Transforms.ToFrame(m);
     }
 
-    /// <summary>Stewart platform plate: Rhino X/Y/Z → Motus X/Y/Z (flat WorldXY ≡ Motus identity).</summary>
+    /// <summary>Stewart / aerial body: Rhino X/Y/Z → Motus X/Y/Z (flat WorldXY ≡ Motus identity).</summary>
     public static Frame FromPlanePlate(Plane plane)
     {
         if (!plane.IsValid)

@@ -18,7 +18,7 @@ Strive for **NASA-grade engineering** on kinematics, planning, and handoff surfa
 - **Planning / preview / export only** — no RTDE, no live robot commands, no project reference to UR.RTDE.Grasshopper.
 - Execution (Session, Run, waits, ServoJ) lives in downstream control plugins.
 - User component reference: [docs/grasshopper-components.md](docs/grasshopper-components.md).
-- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview (`Family=legged`, radians) in Motus.NET with DOI-cited methods. [0005](docs/adr/0005-general-legged-mechanism.md) — N-leg `LeggedMechanism` + Walk; GH is thin Motus Body + Leg + Mechanism → Walk (+ Terrain Patch); **no Motus Hex**.
+- ADR: [docs/adr/0001-urdf-only-robots.md](docs/adr/0001-urdf-only-robots.md) — serial GH robots are URDF-only (path or bundled UR10e Robotiq). [0002](docs/adr/0002-kinematic-tree-in-motus-net.md) — kinematic tree lives in Motus.NET. [0003](docs/adr/0003-parallel-kinematics-stewart.md) — Stewart/Gough (`Family=stewart`) is a Motus.NET sibling stack, not a serial tip chain. [0004](docs/adr/0004-legged-mobile-preview.md) — walking/legged preview (`Family=legged`, radians) in Motus.NET with DOI-cited methods. [0005](docs/adr/0005-general-legged-mechanism.md) — N-leg `LeggedMechanism` + Walk; GH is thin Motus Body + Leg + Mechanism → Walk (+ Terrain Patch); **no Motus Hex**. [0006](docs/adr/0006-aerial-arm-pass-off-example.md) — Motus 2.1 free-flyer HolonomicSE3 hover (`11_aerial_hover`; arm pass-off deferred; Motus.NET [aerial](https://github.com/lasaths/Motus.NET/blob/master/docs/aerial.md)).
 
 ## Layout
 
@@ -105,8 +105,9 @@ Also check in Rhino (full list: [docs/regression-matrix.md](docs/regression-matr
 - `07_urdf_gripper_tool`: Boxes→ULink→Tool Rd (Cap+Bd)→Robot Tl→PTP Ramp; scrub shows authored fingers pinch
 - `09_walking_hexapod`: Body+Leg+Mechanism→Walk; Number Slider `N` (4–12, default 6); Terrain Patch → `Tn`; omit `Tn` = flat Z=0
 - `10_pick_place`: UR10e fingers-down home (Rhino TCP Z = world −Z); C# layout script (5×4 rotating destack → 5 columns × 4) + Collision Boxes + Pick Place → one Program (Auto Plan); SET open `0.085` / close `0.04`; Pick Place `Touch=robotiq_2f85` (**required** — empty Touch Errors, no Seg); plan ColScene = **empty** (Robotiq closed-envelope hull intersects the table at grasp — preview ColScene still has table+bricks); Cassis-authored (not `generate-examples.mjs --only=10`)
+- `11_aerial_hover`: free-flyer HolonomicSE3 Start→Goal (WorldXY body planes); Preview scrub + Export bodyPose; `assets/aerial/free_flyer_box.urdf`; generate with `--only=11`; Motus.NET HolonomicSE3 / `AerialExportTests` (arm pass-off deferred)
 - Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
-- Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract
+- Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract; Motus.NET HolonomicSE3 / `AerialExportTests` for example 11 hover
 
 ## Example layout (agents)
 

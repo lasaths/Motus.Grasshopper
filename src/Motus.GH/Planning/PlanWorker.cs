@@ -32,6 +32,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public string Fingerprint { get; private set; } = string.Empty;
     public bool IsAutoPlan { get; private set; }
     public bool BodyPathMode { get; private set; }
+    public Plane? AerialStartPlane { get; private set; }
 
     public SerialJointChain? Chain { get; private set; }
     public KinematicTree? Tree { get; private set; }
@@ -43,7 +44,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
     public RobotCollisionModel? PreviewGeometry { get; private set; }
     public Color?[]? PreviewMeshColors { get; private set; }
     public Frame? BaseFrameOverride { get; private set; }
-    public MobilityModel.HolonomicSE2? MobilityGoal { get; private set; }
+    public MobilityModel? MobilityGoal { get; private set; }
     public ToolDefinition? ToolSnapshot { get; private set; }
     public JointState? TreeDriverHome { get; private set; }
     /// <summary>Set when PlanBodyPath synthesized a full-driver gait (clears tip Chain / TreeDriverHome on goo).</summary>
@@ -83,6 +84,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         Fingerprint = snap.Fingerprint;
         IsAutoPlan = snap.IsAutoPlan;
         BodyPathMode = snap.BodyPathMode;
+        AerialStartPlane = snap.AerialStartPlane;
         Chain = snap.Chain;
         Tree = snap.Tree;
         Stewart = snap.Stewart;
@@ -160,7 +162,7 @@ internal sealed class PlanWorker : WorkerInstance, IWorkerSkip, IWorkerPreloaded
         try
         {
             Report(0);
-            var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings, BodyPathMode);
+            var request = new PlanRequest(Context, Goals, Start, PlanningContext, LinStepMeters, CollisionInputWired, RrtSettings, BodyPathMode, AerialStartPlane);
             Result = PlanExecutor.Execute(request, CancellationToken, Report, Timings,
                 stage => _owner.ActivePlanningStage = stage);
             LeggedGaitSynthesized = Result.LeggedGaitSynthesized;

@@ -34,6 +34,7 @@ Experimental mobility (`HolonomicSE3`, Unitree H2/Go2 fixtures, catalog fixtures
 - [ ] Motus.NET tests green on tip: catalog robot smoke, `UnitreeH2FixtureTests`, HolonomicSE3 / aerial fixture (sibling UseLocal).
 - [ ] Optional Motus Robot load of meshless H2 / free-flyer URDF from Motus.NET fixtures via UseLocal — Status / remarks must say **experimental** (LoadTree + FK scrub only; no Walk, no biped, no flight controller).
 - [ ] Waypoints + Export: `Family=aerial` runtime warning — body SE(3) / bodyPose, not UR MoveJ (string Family gate; works on NuGet 0.17.0 and UseLocal tip).
+- [ ] **Motus 2.1 aerial hover:** Motus.NET HolonomicSE3 / `AerialExportTests`; GH `11_aerial_hover.ghx` (generate `--only=11`) — Start→Goal WorldXY body planes; ADR 0006. Still experimental (not Yak GA). Rhino: Auto Plan Status OK; Preview scrub moves hull; Waypoints/Export warn bodyPose ≠ MoveJ. (Arm pass-off deferred.)
 - [ ] **No** Motus GH “Aerial” / “H2” / SE3 mobility components claiming GA until a Motus.NET pin ships those types and a later milestone wires honest experimental Status.
 
 See Motus.NET [`docs/aerial.md`](https://github.com/lasaths/Motus.NET/blob/master/docs/aerial.md), ADR holonomic-se3-aerial, and H2 fixture README.
