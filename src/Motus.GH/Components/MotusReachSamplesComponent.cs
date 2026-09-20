@@ -22,6 +22,8 @@ public sealed class MotusReachSamplesComponent : MotusComponentBase
     {
     }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddGenericParameter("Robot", "Rb", "Motus Robot (Serial Chain or URDF)", GH_ParamAccess.item);

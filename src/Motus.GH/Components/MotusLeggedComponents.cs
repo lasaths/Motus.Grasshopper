@@ -19,7 +19,7 @@ public sealed class MotusLegComponent : MotusComponentBase
             "Motus Leg",
             "Leg",
             "Leg lengths (m) → Leg goo. 3 lengths = LegIk3R; longer = numerical serial IK. Wire → Motus Mechanism.",
-            "Model",
+            "Legged",
             "polygon")
     {
     }
@@ -102,7 +102,7 @@ public sealed class MotusBodyComponent : MotusComponentBase
             "Motus Body",
             "Body",
             "Radial hips (N, BodyR, BodyZ) or Custom hip Planes → Bdy goo for Motus Mechanism.",
-            "Model",
+            "Legged",
             "polygon")
     {
     }
@@ -208,7 +208,7 @@ public sealed class MotusMechanismComponent : MotusComponentBase
             "Motus Mechanism",
             "Mech",
             "Assemble Bdy + Leg (clone to all hips) or Leg list → Mech for Motus Walk. Auto gait via GaitSchedule.Auto.",
-            "Model",
+            "Legged",
             "polygon")
     {
     }
@@ -348,7 +348,7 @@ public sealed class MotusBodyPoseComponent : MotusComponentBase
             "Motus Body Pose",
             "BodyPose",
             "PathFollow or TerrainSupport body-pose policy → Pose goo for Motus Walk (optional).",
-            "Model",
+            "Legged",
             "path")
     {
     }

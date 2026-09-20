@@ -79,7 +79,7 @@ Do **not** MoveL FK planes from joint-space RRT. Gate handoff on **`Preset.Famil
 
 ## Icons
 
-Phosphor 24×24 duotone PNGs in `src/Motus.GH/Resources/icons/`; tinted in `MotusIcon.cs` / `MotusPalette` by subcategory (Model `#00DB87`, Plan `#787DFA`, Collision peach, Preview lavender, Export `#AFFC41`; chrome `#0A2E33`). Fetch via `.agents/skills/phosphor-icons` CLI:
+Phosphor 24×24 duotone PNGs in `src/Motus.GH/Resources/icons/`; tinted in `MotusIcon.cs` / `MotusPalette` by subcategory (Model `#00DB87`, Legged emerald→periwinkle, Urdf quieter emerald, Plan `#787DFA`, Collision peach, Preview lavender, Export `#AFFC41`; chrome `#0A2E33`). Fetch via `.agents/skills/phosphor-icons` CLI:
 
 ```bash
 node ../phosphor-icons-mcp/dist/cli.js icon path --weight duotone --format png --size 24 --dir src/Motus.GH/Resources/icons

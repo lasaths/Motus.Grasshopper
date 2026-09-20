@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Ribbon panels: **Legged** and **Urdf** split out of Model; **Attach Body** moved to Plan. Advanced helpers use secondary exposure (Serial Chain, Stewart, Joint Table, Sampling Settings, Planning Group, Reach, Load Mesh, Robot Info, Terrain Patch, Urdf Explode, Export URDF).
+
 ## 2.0.0 — Public product · Yak GA — 2026-09-19
 
 Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/2.0.0). CI `build-*-nuget` uses the props pin (no last-published override). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak`; production `yak push` needs human Package Manager auth (no agent interactive login).

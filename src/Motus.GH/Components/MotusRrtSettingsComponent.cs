@@ -19,6 +19,8 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
             "Plan",
             "faders") { }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Next: Settings->Motus Plan RrtSettings (show pin; joint goals + collision only)",

@@ -27,6 +27,8 @@ public sealed class MotusUrdfExportComponent : MotusComponentBase
     {
     }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override System.Collections.Generic.IReadOnlyList<string> AiKeywords { get; } =
     [
         "Wire: Motus Urdf Assemble D; Folder F",

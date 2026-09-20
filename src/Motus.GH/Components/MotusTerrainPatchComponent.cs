@@ -14,10 +14,12 @@ public sealed class MotusTerrainPatchComponent : MotusComponentBase
             "Motus Terrain Patch",
             "Ground",
             "Outdoor-style heightfield mesh (m) for Motus Walk Terrain — gentle hills, wire to Tn.",
-            "Model",
+            "Legged",
             "polygon")
     {
     }
+
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {

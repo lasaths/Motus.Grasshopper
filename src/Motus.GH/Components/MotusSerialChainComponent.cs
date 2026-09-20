@@ -21,6 +21,8 @@ public sealed class MotusSerialChainComponent : RobotSourceComponentBase
     {
     }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddNumberParameter("Lengths", "L", "Link lengths (m). With Rail: first = stroke, rest = arm.", GH_ParamAccess.list);

@@ -156,8 +156,8 @@ public abstract class RobotSourceComponentBase : MotusComponentBase
     private bool _showCollisionPreview;
     private bool _showTcp;
 
-    protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName)
-        : base(name, nickname, desc, "Model", iconName) { }
+    protected RobotSourceComponentBase(string name, string nickname, string desc, string iconName, string sub = "Model")
+        : base(name, nickname, desc, sub, iconName) { }
 
     protected void ApplyPreview(RobotModelGoo goo, string? sourcePath)
     {

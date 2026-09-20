@@ -13,7 +13,7 @@ public sealed class Param_MotusUrdfLink : GH_PersistentParam<UrdfLinkGoo>
 
     public override Guid ComponentGuid => new("011bd2b8-344d-40d9-ab9a-18c7ac7aece9");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("tree-structure", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("tree-structure", MotusIcon.SubcategoryColor("Urdf"));
     protected override GH_GetterResult Prompt_Singular(ref UrdfLinkGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<UrdfLinkGoo> values) => GH_GetterResult.cancel;
 }
@@ -26,7 +26,7 @@ public sealed class Param_MotusUrdfJoint : GH_PersistentParam<UrdfJointGoo>
 
     public override Guid ComponentGuid => new("04f9c4ba-dda4-4484-8f67-ad1df5bee83a");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("gear-six", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("gear-six", MotusIcon.SubcategoryColor("Urdf"));
     protected override GH_GetterResult Prompt_Singular(ref UrdfJointGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<UrdfJointGoo> values) => GH_GetterResult.cancel;
 }
@@ -39,7 +39,7 @@ public sealed class Param_MotusRobotDescription : GH_PersistentParam<RobotDescri
 
     public override Guid ComponentGuid => new("852f43a0-23c2-4993-b26e-70b8ba67a1a7");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("stack", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("stack", MotusIcon.SubcategoryColor("Urdf"));
     protected override GH_GetterResult Prompt_Singular(ref RobotDescriptionGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<RobotDescriptionGoo> values) => GH_GetterResult.cancel;
 }

@@ -390,6 +390,8 @@ public sealed class MotusLoadMeshComponent : MotusComponentBase
     public MotusLoadMeshComponent()
         : base("Motus Load Mesh", "LoadMesh", "Load an STL mesh file (meters)", "Model", "download-simple") { }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddTextParameter("Path", "P", "Path to .stl file", GH_ParamAccess.item);

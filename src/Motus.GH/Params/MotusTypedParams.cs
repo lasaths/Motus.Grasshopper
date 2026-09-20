@@ -116,7 +116,7 @@ public sealed class Param_MotusLeg : GH_PersistentParam<LegDefinitionGoo>
 
     public override Guid ComponentGuid => new("b7a9381b-cbce-4df0-8e74-46d7ca62cea1");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Legged"));
     protected override GH_GetterResult Prompt_Singular(ref LegDefinitionGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<LegDefinitionGoo> values) => GH_GetterResult.cancel;
 }
@@ -129,7 +129,7 @@ public sealed class Param_MotusBody : GH_PersistentParam<LeggedBodyGoo>
 
     public override Guid ComponentGuid => new("accf652b-0591-4d03-84ac-811a510cb2ef");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Legged"));
     protected override GH_GetterResult Prompt_Singular(ref LeggedBodyGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<LeggedBodyGoo> values) => GH_GetterResult.cancel;
 }
@@ -142,7 +142,7 @@ public sealed class Param_MotusMechanism : GH_PersistentParam<LeggedMechanismGoo
 
     public override Guid ComponentGuid => new("4a2b9635-a730-4ee5-9272-266d1ce9bef4");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("polygon", MotusIcon.SubcategoryColor("Legged"));
     protected override GH_GetterResult Prompt_Singular(ref LeggedMechanismGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<LeggedMechanismGoo> values) => GH_GetterResult.cancel;
 }
@@ -155,7 +155,7 @@ public sealed class Param_MotusBodyPose : GH_PersistentParam<BodyPoseSolverGoo>
 
     public override Guid ComponentGuid => new("03e55c53-15d4-4b46-9927-33803788db85");
     public override GH_Exposure Exposure => GH_Exposure.hidden;
-    protected override Bitmap Icon => MotusIcon.Get("path", MotusIcon.SubcategoryColor("Model"));
+    protected override Bitmap Icon => MotusIcon.Get("path", MotusIcon.SubcategoryColor("Legged"));
     protected override GH_GetterResult Prompt_Singular(ref BodyPoseSolverGoo value) => GH_GetterResult.cancel;
     protected override GH_GetterResult Prompt_Plural(ref List<BodyPoseSolverGoo> values) => GH_GetterResult.cancel;
 }

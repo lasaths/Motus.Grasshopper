@@ -24,6 +24,8 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
     {
     }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
         p.AddTextParameter("Parent", "Par", "Parent link names (first row root, usually base_link)", GH_ParamAccess.list);

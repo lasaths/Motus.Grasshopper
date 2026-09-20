@@ -33,6 +33,12 @@ internal static class MotusPalette
     /// <summary>Lavender darkened toward chrome for 24×24 icon legibility.</summary>
     public static readonly Color Preview = Mix(Lavender, Chrome, 0.22f);
 
+    /// <summary>Emerald → periwinkle — Legged (walker) family.</summary>
+    public static readonly Color Legged = Mix(Model, Plan, 0.45f);
+
+    /// <summary>Emerald → chrome — Urdf authoring (quieter than Model).</summary>
+    public static readonly Color Urdf = Mix(Model, Chrome, 0.35f);
+
     /// <summary>Soft emerald wash for dropdown menus.</summary>
     public static readonly Color MenuFill = Color.FromArgb(0xE6, 0xFB, 0xF2);
 
@@ -54,6 +60,8 @@ internal static class MotusIcon
     public static Color SubcategoryColor(string subcategory) => subcategory switch
     {
         "Model" => MotusPalette.Model,           // #00DB87
+        "Legged" => MotusPalette.Legged,         // emerald → periwinkle
+        "Urdf" => MotusPalette.Urdf,             // quieter emerald
         "Plan" => MotusPalette.Plan,             // #787DFA
         "Collision" => MotusPalette.Collision,   // peach → chrome
         "Preview" => MotusPalette.Preview,       // lavender → chrome

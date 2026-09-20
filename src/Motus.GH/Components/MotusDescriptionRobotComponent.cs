@@ -13,7 +13,7 @@ namespace Motus.GH.Components;
 public sealed class MotusDescriptionRobotComponent : RobotSourceComponentBase
 {
     public MotusDescriptionRobotComponent() : base("Motus Robot From Description", "FromDesc",
-        "Build a plannable robot directly from URDF Assemble/Attach; no file export required", "tree-structure") { }
+        "Build a plannable robot directly from URDF Assemble/Attach; no file export required", "tree-structure", "Urdf") { }
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -78,6 +78,8 @@ public sealed class MotusRobotInfoComponent : MotusComponentBase
 {
     public MotusRobotInfoComponent() : base("Motus Robot Info", "RobotInfo",
         "Inspect planning joint order, per-axis units and collision body names for Touch", "Model", "list-plus") { }
+
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
     protected override void RegisterInputParams(GH_InputParamManager p) =>
         p.AddParameter(new Param_MotusRobot(), "Robot", "Rb", "Robot to inspect", GH_ParamAccess.item);
     protected override void RegisterOutputParams(GH_OutputParamManager p)

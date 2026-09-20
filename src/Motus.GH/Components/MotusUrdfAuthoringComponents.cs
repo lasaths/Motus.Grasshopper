@@ -21,7 +21,7 @@ namespace Motus.GH.Components;
 public sealed class MotusUrdfLinkComponent : MotusComponentBase
 {
     public MotusUrdfLinkComponent()
-        : base("Motus Urdf Link", "ULink", "URDF link from Rhino geometry (meters; Box/Mesh/Brep/Surface/…)", "Model", "stack") { }
+        : base("Motus Urdf Link", "ULink", "URDF link from Rhino geometry (meters; Box/Mesh/Brep/Surface/…)", "Urdf", "stack") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
@@ -98,7 +98,7 @@ public sealed class MotusUrdfLinkComponent : MotusComponentBase
 public sealed class MotusUrdfJointComponent : MotusComponentBase
 {
     public MotusUrdfJointComponent()
-        : base("Motus Urdf Joint", "UJoint", "URDF joint (revolute/continuous/prismatic/fixed) between two links", "Model", "gear-six") { }
+        : base("Motus Urdf Joint", "UJoint", "URDF joint (revolute/continuous/prismatic/fixed) between two links", "Urdf", "gear-six") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
@@ -203,7 +203,7 @@ public sealed class MotusUrdfAssembleComponent : MotusComponentBase
     private RobotDescriptionGoo? _cachedGoo;
 
     public MotusUrdfAssembleComponent()
-        : base("Motus Urdf Assemble", "UAssemble", "Validate and assemble URDF links/joints into a robot description tree", "Model", "tree-structure") { }
+        : base("Motus Urdf Assemble", "UAssemble", "Validate and assemble URDF links/joints into a robot description tree", "Urdf", "tree-structure") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
@@ -291,7 +291,9 @@ public sealed class MotusUrdfAssembleComponent : MotusComponentBase
 public sealed class MotusUrdfExplodeComponent : MotusComponentBase
 {
     public MotusUrdfExplodeComponent()
-        : base("Motus Urdf Explode", "UExplode", "Decompose a robot description into its links and joints", "Model", "list-plus") { }
+        : base("Motus Urdf Explode", "UExplode", "Decompose a robot description into its links and joints", "Urdf", "list-plus") { }
+
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
@@ -332,7 +334,7 @@ public sealed class MotusUrdfExplodeComponent : MotusComponentBase
 public sealed class MotusUrdfAttachComponent : MotusComponentBase
 {
     public MotusUrdfAttachComponent()
-        : base("Motus Urdf Attach", "UAttach", "Graft a child robot description onto a parent link via a fixed joint", "Model", "paperclip") { }
+        : base("Motus Urdf Attach", "UAttach", "Graft a child robot description onto a parent link via a fixed joint", "Urdf", "paperclip") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [

@@ -43,7 +43,8 @@ public sealed class MotusWalkingHexapodComponent : RobotSourceComponentBase
             "Motus Walk",
             "Walk",
             "Walk Mech along Path/Planes (optional Terrain + Pose). Family=legged — not Stewart / not UR MoveJ.",
-            "polygon")
+            "polygon",
+            "Legged")
     {
     }
 

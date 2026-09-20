@@ -15,6 +15,8 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
 {
     public MotusPlanningGroupComponent() : base("Motus Planning Group", "Group", "Create or pass through a planning group", "Plan", "list-plus") { }
 
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
+
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
         "Next: G->Motus Plan Group (show pin)",
@@ -71,7 +73,9 @@ public sealed class MotusPlanningGroupComponent : MotusComponentBase
 
 public sealed class MotusAttachBodyComponent : MotusComponentBase
 {
-    public MotusAttachBodyComponent() : base("Motus Attach Body", "Attach", "Define an attached body in TCP-local frame", "Collision", "paperclip") { }
+    public MotusAttachBodyComponent() : base("Motus Attach Body", "Attach", "Define an attached body in TCP-local frame", "Plan", "paperclip") { }
+
+    public override GH_Exposure Exposure => GH_Exposure.secondary;
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [

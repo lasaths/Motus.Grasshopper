@@ -2,6 +2,8 @@
 
 All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring** — solvers, units, and provenance live in [Motus.NET](https://github.com/lasaths/Motus.NET).
 
+**Ribbon panels:** Model · Legged · Urdf · Plan · Collision · Preview · Export (Params hidden). Advanced / niche components use Grasshopper **secondary** exposure (dropdown under the panel).
+
 ## At a glance
 
 | You want… | Use |
@@ -21,9 +23,9 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
 
 ```
-Model ──► Plan ──► Preview
-   │         │         │
- Tool    ColScene   Waypoints / Export
+Model / Legged / Urdf ──► Plan ──► Preview
+           │                │         │
+         Tool           ColScene   Waypoints / Export
 ```
 
 **Units:** joints default **radians** (toggle ° on Joint State `J`); geometry **meters**. Stewart plan `Q` = meters; serial/legged = radians. See [AGENTS.md](../AGENTS.md) for Family handoff.
@@ -34,25 +36,47 @@ Product tiers (Supported / Advanced / Experimental) toward Yak GA **2.0.0**: [su
 
 ## Model
 
+Primary: serial loaders + tool + joint/TCP helpers. Secondary (panel dropdown): Serial Chain, Stewart, Joint Table, Load Mesh, Robot Info.
+
 | Component | Inputs | Outputs |
 |-----------|--------|---------|
 | Motus UR10e Robotiq | *(none)* | Bundled UR10e + Robotiq 2F-85 robot |
 | Motus Robot | Path to `.urdf` / `.xacro`; optional BaseLink / TipLink; optional Base plane; optional **Tool** | Robot model with URDF kinematics chain |
 | Motus Serial Chain | **Lengths** list (m); optional Base, Home `Q`, **Rail**, Types, TCP | Same Robot goo — parametric serial / rail+arm (concept sizing) |
 | Motus Stewart | Optional JSON Path; **Base** / **Plat** (6 points each); classic BaseRadius / PlatformRadius / MinStroke / MaxStroke / PairSep / Name | Same Robot goo — Stewart/Gough hexapod (`Family=stewart`; `Q` = leg lengths in **meters**) |
+| Motus Joint Table | Parent / Child / Type / Ox; optional Oy,Oz, Name, **Tip**, Base, Home, **SE2**, **AllDrivers** | Same Robot goo — default tip path; AllDrivers promotes side branches (Motus Robot parity) |
+| Motus Tool | Name, TCP; **Cap** face dropdown (`None` \| `Robotiq2F85` \| `Custom`); optional G/L/Rd/Bd + Custom Wmin/Wmax/Cd | Tool definition |
+| Motus Tool State | Optional Tool; **Preset** face dropdown; Width (used when Custom); Speed, Force | End-effector state (`EndEffectorStateGoo`) |
+| Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
+| Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
+| Motus TCP Pose | Robot, Joint state | TCP plane (FK position + orientation in base frame) |
+| Motus Robot Info | Robot | Joint names, units, collision body names, Family |
+
+## Legged
+
+Primary: Leg → Body → Mechanism → Walk. Secondary: Body Pose, Terrain Patch.
+
+| Component | Inputs | Outputs |
+|-----------|--------|---------|
 | Motus Leg | Lengths (m), optional Name / Tip | `Leg` goo — 3R → LegIk3R; longer → numerical IK |
 | Motus Body | N / BodyR / BodyZ or custom hip Planes | `Bdy` hip frames → Mechanism |
 | Motus Mechanism | Bdy + Leg (clone) or Leg list; Dyn; Tip; stance | `Mech` → Walk (auto `GaitSchedule.Auto`) |
 | Motus Body Pose | Mode PathFollow \| TerrainSupport; Clearance | Optional `Pose` → Walk |
 | Motus Walk | Required `Mech`, optional Pose, Path/Planes, Speed, Step, Lift, Terrain | Gait `Tr` (full drivers), Robot, Meshes, Support — **not** Stewart |
 | Motus Terrain Patch | Origin, Size, Amp | Outdoor heightfield mesh → Walk `Tn` |
-| Motus Joint Table | Parent / Child / Type / Ox; optional Oy,Oz, Name, **Tip**, Base, Home, **SE2**, **AllDrivers** | Same Robot goo — default tip path; AllDrivers promotes side branches (Motus Robot parity) |
-| Motus Reach Samples | Robot; optional Count (≤512), Seed | TCP sample points for reach overlay (no building pin) |
-| Motus Tool | Name, TCP; **Cap** face dropdown (`None` \| `Robotiq2F85` \| `Custom`); optional G/L/Rd/Bd + Custom Wmin/Wmax/Cd | Tool definition |
-| Motus Tool State | Optional Tool; **Preset** face dropdown; Width (used when Custom); Speed, Force | End-effector state (`EndEffectorStateGoo`) |
-| Motus Load Mesh | Path to `.stl`, optional plane | Triangle mesh (wire to Motus Tool `Geometry`) |
-| Motus Joint State | Joint list (right-click **J** input → toggle °) | Joint state |
-| Motus TCP Pose | Robot, Joint state | TCP plane (FK position + orientation in base frame) |
+
+## Urdf
+
+Authoring panel (Link / Joint / Assemble / Attach / From Description). Secondary: Explode. Export URDF lives under **Export** (secondary).
+
+| Component | Inputs | Outputs |
+|-----------|--------|---------|
+| Motus Urdf Link | Name; Visual (Box/Mesh/Brep list); optional Collision list | `UrdfLink` |
+| Motus Urdf Joint | Name; Type (Revolute/Continuous/Prismatic/Fixed or R/C/P/F); Parent/Child link names; Axis (Line: Start = origin, direction = joint axis); optional Lower/Upper, MimicJoint/Mult/Offset | `UrdfJoint` |
+| Motus Urdf Assemble | Name; Links list; Joints list; optional Tip | `RobotDescription` (validated tree; debounced ~120 ms) |
+| Motus Urdf Explode | Description | Links list, Joints list |
+| Motus Urdf Attach | Parent/Child `RobotDescription`; ParentLink; optional Plane (origin only), JointName | Merged `RobotDescription` |
+| Motus Robot From Description | Description; optional Tip / BaseLink / Base / AllDrivers | Robot goo → Plan / Program |
 
 `Motus UR10e Robotiq` is the zero-config bundled robot (`resources/robots/ur10e_robotiq/`). It previews at the UR10e home pose on placement.
 
@@ -74,17 +98,9 @@ Optionally wire a **Description** (`RobotDescription`, e.g. from **Motus Urdf As
 
 `Motus Load URDF` was removed; use **Motus Robot** instead.
 
-### Urdf authoring (Link / Joint / Assemble / Explode / Attach)
+### Urdf authoring detail
 
-Use native Grasshopper geometry (e.g. **Center Box**, Mesh, Brep) into **Motus Urdf Link** — there is no Motus geom component.
-
-| Component | Inputs | Outputs |
-|-----------|--------|---------|
-| Motus Urdf Link | Name; Visual (Box/Mesh/Brep list); optional Collision list | `UrdfLink` |
-| Motus Urdf Joint | Name; Type (Revolute/Continuous/Prismatic/Fixed or R/C/P/F); Parent/Child link names; Axis (Line: Start = origin, direction = joint axis); optional Lower/Upper, MimicJoint/Mult/Offset | `UrdfJoint` |
-| Motus Urdf Assemble | Name; Links list; Joints list; optional Tip | `RobotDescription` (validated tree; debounced ~120 ms) |
-| Motus Urdf Explode | Description | Links list, Joints list |
-| Motus Urdf Attach | Parent/Child `RobotDescription`; ParentLink; optional Plane (origin only), JointName | Merged `RobotDescription` |
+Use native Grasshopper geometry (e.g. **Center Box**, Mesh, Brep) into **Motus Urdf Link** — there is no Motus geom component. Ribbon panel: **Urdf**.
 
 This is a **typed** authoring path, not a return to bare-number Link×N/Joint×N spaghetti: every
 node is a validated Motus.NET goo (`UrdfLinkGoo` → `UrdfJointGoo` → `RobotDescriptionGoo`), and
@@ -94,7 +110,7 @@ Grasshopper only collects per-node inputs and hands them to Motus.NET. See
 
 Use this family to author a driven mechanism (gripper, turntable, rail) with **no URDF file on
 disk** — e.g. **Motus Urdf Assemble** the tool mechanism, **Motus Urdf Attach** it onto the arm's
-description at a parent link, then project to a `KinematicTree` (`RobotDescriptionSession.Project`)
+description at a parent link, then **Motus Robot From Description** (or Export URDF → Motus Robot)
 for FK/planning the same way a URDF load or **Motus Serial Chain** would. **Motus Urdf Attach**'s
 `Plane` carries origin only — rotate the child's own links/axes for a tilted mount, not the attach
 frame.
@@ -129,11 +145,11 @@ pin is simpler and grafts onto the loaded tree directly (see above).
 | Component | Notes |
 |-----------|-------|
 | Motus Plan (nick **Quick**) | Quick single/multi-goal planner. Plane = TCP LIN; joint = joint-linear or RRT with collision. Click **Plan**, or **Auto Plan** from the right-click menu. |
-| Motus RRT Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. `Step` is a config-space step: radians for serial/legged joints, meters for `Family=stewart` leg lengths. Planner dropdown lists algorithms from `SamplingPlannerRegistry.ListAvailable()` (stub builds show managed RRT-Connect only; full native adds RRT*, AORRTC, etc.). See [AGENTS.md](../AGENTS.md). |
+| Motus Sampling Settings | Tune sampling planners (`MaxIter`, `TimeLimit`, `Planner`, `GoalBias`, `Step`) → wire `Settings` to **Motus Plan** `RrtSettings`. Secondary exposure. |
 | Motus Move | One PTP/LIN/CIRC/SET/WAIT program line. Type (± ToolMode) are Arup-style on-component dropdowns; pins morph by type. |
 | Motus Program | Plan a Motus Move list via `IndustrialMotionPlanner` (click **Plan**; wire order = program order). |
-| Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). |
-| Motus Attach Body | Build an attached body from a collision object in TCP-local frame. |
+| Motus Planning Group | Build or forward a planning group (manual joints or SRDF-derived). Secondary. |
+| Motus Attach Body | Build an attached body from a collision object in TCP-local frame → Plan `Attach`. Secondary (Plan panel, not Collision). |
 
 `Motus Plan` inputs:
 
@@ -246,6 +262,7 @@ Exported trajectories include optional `toolState` per waypoint and `toolCapabil
 |-----------------------|-------|
 | Motus Preview | Animated FK preview with a built-in **Play / Stop** button; right-click for **Override / URDF / Custom** mesh colours |
 | Motus Scrub | Resizable **0–1** canvas slider; wire to Preview **Position** for manual scrubbing |
+| Motus Reach Samples | TCP sample points for reach overlay (secondary) |
 
 `Motus Preview` takes a `Trajectory`, optional `ShowStart`, optional **Position** (0–1), and optional **Collision** (same `ColScene` as Plan). Right-click to choose **Override**, **URDF**, or **Custom** viewport mesh colours; expose the hidden **Custom Colours** list input from the menu when using Custom mode (one colour per **Meshes** slot); **Show TCP** draws the playhead TCP triad in the viewport. **Show path** toggles the white path in the viewport (saved with the component, on by default); the TCP Path output remains available. It outputs link `Meshes` and `Links` at the current playback frame, the full `TCP Path` polyline (FK between waypoints — not a collision-safe sweep), the `State` / `Time` / `Index` at the playhead, and `Invalid` TCP segments (joint/velocity/acceleration limits only). When **Collision** is wired, obstacle hits along the TCP polyline draw in **orange** in the viewport.
 
