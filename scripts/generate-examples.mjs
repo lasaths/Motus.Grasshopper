@@ -578,6 +578,21 @@ function item(name, type, code, value) {
   return `            <item name="${name}" type_name="${type}" type_code="${code}">${value}</item>`;
 }
 
+/** Viewport-hide native GH geometry (IGH_PreviewObject.Hidden) so construction planes/points don't clutter Rhino. */
+function hidePreview(part) {
+  if (!part?.xml || part.xml.includes('name="Hidden"')) return part;
+  const xml = part.xml
+    .replace(
+      /(<chunk name="Container">\s*<items count=")(\d+)(">)/,
+      (_, a, n, c) => `${a}${Number(n) + 1}${c}`,
+    )
+    .replace(
+      /(<item name="Description"[^>]*>[^<]*<\/item>\n)/,
+      `$1                    ${item('Hidden', 'gh_bool', '1', 'true')}\n`,
+    );
+  return { ...part, xml };
+}
+
 function bounds(x, y, w, h) {
   return `<chunk name="Attributes">
                       <items count="2">
@@ -2679,28 +2694,28 @@ function graph07() {
   const yL = cy + 100;
   const yR = cy + 220;
 
-  const xy = nativeXYPlane(ex, yPalm);
-  const uz = nativeUnitZ(ex, yPalm + 70);
-  const palmBox = nativeCenterBox(ex, yL, outRef(xy.node, 'Plane'), [0.10, 0.08, 0.02]);
-  const fingerCenter = nativeConstructPoint(ex, yR, [-0.045, 0, 0.055]);
-  const fingerPl = nativePlane(ex + 140, yR, fingerCenter.node.outputs[0], uz.node.outputs[0]);
-  const leftBox = nativeCenterBox(ex + 280, yR, outRef(fingerPl.node, 'Plane'), [0.07, 0.012, 0.08]);
-  const rightBox = nativeCenterBox(ex + 280, yR + 100, outRef(fingerPl.node, 'Plane'), [0.07, 0.012, 0.08]);
+  const xy = hidePreview(nativeXYPlane(ex, yPalm));
+  const uz = hidePreview(nativeUnitZ(ex, yPalm + 70));
+  const palmBox = hidePreview(nativeCenterBox(ex, yL, outRef(xy.node, 'Plane'), [0.10, 0.08, 0.02]));
+  const fingerCenter = hidePreview(nativeConstructPoint(ex, yR, [-0.045, 0, 0.055]));
+  const fingerPl = hidePreview(nativePlane(ex + 140, yR, fingerCenter.node.outputs[0], uz.node.outputs[0]));
+  const leftBox = hidePreview(nativeCenterBox(ex + 280, yR, outRef(fingerPl.node, 'Plane'), [0.07, 0.012, 0.08]));
+  const rightBox = hidePreview(nativeCenterBox(ex + 280, yR + 100, outRef(fingerPl.node, 'Plane'), [0.07, 0.012, 0.08]));
 
   const palm = motusComponent('urdfLink', ex + 440, yL, {
     Visual: [outRef(palmBox.node, 'Box')],
-  }, { text: { Name: 'palm' } });
+  }, { text: { Name: 'palm' }, hidden: true });
   const left = motusComponent('urdfLink', ex + 440, yR, {
     Visual: [outRef(leftBox.node, 'Box')],
-  }, { text: { Name: 'L' } });
+  }, { text: { Name: 'L' }, hidden: true });
   const right = motusComponent('urdfLink', ex + 440, yR + 100, {
     Visual: [outRef(rightBox.node, 'Box')],
-  }, { text: { Name: 'R' } });
+  }, { text: { Name: 'R' }, hidden: true });
 
-  const leftOrigin = nativeConstructPoint(ex + 580, yL, [0, 0.035, 0]);
-  const rightOrigin = nativeConstructPoint(ex + 580, yR, [0, -0.035, 0]);
-  const leftAxis = nativeLineSdl(ex + 700, yL, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
-  const rightAxis = nativeLineSdl(ex + 700, yR, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05);
+  const leftOrigin = hidePreview(nativeConstructPoint(ex + 580, yL, [0, 0.035, 0]));
+  const rightOrigin = hidePreview(nativeConstructPoint(ex + 580, yR, [0, -0.035, 0]));
+  const leftAxis = hidePreview(nativeLineSdl(ex + 700, yL, leftOrigin.node.outputs[0], uz.node.outputs[0], 0.05));
+  const rightAxis = hidePreview(nativeLineSdl(ex + 700, yR, rightOrigin.node.outputs[0], uz.node.outputs[0], 0.05));
 
   const jLeft = motusComponent('urdfJoint', ex + 840, yPalm, {
     Axis: [outRef(leftAxis.node, 'Line')],
@@ -3002,11 +3017,12 @@ function graph11() {
   }, { text: { BaseLink: 'body', TipLink: 'body' }, hidden: true });
 
   // WorldXY body planes (Z up) — FromPlanePlate → Motus identity; not serial Z→X remap.
-  const uz = nativeUnitZ(ex, cy);
-  const ptStart = nativeConstructPoint(ex, cy + 60, [-0.5, 0.35, 0.55]);
-  const plStart = nativePlane(ex + 140, cy + 60, ptStart.node.outputs[0], uz.node.outputs[0]);
-  const ptGoal = nativeConstructPoint(ex, cy + 140, [0.45, -0.25, 1.05]);
-  const plGoal = nativePlane(ex + 140, cy + 140, ptGoal.node.outputs[0], uz.node.outputs[0]);
+  // Hidden: construction planes/points must not draw in Rhino (Preview owns the flyer).
+  const uz = hidePreview(nativeUnitZ(ex, cy));
+  const ptStart = hidePreview(nativeConstructPoint(ex, cy + 60, [-0.5, 0.35, 0.55]));
+  const plStart = hidePreview(nativePlane(ex + 140, cy + 60, ptStart.node.outputs[0], uz.node.outputs[0]));
+  const ptGoal = hidePreview(nativeConstructPoint(ex, cy + 140, [0.45, -0.25, 1.05]));
+  const plGoal = hidePreview(nativePlane(ex + 140, cy + 140, ptGoal.node.outputs[0], uz.node.outputs[0]));
 
   const plan = motusComponent('plan', planX, cy, {
     Robot: [outRef(drone.node, 'Robot')],

@@ -1167,10 +1167,16 @@ public static class KinematicsPreview
         var axis = plane.ZAxis;
         if (!axis.Unitize()) return null;
 
-        var mesh = new Mesh();
         var lineFrom = plane.Origin - axis * halfLength;
         var lineTo = plane.Origin + axis * halfLength;
         var body = CylinderMesh(lineFrom, lineTo, radius);
+
+        // Short URDF cylinders (free-flyer rotors: R=55 mm, L=8 mm) must not grow sphere caps —
+        // those turn a disc into a blob. Draw the cylinder only when 2h << R.
+        if (halfLength < radius * 0.5)
+            return body;
+
+        var mesh = new Mesh();
         if (body is not null) mesh.Append(body);
         var capA = Mesh.CreateFromSphere(new Sphere(lineFrom, radius), 12, 8);
         var capB = Mesh.CreateFromSphere(new Sphere(lineTo, radius), 12, 8);
