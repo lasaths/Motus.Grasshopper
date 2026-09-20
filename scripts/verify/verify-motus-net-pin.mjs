@@ -72,7 +72,7 @@ if (onNuget) {
       if (re.test(slice)) fail(`${rel} still claims "${label}" after ${EXPECTED} is on nuget.org`);
     }
   }
-  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak unpublished (expected).`);
+  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak 2.0.0 live on Package Manager.`);
 } else {
   // Pre-publish: require at least one doc to mention UseLocal / pending publish for this cut.
   const joined = docFiles.map(read).join("\n");
@@ -85,12 +85,15 @@ if (onNuget) {
     fail(`pin ${EXPECTED} not on nuget.org yet, but docs do not acknowledge UseLocal / publish-pending`);
   }
   console.log(
-    `verify-motus-net-pin: OK — pin ${EXPECTED} (not on nuget.org yet); docs acknowledge UseLocal until publish; Yak unpublished (expected).`,
+    `verify-motus-net-pin: OK — pin ${EXPECTED} (not on nuget.org yet); docs acknowledge UseLocal until publish.`,
   );
 }
 
-// Yak / Package Manager honesty: do not claim a published Package Manager release for 1.8/2.0.
+// Yak / Package Manager honesty: 2.0.0 is live — README must say so; must not claim unpublished.
 const readme = read("README.md");
-if (/Package Manager.*(1\.8|2\.0).*published/i.test(readme) || /yak\.rhino3d\.com\/packages\/motus/i.test(readme)) {
-  fail("README must not claim Yak / Package Manager publish for 1.8 or 2.0 yet");
+if (/Yak unpublished/i.test(readme) || /no Rhino Package Manager entry for `motus` yet/i.test(readme)) {
+  fail("README still claims Yak unpublished after motus 2.0.0 GA");
+}
+if (!/Yak live|Package Manager.*motus|motus.*2\.0\.0.*Package Manager/i.test(readme)) {
+  fail("README must state Yak / Package Manager motus 2.0.0 is live");
 }

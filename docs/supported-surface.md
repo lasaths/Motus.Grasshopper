@@ -33,7 +33,7 @@ Matrix: [regression-matrix.md](regression-matrix.md) Supported / Rhino rows. Exa
 
 ## Out through 2.0
 
-No RTDE / Session / Run / live commands. No ROS. Yak unpublished until **2.0.0** ([packaging/yak/README.md](../packaging/yak/README.md)).
+No RTDE / Session / Run / live commands. No ROS. Yak `motus` **2.0.0** is live on Package Manager ([packaging/yak/README.md](../packaging/yak/README.md)).
 
 ## Yak
 

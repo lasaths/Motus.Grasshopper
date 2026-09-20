@@ -137,7 +137,11 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
 - Motus.NET **2.0.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
-- **Yak unpublished** — no Rhino Package Manager entry for `motus` yet; install from source (first public Yak target is Motus **2.0.0**)
+- **Yak live** — `motus` **2.0.0** on Rhino Package Manager (`yak search --all motus`). Source install still supported for tip / CI.
+
+## Install
+
+**Package Manager (recommended):** Rhino → Tools → Package Manager → search **motus** → install **2.0.0**.
 
 ## Install from source
 
@@ -147,7 +151,7 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 ./build.ps1                      # Release (NuGet Motus.NET 2.0.0)
 ./build.ps1 -UseLocal            # sibling Motus.NET project refs (tip / CI)
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
-./build.ps1 -Yak                 # pack only → dist/motus-*-rh8_*-any.yak (not published)
+./build.ps1 -Yak                 # pack → dist/motus-*-rh8_*-any.yak
 ./build.ps1 -Install             # %APPDATA%\Grasshopper\Libraries\Motus
 ```
 

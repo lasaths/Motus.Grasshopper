@@ -4,9 +4,7 @@
  *
  * - Identity surfaces agree with each other (whatever SemVer is currently on the tree)
  * - manifest + icon anatomy ready for McNeel Package Manager
- * - Docs still state first public Yak = 2.0.0 (do not claim published)
- *
- * Does NOT bump or require 1.8 / 2.0 SemVer — safe to run while Milestone 1.8 is in flight.
+ * - Docs state first public Yak 2.0.0 is live on Package Manager
  */
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -97,18 +95,23 @@ if (!existsSync(join(root, "scripts/pack-yak.sh"))) {
 const docs = ["README.md", "AGENTS.md", "packaging/yak/README.md", "docs/regression-matrix.md"];
 for (const rel of docs) {
   const text = read(rel);
-  if (!new RegExp(`2\\.0\\.0|first public Yak`, "i").test(text)) {
-    fail(`${rel} must mention first public Yak / 2.0.0 policy`);
+  if (!new RegExp(`2\\.0\\.0`, "i").test(text)) {
+    fail(`${rel} must mention 2.0.0`);
   }
-  if (/yak\.rhino3d\.com\/packages\/motus/i.test(text) && /published|live|available/i.test(text)) {
-    fail(`${rel} must not claim production Yak publish before ${FIRST_PUBLIC_YAK}`);
+  if (/Yak unpublished|not\*\* on (Rhino )?Package Manager|not on Package Manager yet/i.test(text)) {
+    fail(`${rel} still claims Yak unpublished after ${FIRST_PUBLIC_YAK} GA`);
   }
+}
+
+const readme = read("README.md");
+if (!/Yak live|Package Manager \(recommended\)/i.test(readme)) {
+  fail("README must state Yak live / Package Manager install for motus 2.0.0");
 }
 
 const isGa = vCsproj === FIRST_PUBLIC_YAK;
 const status = isGa
-  ? `GA identity ${FIRST_PUBLIC_YAK} — production yak push allowed after auth + clean pack`
-  : `pre-GA identity ${vCsproj} — pack/test-server OK; do NOT push production Yak until ${FIRST_PUBLIC_YAK}`;
+  ? `GA identity ${FIRST_PUBLIC_YAK} — live on Package Manager`
+  : `post-GA identity ${vCsproj} — keep Package Manager docs honest; pack before yak push`;
 
 console.log(`verify-yak-packaging: OK — ${status}`);
 console.log(`  csproj/plugin/manifest/MotusNetVersion = ${vCsproj}`);

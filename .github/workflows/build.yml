@@ -124,7 +124,7 @@ jobs:
       - name: Verify Motus.NET NuGet pin + docs
         run: node scripts/verify/verify-motus-net-pin.mjs
 
-      - name: Verify Yak packaging anatomy (pre-2.0.0 GA)
+      - name: Verify Yak packaging anatomy (2.0.0 live)
         run: node scripts/verify/verify-yak-packaging.mjs
 
       # Compiles against NuGet RhinoCommon (ref-only). Runtime loads Rhino 8 System\RhinoCommon.dll.

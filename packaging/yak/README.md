@@ -5,8 +5,8 @@ Rhino Package Manager package for Motus.Grasshopper.
 | Rule | Detail |
 |------|--------|
 | Package name | `motus` (do not rename) |
-| First **public** push | **2.0.0** only — no 0.x / 1.8 / 1.9 on yak.rhino3d.com |
-| Pack anytime | Allowed for local / test-server dry-runs |
+| First **public** push | **2.0.0** — live on yak.rhino3d.com (`yak search --all motus`) |
+| Pack anytime | Allowed for local rebuilds / test-server |
 | Motus.NET | `-Yak` always builds against **NuGet** (never UseLocal) |
 
 ## Anatomy
@@ -38,23 +38,13 @@ pwsh ./build.ps1 -Configuration Release -Yak
 
 Output: `dist/motus-<version>-rh8_*-any.yak`
 
-## Push (2.0.0 GA only)
+## Push (post-GA)
 
-Prerequisites (human / authenticated host):
-
-1. Motus.NET **2.0.0** on nuget.org; GH pin + csproj + `MotusGhPlugin.Version` + manifest template all **2.0.0**
-2. Clean tree (or stash WIP) — do not bake dirty WIP into the package
-3. Fresh dual-TFM Release build identity matches **2.0.0**
-4. Yak auth: `~/.mcneel/yak.yml` or `YAK_TOKEN` (`yak login` / `yak login --ci`)
-5. `node scripts/verify/verify-yak-packaging.mjs` green
+`motus` **2.0.0** is live on production Yak. Further SemVers need a version bump (csproj + `MotusGhPlugin.Version` + manifest template + Motus.NET pin when required), fresh dual-TFM pack, then:
 
 ```bash
-# Prefer production only when Version == 2.0.0
-yak push dist/motus-2.0.0-rh8_*-any.yak
+yak push dist/motus-<version>-rh8_*-any.yak
 yak search --all motus
-
-# Pre-GA dry-run → test server only
-yak push --source https://test.yak.rhino3d.com dist/motus-*.yak
 ```
 
-Do **not** push 0.17 / 1.8 / 1.9 to production Yak — policy in the Motus 2.0 release plan.
+Do **not** re-push older pre-GA identities (0.17 / 1.8 / 1.9) to production.
