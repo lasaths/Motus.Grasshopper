@@ -19,8 +19,9 @@ Examples target the **current Motus.Grasshopper** build (Motus.NET **2.0.0** NuG
 
 macOS: `INSTALL=1 ./build.sh`. Confirm a **Motus** tab appears before opening an example.
 
-Each file uses **Scribble** titles and coloured **Groups**; list inputs go through **Merge**. **Motus Plan** / **Motus Program** examples ship with **Auto Plan** on. Use **Motus Scrub** or Preview **Play** after a trajectory appears.
+Each file uses **Scribble** titles + note scribbles, coloured **Groups** with size-25 stage headers (**Robot → Env + Traj → Plan → Play**), and list inputs through **Merge**. **Motus Plan** / **Motus Program** examples ship with **Auto Plan** on. Use **Motus Scrub** or Preview **Play** after a trajectory appears.
 
+Layout QA without Rhino: regenerate writes `.cassis-audit/layout/*.svg` and fails on authored Bounds overlaps.
 Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-components.md).
 
 ## Example index
@@ -100,6 +101,6 @@ Drag Number Slider `N` (4–12) on **09** to change leg count.
 
 ## Editing
 
-**Only:** edit `scripts/generate-examples.mjs`, then regenerate + validate. Layout: band layout, Scribble titles, short Note panels ([CONTEXT.md](../CONTEXT.md) if present).
+**Only:** edit `scripts/generate-examples.mjs`, then regenerate + validate. Layout: pipeline **Robot → Env + Traj → Plan → Play**, size-25 group scribbles, title + note scribbles ([CONTEXT.md](../CONTEXT.md)).
 
 Controller handoff: [AGENTS.md](../AGENTS.md).
