@@ -1198,12 +1198,12 @@ function exampleHeader(titleText, noteText) {
 
 /**
  * Coloured GH Group with a size-25 Scribble header, left-aligned at the top of the stage.
- * NickName left blank — the scribble is the stage label (avoids double chrome).
+ * NickName left blank (no ZWSP/space — GH still draws empty nick chrome which looks silly).
  * Place `hx, hy` at the top-left of the stage; components should sit below hy + headerGap.
  */
 function stageGroup(label, members, colourArgb, hx, hy) {
   const header = nativeScribble(hx, hy, label, PIPE.groupHeaderSize);
-  const group = nativeGroup('\u200B', [header, ...members], colourArgb); // ZWSP: named in snapshot, no visible nick
+  const group = nativeGroup('', [header, ...members], colourArgb);
   return { header, group };
 }
 
