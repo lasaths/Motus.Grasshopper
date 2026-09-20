@@ -2,13 +2,9 @@
 
 ## Unreleased
 
-### Changed
+## 2.0.0 — Public product · Yak GA — 2026-09-20
 
-- Ribbon panels: **Legged** and **Urdf** split out of Model; **Attach Body** moved to Plan. Advanced helpers use secondary exposure (Serial Chain, Stewart, Joint Table, Sampling Settings, Planning Group, Reach, Load Mesh, Robot Info, Terrain Patch, Urdf Explode, Export URDF).
-
-## 2.0.0 — Public product · Yak GA — 2026-09-19
-
-Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/2.0.0). CI `build-*-nuget` uses the props pin (no last-published override). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak`; production `yak push` needs human Package Manager auth (no agent interactive login).
+Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/2.0.0). CI `build-*-nuget` uses the props pin (no last-published override). **First public Yak** `motus` target is this SemVer — pack with `./build.ps1 -Yak` or `./scripts/pack-yak.sh`; production `yak push` needs human Package Manager auth (no agent interactive login).
 
 ### Added
 
@@ -18,6 +14,8 @@ Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/M
 
 - Plugin / yak manifest / `MotusNetVersion` pin aligned to **2.0.0**.
 - Docs (AGENTS, README, examples, regression matrix) describe **2.0.0** cut; CI NuGet jobs drop `MotusNetVersion=1.9.0` override.
+- Ribbon panels: **Legged** and **Urdf** split out of Model; **Attach Body** moved to Plan. Advanced helpers use secondary exposure (Serial Chain, Stewart, Joint Table, Sampling Settings, Planning Group, Reach, Load Mesh, Robot Info, Terrain Patch, Urdf Explode, Export URDF).
+- Repo hygiene: example assets under `examples/assets/`; fetch/verify scripts under `scripts/{fetch,verify}`; obsolete 0.7.0 patches/scripts removed.
 
 ### Motus.NET pin
 
