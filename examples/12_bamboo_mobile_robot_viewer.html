@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Example 12: ICD/LIS Bamboo Mobile Robot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f5f5f5;
+      overflow: hidden;
+    }
+    #container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #header {
+      background: #0A2E33;
+      color: white;
+      padding: 16px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    #header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    #header p {
+      font-size: 13px;
+      color: #00DB87;
+      margin: 0;
+    }
+    #viewer {
+      flex: 1;
+      position: relative;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      min-width: 400px;
+    }
+    #controls label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #0A2E33;
+      margin-bottom: 8px;
+    }
+    #scrubber {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #e0e0e0;
+      outline: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #787DFA;
+      cursor: pointer;
+      border-radius: 50%;
+    }
+    #scrubber::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: #787DFA;
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+    }
+    #joint-display {
+      margin-top: 12px;
+      font-size: 11px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: #666;
+      line-height: 1.5;
+    }
+    .button-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    button {
+      flex: 1;
+      padding: 8px 16px;
+      background: #787DFA;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #6066d6;
+    }
+    button.secondary {
+      background: #00DB87;
+    }
+    button.secondary:hover {
+      background: #00c278;
+    }
+    #info {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      font-size: 12px;
+      color: #666;
+      max-width: 200px;
+    }
+    #info strong {
+      color: #0A2E33;
+      display: block;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="header">
+      <h1>Example 12: ICD/LIS Bamboo Mobile Robot</h1>
+      <p>5-DOF Symmetric Brachiation Robot (Kalousdian et al., RAL 2022)</p>
+    </div>
+    <div id="viewer"></div>
+    <div id="info">
+      <strong>5-DOF Chain</strong>
+      Claw → Wrist(Z) → Elbow(X) → Shoulder(X) → Elbow(X) → Wrist(Z) → Claw
+    </div>
+    <div id="controls">
+      <label for="scrubber">Motion Scrubber (Start → Goal)</label>
+      <input type="range" id="scrubber" min="0" max="100" value="0" step="1">
+      <div id="joint-display"></div>
+      <div class="button-row">
+        <button id="animate-btn" class="secondary">Animate</button>
+        <button id="reset-btn">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Joint states from example 12
+    const START_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0];
+    const GOAL_JOINTS = [Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4];
+    const JOINT_NAMES = ['θ1: Wrist1', 'θ2: Elbow1', 'θ3: Shoulder', 'θ4: Elbow2', 'θ5: Wrist2'];
+
+    // URDF-based link structure (simplified from bamboo_mobile_robot.urdf)
+    const ROBOT_STRUCTURE = {
+      base_claw: { type: 'cylinder', length: 0.08, radius: 0.04, color: 0x00DB87 },
+      wrist1: { parent: 'base_claw', offset: [0, 0, 0.04], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x787DFA },
+      link1: { parent: 'wrist1', offset: [0, 0, 0.06], type: 'cylinder', length: 0.10, radius: 0.015, color: 0xAFFC41 },
+      elbow1: { parent: 'link1', offset: [0, 0, 0.10], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0x787DFA },
+      link2: { parent: 'elbow1', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0xAFFC41 },
+      shoulder: { parent: 'link2', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.07, 0.07, 0.04], color: 0xFF6B6B },
+      link3: { parent: 'shoulder', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0xAFFC41 },
+      elbow2: { parent: 'link3', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0x787DFA },
+      link4: { parent: 'elbow2', offset: [0, 0, 0.02], type: 'cylinder', length: 0.10, radius: 0.015, color: 0xAFFC41 },
+      wrist2: { parent: 'link4', offset: [0, 0, 0.10], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x787DFA },
+      right_claw: { parent: 'wrist2', offset: [0, 0, 0.06], type: 'cylinder', length: 0.08, radius: 0.04, color: 0x00DB87 }
+    };
+
+    // Three.js setup
+    const container = document.getElementById('viewer');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f5f5);
+    
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0.6, 0.4, 0.5);
+    camera.lookAt(0, 0, 0.2);
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+    
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    directionalLight.position.set(1, 1, 1);
+    scene.add(directionalLight);
+    
+    // Ground plane
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.MeshBasicMaterial({ color: 0xe0e0e0, side: THREE.DoubleSide })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.05;
+    scene.add(ground);
+    
+    // Robot parts
+    const robotParts = {};
+    const jointAxes = [];
+    
+    function createGeometry(spec) {
+      if (spec.type === 'cylinder') {
+        return new THREE.CylinderGeometry(spec.radius, spec.radius, spec.length, 16);
+      } else {
+        return new THREE.BoxGeometry(spec.size[0], spec.size[1], spec.size[2]);
+      }
+    }
+    
+    function buildRobot() {
+      for (const [name, spec] of Object.entries(ROBOT_STRUCTURE)) {
+        const geometry = createGeometry(spec);
+        const material = new THREE.MeshPhongMaterial({ color: spec.color });
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        if (spec.type === 'cylinder') {
+          mesh.geometry.rotateX(Math.PI / 2);
+          mesh.position.z = spec.length / 2;
+        } else {
+          mesh.position.z = spec.size[2] / 2;
+        }
+        
+        const group = new THREE.Group();
+        group.add(mesh);
+        
+        if (spec.parent) {
+          const parent = robotParts[spec.parent];
+          group.position.set(...spec.offset);
+          parent.add(group);
+          
+          if (spec.axis) {
+            jointAxes.push({ group, axis: spec.axis });
+          }
+        } else {
+          scene.add(group);
+        }
+        
+        robotParts[name] = group;
+      }
+    }
+    
+    buildRobot();
+    
+    // Joint control
+    function setJointAngles(angles) {
+      if (jointAxes[0]) { // θ1: Wrist1 Z-axis
+        robotParts.wrist1.rotation.z = angles[0];
+      }
+      if (jointAxes[1]) { // θ2: Elbow1 X-axis
+        robotParts.elbow1.rotation.x = angles[1];
+      }
+      if (jointAxes[2]) { // θ3: Shoulder X-axis
+        robotParts.shoulder.rotation.x = angles[2];
+      }
+      if (jointAxes[3]) { // θ4: Elbow2 X-axis
+        robotParts.elbow2.rotation.x = angles[3];
+      }
+      if (jointAxes[4]) { // θ5: Wrist2 Z-axis
+        robotParts.wrist2.rotation.z = angles[4];
+      }
+    }
+    
+    function interpolateJoints(t) {
+      return START_JOINTS.map((start, i) => {
+        return start + (GOAL_JOINTS[i] - start) * t;
+      });
+    }
+    
+    function updateJointDisplay(angles) {
+      const lines = angles.map((angle, i) => {
+        const deg = (angle * 180 / Math.PI).toFixed(1);
+        const rad = angle.toFixed(3);
+        return `${JOINT_NAMES[i]}: ${rad} rad (${deg}°)`;
+      });
+      document.getElementById('joint-display').innerHTML = lines.join('<br>');
+    }
+    
+    // Controls
+    const scrubber = document.getElementById('scrubber');
+    const animateBtn = document.getElementById('animate-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    
+    let animating = false;
+    let animationId = null;
+    
+    scrubber.addEventListener('input', (e) => {
+      const t = parseFloat(e.target.value) / 100;
+      const joints = interpolateJoints(t);
+      setJointAngles(joints);
+      updateJointDisplay(joints);
+      renderer.render(scene, camera);
+    });
+    
+    animateBtn.addEventListener('click', () => {
+      if (animating) {
+        animating = false;
+        animateBtn.textContent = 'Animate';
+        animateBtn.classList.add('secondary');
+        cancelAnimationFrame(animationId);
+      } else {
+        animating = true;
+        animateBtn.textContent = 'Stop';
+        animateBtn.classList.remove('secondary');
+        
+        const duration = 3000;
+        const startTime = Date.now();
+        
+        function animate() {
+          if (!animating) return;
+          
+          const elapsed = Date.now() - startTime;
+          const t = (elapsed % duration) / duration;
+          
+          scrubber.value = t * 100;
+          const joints = interpolateJoints(t);
+          setJointAngles(joints);
+          updateJointDisplay(joints);
+          renderer.render(scene, camera);
+          
+          animationId = requestAnimationFrame(animate);
+        }
+        animate();
+      }
+    });
+    
+    resetBtn.addEventListener('click', () => {
+      animating = false;
+      animateBtn.textContent = 'Animate';
+      animateBtn.classList.add('secondary');
+      cancelAnimationFrame(animationId);
+      
+      scrubber.value = 0;
+      setJointAngles(START_JOINTS);
+      updateJointDisplay(START_JOINTS);
+      renderer.render(scene, camera);
+    });
+    
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.render(scene, camera);
+    });
+    
+    // Mouse controls (simple orbit)
+    let mouseDown = false;
+    let mouseX = 0, mouseY = 0;
+    let cameraTheta = Math.PI / 4;
+    let cameraPhi = Math.PI / 6;
+    const cameraDistance = 0.8;
+    
+    container.addEventListener('mousedown', (e) => {
+      mouseDown = true;
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+    
+    container.addEventListener('mousemove', (e) => {
+      if (!mouseDown) return;
+      
+      const dx = e.clientX - mouseX;
+      const dy = e.clientY - mouseY;
+      
+      cameraTheta -= dx * 0.005;
+      cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi - dy * 0.005));
+      
+      camera.position.x = cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+      camera.position.y = cameraDistance * Math.cos(cameraPhi);
+      camera.position.z = cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta) + 0.2;
+      camera.lookAt(0, 0, 0.2);
+      
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      
+      renderer.render(scene, camera);
+    });
+    
+    container.addEventListener('mouseup', () => {
+      mouseDown = false;
+    });
+    
+    // Initial render
+    setJointAngles(START_JOINTS);
+    updateJointDisplay(START_JOINTS);
+    renderer.render(scene, camera);
+  </script>
+</body>
+</html>

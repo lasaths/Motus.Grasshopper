@@ -12,6 +12,26 @@ URDF model of the bamboo mobile brachiation robot developed for collaborative ro
 
 The robot brachiates on bamboo bundle structures, using learned control policies to transport bamboo bundles and reach goal positions by leveraging elastic bending behavior of the material.
 
+## Preview Without Grasshopper/Rhino
+
+**Static Web Viewer:** Open `../../12_bamboo_mobile_robot_viewer.html` in any web browser to see the robot in 3D.
+
+Features:
+- Interactive 3D view (drag to rotate camera)
+- Motion scrubber (slide from start pose to goal pose)
+- Animate button (3-second loop)
+- Real-time joint angle display
+- No network required at runtime (self-contained HTML/JS)
+
+```bash
+# From repo root, open the viewer:
+open examples/12_bamboo_mobile_robot_viewer.html
+# or
+firefox examples/12_bamboo_mobile_robot_viewer.html
+```
+
+The viewer shows the same start-to-goal motion that the Grasshopper example demonstrates.
+
 ## Published Kinematics
 
 ### 5-DOF Symmetric Chain
