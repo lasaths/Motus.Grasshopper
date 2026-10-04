@@ -4,14 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Example 12: ICD/LIS Bamboo Mobile Robot</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;500&family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     body {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #000000;
       color: #E8E8E8;
       overflow: hidden;
@@ -44,7 +41,7 @@
     }
     
     #shoulder-value {
-      font-family: 'Doto', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: clamp(120px, 18vw, 240px);
       font-weight: 500;
       color: #FFFFFF;
@@ -53,7 +50,7 @@
     }
     
     #shoulder-label {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 11px;
       font-weight: 400;
       letter-spacing: 0.15em;
@@ -72,7 +69,7 @@
     }
     
     #header h1 {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.15em;
@@ -82,7 +79,7 @@
     }
     
     #header p {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       font-weight: 400;
       color: #666666;
@@ -109,7 +106,7 @@
     }
     
     .control-label {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 10px;
       font-weight: 400;
       letter-spacing: 0.15em;
@@ -176,7 +173,7 @@
     }
     
     button {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.12em;
@@ -212,7 +209,7 @@
     }
     
     .joint-row {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 10px;
       font-weight: 400;
       color: #666666;
@@ -243,7 +240,7 @@
     }
     
     #info .label {
-      font-family: 'Space Mono', monospace;
+      font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 10px;
       font-weight: 400;
       letter-spacing: 0.15em;
@@ -252,7 +249,7 @@
     }
     
     #info .value {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 13px;
       color: #999999;
       margin-top: 4px;
@@ -299,7 +296,7 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="three.r128.min.js"></script>
   <script>
     // Joint states from example 12 (unchanged)
     const START_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0];

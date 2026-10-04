@@ -50,14 +50,30 @@ for (const viewer of EXPECTED_VIEWERS) {
     '<!DOCTYPE html>',
     '<title>',
     'id="viewer"',
-    'id="scrubber"',
-    'three.js'
+    'id="scrubber"'
   ];
   
   for (const element of requiredElements) {
     if (!htmlContent.includes(element)) {
       console.error(`  ❌ HTML missing required element: ${element}`);
       failed++;
+    }
+  }
+  
+  // Check for Three.js (CDN or local)
+  if (!htmlContent.includes('three.js') && !htmlContent.includes('three.r128.min.js')) {
+    console.error(`  ❌ HTML missing Three.js library reference`);
+    failed++;
+  }
+  
+  // If using local Three.js, verify the file exists
+  if (htmlContent.includes('three.r128.min.js')) {
+    const threeJsPath = path.join(examplesDir, 'three.r128.min.js');
+    if (!fs.existsSync(threeJsPath)) {
+      console.error(`  ❌ Local Three.js file not found: three.r128.min.js`);
+      failed++;
+    } else {
+      console.log(`  ✓ Local Three.js library found`);
     }
   }
   
