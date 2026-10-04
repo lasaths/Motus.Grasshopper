@@ -4,186 +4,330 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Example 12: ICD/LIS Bamboo Mobile Robot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;500&family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-      background: #f5f5f5;
+      font-family: 'Space Grotesk', sans-serif;
+      background: #000000;
+      color: #E8E8E8;
       overflow: hidden;
+      position: relative;
     }
+    
     #container {
       display: flex;
       flex-direction: column;
       height: 100vh;
-    }
-    #header {
-      background: #0A2E33;
-      color: white;
-      padding: 16px 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    #header h1 {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    #header p {
-      font-size: 13px;
-      color: #00DB87;
-      margin: 0;
-    }
-    #viewer {
-      flex: 1;
       position: relative;
     }
+    
+    #viewer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    
+    /* Huge shoulder angle number - dominant visual element */
+    #shoulder-display {
+      position: absolute;
+      top: 15vh;
+      right: 8vw;
+      z-index: 10;
+      pointer-events: none;
+    }
+    
+    #shoulder-value {
+      font-family: 'Doto', monospace;
+      font-size: clamp(120px, 18vw, 240px);
+      font-weight: 500;
+      color: #FFFFFF;
+      line-height: 0.9;
+      letter-spacing: -0.02em;
+    }
+    
+    #shoulder-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      color: #666666;
+      text-transform: uppercase;
+      margin-top: 12px;
+    }
+    
+    /* Top left title */
+    #header {
+      position: absolute;
+      top: 40px;
+      left: 40px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    
+    #header h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #999999;
+      margin-bottom: 6px;
+    }
+    
+    #header p {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: #666666;
+      max-width: 280px;
+    }
+    
+    /* Bottom controls - minimal surface */
     #controls {
       position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: white;
-      padding: 16px 24px;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-      min-width: 400px;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #111111;
+      border-top: 1px solid #222222;
+      padding: 32px 40px;
+      z-index: 10;
     }
-    #controls label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      color: #0A2E33;
-      margin-bottom: 8px;
+    
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      max-width: 1200px;
     }
+    
+    .control-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #666666;
+      min-width: 80px;
+    }
+    
+    /* Scrubber */
+    #scrubber-container {
+      flex: 1;
+      max-width: 600px;
+    }
+    
     #scrubber {
       width: 100%;
-      height: 6px;
+      height: 2px;
       -webkit-appearance: none;
       appearance: none;
-      background: #e0e0e0;
+      background: #333333;
       outline: none;
-      border-radius: 3px;
       cursor: pointer;
+      border-radius: 0;
+      transition: background 0.2s ease-out;
     }
+    
+    #scrubber:hover {
+      background: #444444;
+    }
+    
     #scrubber::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 18px;
-      height: 18px;
-      background: #787DFA;
+      width: 12px;
+      height: 12px;
+      background: #FFFFFF;
       cursor: pointer;
-      border-radius: 50%;
+      border-radius: 6px;
+      transition: background 0.15s ease-out;
     }
+    
     #scrubber::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      background: #787DFA;
+      width: 12px;
+      height: 12px;
+      background: #FFFFFF;
       cursor: pointer;
-      border-radius: 50%;
+      border-radius: 6px;
       border: none;
+      transition: background 0.15s ease-out;
     }
-    #joint-display {
-      margin-top: 12px;
-      font-size: 11px;
-      font-family: 'Monaco', 'Courier New', monospace;
-      color: #666;
-      line-height: 1.5;
+    
+    #scrubber:active::-webkit-slider-thumb {
+      background: #D71921;
     }
-    .button-row {
+    
+    #scrubber:active::-moz-range-thumb {
+      background: #D71921;
+    }
+    
+    /* Buttons - pill shape */
+    .button-group {
       display: flex;
-      gap: 8px;
-      margin-top: 12px;
+      gap: 12px;
     }
+    
     button {
-      flex: 1;
-      padding: 8px 16px;
-      background: #787DFA;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 500;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 10px 20px;
+      background: transparent;
+      color: #999999;
+      border: 1px solid #333333;
+      border-radius: 20px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.15s ease-out;
+      white-space: nowrap;
     }
+    
     button:hover {
-      background: #6066d6;
+      border-color: #666666;
+      color: #E8E8E8;
     }
-    button.secondary {
-      background: #00DB87;
+    
+    button.active {
+      background: #D71921;
+      border-color: #D71921;
+      color: #FFFFFF;
     }
-    button.secondary:hover {
-      background: #00c278;
+    
+    /* Small joint details - bottom left */
+    #joint-details {
+      position: absolute;
+      bottom: 140px;
+      left: 40px;
+      z-index: 10;
+      pointer-events: none;
     }
+    
+    .joint-row {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      color: #666666;
+      margin-bottom: 4px;
+      letter-spacing: 0.05em;
+    }
+    
+    .joint-row .label {
+      display: inline-block;
+      width: 60px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    .joint-row .value {
+      color: #999999;
+      font-weight: 400;
+    }
+    
+    /* Info label - top right corner */
     #info {
       position: absolute;
-      top: 20px;
-      right: 20px;
-      background: white;
-      padding: 12px 16px;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      font-size: 12px;
-      color: #666;
-      max-width: 200px;
+      top: 40px;
+      right: 40px;
+      z-index: 10;
+      pointer-events: none;
+      text-align: right;
     }
-    #info strong {
-      color: #0A2E33;
-      display: block;
-      margin-bottom: 4px;
+    
+    #info .label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #666666;
+    }
+    
+    #info .value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      color: #999999;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
   <div id="container">
-    <div id="header">
-      <h1>Example 12: ICD/LIS Bamboo Mobile Robot</h1>
-      <p>5-DOF Symmetric Brachiation Robot (Kalousdian et al., RAL 2022)</p>
-    </div>
     <div id="viewer"></div>
-    <div id="info">
-      <strong>5-DOF Chain</strong>
-      Claw → Wrist(Z) → Elbow(X) → Shoulder(X) → Elbow(X) → Wrist(Z) → Claw
+    
+    <div id="header">
+      <h1>Example 12</h1>
+      <p>ICD/LIS Bamboo Mobile Robot<br>5-DOF Symmetric Brachiation</p>
     </div>
+    
+    <div id="info">
+      <div class="label">Structure</div>
+      <div class="value">Wrist · Elbow · Shoulder · Elbow · Wrist</div>
+    </div>
+    
+    <div id="shoulder-display">
+      <div id="shoulder-value">0.0°</div>
+      <div id="shoulder-label">Shoulder θ3</div>
+    </div>
+    
+    <div id="joint-details">
+      <div class="joint-row"><span class="label">θ1 wrist</span><span class="value" id="j1">0.0°</span></div>
+      <div class="joint-row"><span class="label">θ2 elbow</span><span class="value" id="j2">0.0°</span></div>
+      <div class="joint-row"><span class="label">θ4 elbow</span><span class="value" id="j4">0.0°</span></div>
+      <div class="joint-row"><span class="label">θ5 wrist</span><span class="value" id="j5">0.0°</span></div>
+    </div>
+    
     <div id="controls">
-      <label for="scrubber">Motion Scrubber (Start → Goal)</label>
-      <input type="range" id="scrubber" min="0" max="100" value="0" step="1">
-      <div id="joint-display"></div>
-      <div class="button-row">
-        <button id="animate-btn" class="secondary">Animate</button>
-        <button id="reset-btn">Reset</button>
+      <div class="control-row">
+        <span class="control-label">Motion</span>
+        <div id="scrubber-container">
+          <input type="range" id="scrubber" min="0" max="100" value="0" step="0.5">
+        </div>
+        <div class="button-group">
+          <button id="animate-btn">Animate</button>
+          <button id="reset-btn">Reset</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
-    // Joint states from example 12
+    // Joint states from example 12 (unchanged)
     const START_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0];
     const GOAL_JOINTS = [Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4];
     const JOINT_NAMES = ['θ1: Wrist1', 'θ2: Elbow1', 'θ3: Shoulder', 'θ4: Elbow2', 'θ5: Wrist2'];
 
-    // URDF-based link structure (simplified from bamboo_mobile_robot.urdf)
+    // URDF-based link structure (unchanged)
     const ROBOT_STRUCTURE = {
-      base_claw: { type: 'cylinder', length: 0.08, radius: 0.04, color: 0x00DB87 },
-      wrist1: { parent: 'base_claw', offset: [0, 0, 0.04], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x787DFA },
-      link1: { parent: 'wrist1', offset: [0, 0, 0.06], type: 'cylinder', length: 0.10, radius: 0.015, color: 0xAFFC41 },
-      elbow1: { parent: 'link1', offset: [0, 0, 0.10], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0x787DFA },
-      link2: { parent: 'elbow1', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0xAFFC41 },
-      shoulder: { parent: 'link2', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.07, 0.07, 0.04], color: 0xFF6B6B },
-      link3: { parent: 'shoulder', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0xAFFC41 },
-      elbow2: { parent: 'link3', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0x787DFA },
-      link4: { parent: 'elbow2', offset: [0, 0, 0.02], type: 'cylinder', length: 0.10, radius: 0.015, color: 0xAFFC41 },
-      wrist2: { parent: 'link4', offset: [0, 0, 0.10], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x787DFA },
-      right_claw: { parent: 'wrist2', offset: [0, 0, 0.06], type: 'cylinder', length: 0.08, radius: 0.04, color: 0x00DB87 }
+      base_claw: { type: 'cylinder', length: 0.08, radius: 0.04, color: 0xCCCCCC },
+      wrist1: { parent: 'base_claw', offset: [0, 0, 0.04], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x999999 },
+      link1: { parent: 'wrist1', offset: [0, 0, 0.06], type: 'cylinder', length: 0.10, radius: 0.015, color: 0x666666 },
+      elbow1: { parent: 'link1', offset: [0, 0, 0.10], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0xAAAAAA },
+      link2: { parent: 'elbow1', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0x777777 },
+      shoulder: { parent: 'link2', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.07, 0.07, 0.04], color: 0xFFFFFF },
+      link3: { parent: 'shoulder', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0x777777 },
+      elbow2: { parent: 'link3', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0xAAAAAA },
+      link4: { parent: 'elbow2', offset: [0, 0, 0.02], type: 'cylinder', length: 0.10, radius: 0.015, color: 0x666666 },
+      wrist2: { parent: 'link4', offset: [0, 0, 0.10], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x999999 },
+      right_claw: { parent: 'wrist2', offset: [0, 0, 0.06], type: 'cylinder', length: 0.08, radius: 0.04, color: 0xCCCCCC }
     };
 
     // Three.js setup
     const container = document.getElementById('viewer');
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf5f5f5);
+    scene.background = new THREE.Color(0x000000);
     
-    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.01, 100);
-    camera.position.set(0.6, 0.4, 0.5);
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0.65, 0.45, 0.55);
     camera.lookAt(0, 0, 0.2);
     
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -191,21 +335,15 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
     
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting - subtle, no color
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
-    
-    // Ground plane
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(2, 2),
-      new THREE.MeshBasicMaterial({ color: 0xe0e0e0, side: THREE.DoubleSide })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.05;
-    scene.add(ground);
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    backLight.position.set(-1, 0.5, -1);
+    scene.add(backLight);
     
     // Robot parts
     const robotParts = {};
@@ -222,7 +360,11 @@
     function buildRobot() {
       for (const [name, spec] of Object.entries(ROBOT_STRUCTURE)) {
         const geometry = createGeometry(spec);
-        const material = new THREE.MeshPhongMaterial({ color: spec.color });
+        const material = new THREE.MeshPhongMaterial({ 
+          color: spec.color,
+          shininess: 20,
+          specular: 0x222222
+        });
         const mesh = new THREE.Mesh(geometry, material);
         
         if (spec.type === 'cylinder') {
@@ -253,38 +395,29 @@
     
     buildRobot();
     
-    // Joint control
+    // Joint control (unchanged kinematics)
     function setJointAngles(angles) {
-      if (jointAxes[0]) { // θ1: Wrist1 Z-axis
-        robotParts.wrist1.rotation.z = angles[0];
-      }
-      if (jointAxes[1]) { // θ2: Elbow1 X-axis
-        robotParts.elbow1.rotation.x = angles[1];
-      }
-      if (jointAxes[2]) { // θ3: Shoulder X-axis
-        robotParts.shoulder.rotation.x = angles[2];
-      }
-      if (jointAxes[3]) { // θ4: Elbow2 X-axis
-        robotParts.elbow2.rotation.x = angles[3];
-      }
-      if (jointAxes[4]) { // θ5: Wrist2 Z-axis
-        robotParts.wrist2.rotation.z = angles[4];
-      }
+      if (jointAxes[0]) robotParts.wrist1.rotation.z = angles[0];
+      if (jointAxes[1]) robotParts.elbow1.rotation.x = angles[1];
+      if (jointAxes[2]) robotParts.shoulder.rotation.x = angles[2];
+      if (jointAxes[3]) robotParts.elbow2.rotation.x = angles[3];
+      if (jointAxes[4]) robotParts.wrist2.rotation.z = angles[4];
     }
     
     function interpolateJoints(t) {
-      return START_JOINTS.map((start, i) => {
-        return start + (GOAL_JOINTS[i] - start) * t;
-      });
+      return START_JOINTS.map((start, i) => start + (GOAL_JOINTS[i] - start) * t);
     }
     
-    function updateJointDisplay(angles) {
-      const lines = angles.map((angle, i) => {
-        const deg = (angle * 180 / Math.PI).toFixed(1);
-        const rad = angle.toFixed(3);
-        return `${JOINT_NAMES[i]}: ${rad} rad (${deg}°)`;
-      });
-      document.getElementById('joint-display').innerHTML = lines.join('<br>');
+    function updateDisplay(angles) {
+      // Huge shoulder angle
+      const shoulderDeg = (angles[2] * 180 / Math.PI).toFixed(1);
+      document.getElementById('shoulder-value').textContent = shoulderDeg + '°';
+      
+      // Small joint details (excluding shoulder)
+      document.getElementById('j1').textContent = (angles[0] * 180 / Math.PI).toFixed(1) + '°';
+      document.getElementById('j2').textContent = (angles[1] * 180 / Math.PI).toFixed(1) + '°';
+      document.getElementById('j4').textContent = (angles[3] * 180 / Math.PI).toFixed(1) + '°';
+      document.getElementById('j5').textContent = (angles[4] * 180 / Math.PI).toFixed(1) + '°';
     }
     
     // Controls
@@ -299,7 +432,7 @@
       const t = parseFloat(e.target.value) / 100;
       const joints = interpolateJoints(t);
       setJointAngles(joints);
-      updateJointDisplay(joints);
+      updateDisplay(joints);
       renderer.render(scene, camera);
     });
     
@@ -307,12 +440,12 @@
       if (animating) {
         animating = false;
         animateBtn.textContent = 'Animate';
-        animateBtn.classList.add('secondary');
+        animateBtn.classList.remove('active');
         cancelAnimationFrame(animationId);
       } else {
         animating = true;
         animateBtn.textContent = 'Stop';
-        animateBtn.classList.remove('secondary');
+        animateBtn.classList.add('active');
         
         const duration = 3000;
         const startTime = Date.now();
@@ -321,12 +454,15 @@
           if (!animating) return;
           
           const elapsed = Date.now() - startTime;
-          const t = (elapsed % duration) / duration;
+          let t = (elapsed % duration) / duration;
+          
+          // Ease-out cubic
+          t = 1 - Math.pow(1 - t, 3);
           
           scrubber.value = t * 100;
           const joints = interpolateJoints(t);
           setJointAngles(joints);
-          updateJointDisplay(joints);
+          updateDisplay(joints);
           renderer.render(scene, camera);
           
           animationId = requestAnimationFrame(animate);
@@ -338,12 +474,12 @@
     resetBtn.addEventListener('click', () => {
       animating = false;
       animateBtn.textContent = 'Animate';
-      animateBtn.classList.add('secondary');
+      animateBtn.classList.remove('active');
       cancelAnimationFrame(animationId);
       
       scrubber.value = 0;
       setJointAngles(START_JOINTS);
-      updateJointDisplay(START_JOINTS);
+      updateDisplay(START_JOINTS);
       renderer.render(scene, camera);
     });
     
@@ -360,7 +496,7 @@
     let mouseX = 0, mouseY = 0;
     let cameraTheta = Math.PI / 4;
     let cameraPhi = Math.PI / 6;
-    const cameraDistance = 0.8;
+    const cameraDistance = 0.85;
     
     container.addEventListener('mousedown', (e) => {
       mouseDown = true;
@@ -394,7 +530,7 @@
     
     // Initial render
     setJointAngles(START_JOINTS);
-    updateJointDisplay(START_JOINTS);
+    updateDisplay(START_JOINTS);
     renderer.render(scene, camera);
   </script>
 </body>
