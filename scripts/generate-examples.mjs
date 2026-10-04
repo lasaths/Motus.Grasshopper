@@ -3062,7 +3062,88 @@ function graph11() {
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11];
+/**
+ * Example 12: ICD/LIS Bamboo Mobile Robot — Pick and Place Construction
+ * 
+ * 5-DOF symmetric brachiation robot for bamboo bundle construction.
+ * Team: Nicolas Kubail Kalousdian, Samuel Leder, Achim Menges, Marc Toussaint (ICD/LIS).
+ * 
+ * Published kinematics (RAL 2022, ACADIA 2021):
+ * Symmetric chain: Wrist(Z) - Elbow(X) - Shoulder(X) - Elbow(X) - Wrist(Z)
+ * Either claw can act as base or end-effector.
+ * 
+ * This example shows a construction task: one claw fixed on support, other claw
+ * picks up a strut, lifts, and places it vertically. Web viewer (12_bamboo_mobile_robot_viewer.html)
+ * shows full gripper kinematics, strut motion, and complete pick-place sequence.
+ * 
+ * Note: User described as "gripper, servo, profile, two servos, profile, servo, gripper" (4 joints).
+ * Papers specify 5 DOF with three middle joints (elbow-shoulder-elbow), not two. Following papers.
+ */
+function graph12() {
+  // Pipeline: Robot → Env + Traj → Plan → Play
+  const { title, note } = exampleHeader(
+    '12 · ICD Bamboo Mobile Robot',
+    'ICD/LIS 5-DOF brachiation: pick-and-place construction (RAL 2022). One claw fixed, other picks strut, places vertically. Web viewer shows gripper kinematics.',
+  );
+  const hy = PIPE.y0;
+  const cy = stageContentY(hy);
+
+  // Robot — ICD bamboo robot from URDF
+  const rx = PIPE.x0;
+  const urdfFile = pathPanel(rx, cy, repoRel('assets', 'icd', 'bamboo_mobile_robot.urdf'), 'Urdf', 160, 36);
+  const robot = motusComponent('robot', rx + 180, cy, {
+    Path: [outRef(urdfFile.node, 'Text')],
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
+
+  // Env + Traj — joint states showing pick-and-place construction motion
+  const ex = rx + 380;
+  // Start: home position (ready for pickup)
+  const start = motusComponent('joints', ex, cy, {}, { 
+    jointValues: [0.0, -0.3, 0.0, 0.3, 0.0] 
+  });
+  // Goal: after placing strut vertically (retracted position)
+  // Represents end state of: approach pickup, grip, lift, rotate to place, release, retract
+  const goal = motusComponent('joints', ex, cy + 120, {}, { 
+    jointValues: [0.0, -0.3, 0.5, 0.3, 0.0] 
+  });
+
+  // Plan — joint-linear motion
+  const planX = ex + 180;
+  const plan = motusComponent('plan', planX, cy, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
+  });
+
+  // Play — Preview + Scrub + Waypoints
+  const { scrub, preview } = previewWithScrub(planX, cy, outRef(plan.node, 'Trajectory'));
+  const stackX = planX + PLAN_PREVIEW_DX;
+  const waypoints = motusComponent('waypoints', stackX, belowPreview(cy), {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+
+  // Groups
+  const gRobot = stageGroup('Robot', [urdfFile, robot], GROUP_COLOUR.robot, rx, hy);
+  const gEnv = stageGroup('Env + Traj', [start, goal], GROUP_COLOUR.goals, ex, hy);
+  const gPlan = stageGroup('Plan', [plan], GROUP_COLOUR.plan, planX, hy);
+  const gPlay = stageGroup('Play', [scrub, preview, waypoints], GROUP_COLOUR.play, planX + PIPE.playHeaderDx, hy);
+
+  const objs = [
+    title, note,
+    urdfFile, robot, start, goal, plan, scrub, preview, waypoints,
+    gRobot.header, gEnv.header, gPlan.header, gPlay.header,
+    gRobot.group, gEnv.group, gPlan.group, gPlay.group,
+  ];
+  objs._meta = {
+    fileName: '12_bamboo_mobile_robot.ghx',
+    description:
+      'ICD/LIS bamboo brachiation robot (Kalousdian et al., RAL 2022): 5-DOF symmetric chain (Wrist-Elbow-Shoulder-Elbow-Wrist) → Pick-and-place construction motion → Preview. Web viewer shows full gripper kinematics and strut placement. Planning/preview only.',
+    view: { x: 580, y: 220, zoom: 0.65 },
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11, graph12];
 // graph10 (10_pick_place.ghx) is Cassis-authored — not in default regen list.
 const legacy = [
   '01_basic_planning.ghx',
@@ -3091,7 +3172,7 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const onlyGraph = onlyArg?.slice('--only='.length);
 const onlyBuilders = {
   1: graph01, 2: graph02, 3: graph03, 4: graph04, 5: graph05,
-  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11,
+  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11, 12: graph12,
 };
 
 const buildList = onlyGraph
