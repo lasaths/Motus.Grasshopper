@@ -189,13 +189,14 @@
   var NAMES = ["θ1", "θ2", "θ3", "θ4", "θ5"];
   // Home / retract posture. The pick-and-place path is solved from task planes
   // (same frame convention as solve_fk.js), not a fixed waypoint list.
-  var HOME_Q = [-90, -72, -104, -24, 0];
+  var HOME_Q = [-90, -72, -80, -24, 0];
   var PICK = { x: 0, y: 0.00778, z: 0.09194 };
   var PLACE = { x: 0, y: 0.1506, z: 0.2000 };
   var DURATION = 14;
   var tasks = [];
   var motionKeys = [];
   var motionError = "";
+  var pathHit = null;
 
   function metal(hex, rough, metalness) {
     return new THREE.MeshStandardMaterial({
@@ -322,14 +323,27 @@
   var axisGroups = [];
   function track(obj) { axisGroups.push(obj); return obj; }
 
-  function addTube(parent, span) {
+  // Collision parts are the meshes already in the scene. link is the
+  // kinematic index; parent/child links (|Δlink| ≤ 1) meet at a joint.
+  var colliders = [];
+  function collider(name, link) {
+    var c = { name: name, link: link, meshes: [] };
+    colliders.push(c);
+    return c;
+  }
+  function addTube(parent, span, col) {
     var L = Math.max(0.008, span - 0.016);
     var mesh = new THREE.Mesh(new THREE.BoxGeometry(0.012, L, 0.016), mats.tube);
     mesh.position.y = -span / 2;
     parent.add(mesh);
+    if (col) col.meshes.push(mesh);
+    return mesh;
   }
-  function housing(parent, size, mat) {
-    parent.add(new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat));
+  function housing(parent, size, mat, col) {
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat);
+    parent.add(mesh);
+    if (col) col.meshes.push(mesh);
+    return mesh;
   }
 
   // Left gripper frame: local Z along the pole (world +X), jaw travel along local X.
@@ -337,73 +351,84 @@
   mount.position.set(0, POLE_Y, 0);
   mount.rotation.y = Math.PI / 2;
   scene.add(mount);
+  var colL = collider("L-grip", 0);
   var lbody = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.016, 0.026), mats.carriage);
   lbody.position.y = 0.020;
   mount.add(lbody);
+  colL.meshes.push(lbody);
   var lrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
   lrail.position.y = 0.014;
   mount.add(lrail);
+  colL.meshes.push(lrail);
   function jawPlate(w, h, d, mat) {
     return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   }
   var lNeg = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
   var lPos = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
   mount.add(lNeg); mount.add(lPos);
+  colL.meshes.push(lNeg); colL.meshes.push(lPos);
   mount.add(track(axisX(0x3ddc6a, "#3ddc6a", "L-grip")));
 
-  addTube(mount, SEG[0]);
+  var colBase = collider("base link", 1);
+  addTube(mount, SEG[0], colBase);
   var j1 = new THREE.Group();
   j1.position.y = -SEG[0];
   mount.add(j1);
-  housing(j1, [0.046, 0.029, 0.034], mats.wrist);
+  housing(j1, [0.046, 0.029, 0.034], mats.wrist, collider("θ1", 2));
   j1.add(track(axisY(0x33e0e0, "#33e0e0", "θ1")));
 
-  addTube(j1, SEG[1]);
+  addTube(j1, SEG[1], collider("link θ2", 3));
   var j2 = new THREE.Group();
   j2.position.y = -SEG[1];
   j1.add(j2);
-  housing(j2, [0.041, 0.061, 0.040], mats.elbow);
+  housing(j2, [0.041, 0.061, 0.040], mats.elbow, collider("θ2", 4));
   j2.add(track(axisX(0xff8800, "#ff8800", "θ2")));
 
-  addTube(j2, SEG[2]);
+  addTube(j2, SEG[2], collider("link θ3", 5));
   var j3 = new THREE.Group();
   j3.position.y = -SEG[2];
   j2.add(j3);
-  housing(j3, [0.041, 0.061, 0.040], mats.shoulder);
+  housing(j3, [0.041, 0.061, 0.040], mats.shoulder, collider("θ3", 6));
   j3.add(track(axisX(0xffffff, "#ffffff", "θ3")));
 
-  addTube(j3, SEG[3]);
+  addTube(j3, SEG[3], collider("link θ4", 7));
   var j4 = new THREE.Group();
   j4.position.y = -SEG[3];
   j3.add(j4);
-  housing(j4, [0.041, 0.061, 0.040], mats.elbow);
+  housing(j4, [0.041, 0.061, 0.040], mats.elbow, collider("θ4", 8));
   j4.add(track(axisX(0xff8800, "#ff8800", "θ4")));
 
-  addTube(j4, SEG[4]);
+  addTube(j4, SEG[4], collider("link θ5", 9));
   var j5 = new THREE.Group();
   j5.position.y = -SEG[4];
   j4.add(j5);
-  housing(j5, [0.046, 0.029, 0.034], mats.wrist);
+  housing(j5, [0.046, 0.029, 0.034], mats.wrist, collider("θ5", 10));
   j5.add(track(axisY(0x33e0e0, "#33e0e0", "θ5")));
 
+  var colNeck = collider("neck", 11);
   var neck = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.016), mats.tube);
   neck.position.y = -0.024;
   j5.add(neck);
+  colNeck.meshes.push(neck);
 
   var jaw = new THREE.Group();
   jaw.position.y = -SEG[5];
   j5.add(jaw);
+  var colR = collider("R-grip", 12);
   var carriage = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.022), mats.carriage);
   carriage.position.y = 0.022;
   jaw.add(carriage);
+  colR.meshes.push(carriage);
   var rrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
   rrail.position.set(0, 0.012, 0);
   jaw.add(rrail);
+  colR.meshes.push(rrail);
   var rNeg = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
   var rPos = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
   rNeg.position.y = 0.005;
   rPos.position.y = 0.005;
   jaw.add(rNeg); jaw.add(rPos);
+  colR.meshes.push(rNeg); colR.meshes.push(rPos);
   jaw.add(track(axisX(0x3ddc6a, "#3ddc6a", "R-grip")));
 
   var strutGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.30, 20);
@@ -415,6 +440,9 @@
     strut.add(n);
   });
   scene.add(strut);
+  collider("pole", null).meshes.push(pole);
+  collider("ground", null).meshes.push(ground);
+  collider("strut", null).meshes.push(strut);
 
   function setOpening(neg, pos, mm, yLift) {
     var half = (mm / 1000) / 2;
@@ -544,14 +572,14 @@
   }
   function linkStages(stages) {
     var n = stages.length;
-    var releaseIndex = n - 2;
     var cost = stages.map(function (st) { return st.sols.map(function () { return 1e18; }); });
     var prev = stages.map(function (st) { return st.sols.map(function () { return -1; }); });
     stages[0].sols.forEach(function (q, i) {
       if (segOk(HOME_Q, q, false)) cost[0][i] = 0;
     });
     for (var s = 1; s < n; s++) {
-      var carry = s >= 2 && s <= releaseIndex;
+      // Carrying ends at release. Depart and retract leave the strut standing.
+      var carry = s >= 2 && stages[s].name !== "Retract" && stages[s].name !== "Depart";
       for (var j = 0; j < stages[s].sols.length; j++) {
         for (var i = 0; i < stages[s - 1].sols.length; i++) {
           if (cost[s - 1][i] >= 1e17) continue;
@@ -678,6 +706,44 @@
       return { error: bad.join(", ") + " unreachable", keys: homeKeys(Number(place.jawMm)) };
     }
     var G = pose.grasp, H = pose.hold;
+    var R = pose.release;
+    function elbowSols(y, z, a) {
+      var sols = ikSolve(y, z, a);
+      var mild = [];
+      for (var i = 0; i < sols.length; i++) if (Math.abs(sols[i][2]) <= 88) mild.push(sols[i]);
+      return mild.length ? mild : sols;
+    }
+    // Swing out before pitching so the elbow stays open and the strut clears
+    // the ground, then pull off the standing strut before folding home.
+    var tuned = [
+      { name: "pick:approach", sols: solved.approach },
+      { name: "pick:grasp", sols: solved.grasp }
+    ];
+    var viaPts = [
+      ["Lift", G.y + 0.07222, G.z + 0.04806, G.a],
+      ["Pitch", 0.16, 0.22, -30],
+      ["Pitch", 0.18, 0.26, -45],
+      ["Pitch", 0.22, 0.26, -60],
+      ["Pitch", 0.20, 0.26, -75]
+    ];
+    var viaOk = true;
+    for (var vi = 0; vi < viaPts.length; vi++) {
+      var vs = elbowSols(viaPts[vi][1], viaPts[vi][2], viaPts[vi][3]);
+      if (!vs.length) { viaOk = false; break; }
+      tuned.push({ name: viaPts[vi][0], sols: vs });
+    }
+    if (viaOk) {
+      tuned.push({ name: "place:hold", sols: solved.hold });
+      tuned.push({ name: "place:release", sols: solved.release });
+      var dep = elbowSols(R.y + 0.0294, R.z - 0.14, R.a);
+      if (dep.length) tuned.push({ name: "Depart", sols: dep });
+      tuned.push({ name: "Retract", sols: [HOME_Q.slice()] });
+      var tunedChain = linkStages(tuned);
+      if (tunedChain.ok) {
+        var tunedKeys = stamp(chainItems(tunedChain.seq, Number(place.jawMm), Number(pick.jawMm)));
+        if (!sweepMotion(tunedKeys)) return { error: "", keys: tunedKeys };
+      }
+    }
     var lifts = [];
     var zgs = [0.25, 0.4, 0.55, 0.7, 0.15];
     var yls = [0.02, 0.035, 0.05, 0.065];
@@ -691,7 +757,7 @@
     if (!lifts.length) {
       return { error: "lift toward place:hold unreachable", keys: homeKeys(Number(place.jawMm)) };
     }
-    var best = null;
+    var candidates = [];
     var failFar = -1;
     var failNext = "";
     for (var li = 0; li < lifts.length; li++) {
@@ -725,9 +791,9 @@
         if (chained.far > failFar) { failFar = chained.far; failNext = chained.next; }
         continue;
       }
-      if (!best || chained.cost < best.cost) best = chained;
+      candidates.push(chained);
     }
-    if (!best) {
+    if (!candidates.length) {
       var msg = "lift toward place:hold unreachable";
       if (failFar < 0) msg = "pick:approach unreachable";
       else if (failNext === "pick:grasp" || failNext === "place:hold" || failNext === "place:release") msg = failNext + " unreachable";
@@ -736,7 +802,16 @@
     }
     var open = Number(place.jawMm);
     var closed = Number(pick.jawMm);
-    var seq = best.seq;
+    candidates.sort(function (a, b) { return a.cost - b.cost; });
+    var chosen = null;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var keysTry = stamp(chainItems(candidates[ci].seq, open, closed));
+      if (!sweepMotion(keysTry)) { chosen = keysTry; break; }
+    }
+    if (!chosen) chosen = stamp(chainItems(candidates[0].seq, open, closed));
+    return { error: "", keys: chosen };
+  }
+  function chainItems(seq, open, closed) {
     var items = [
       { label: "Home", q: HOME_Q.slice(), gR: open, hold: 0 },
       { label: "Approach", q: seq[0].q, gR: open, hold: 0 },
@@ -744,19 +819,29 @@
       { label: "Close", q: seq[1].q.slice(), gR: closed, hold: 1 },
       { label: "Lift", q: seq[2].q, gR: closed, hold: 1 }
     ];
+    var depart = null;
+    var retract = null;
     for (var k = 3; k < seq.length; k++) {
       var nm = seq[k].name;
+      if (nm === "Retract") {
+        retract = { label: "Retract", q: seq[k].q, gR: open, hold: 2 };
+        continue;
+      }
+      if (nm === "Depart") {
+        depart = { label: "Depart", q: seq[k].q, gR: open, hold: 2 };
+        continue;
+      }
       var label = nm === "place:hold" ? "Hold" : (nm === "place:release" ? "Lower" : nm);
-      var gR = closed;
-      var hold = 1;
-      if (nm === "Retract") { label = "Retract"; gR = open; hold = 2; }
-      items.push({ label: label, q: seq[k].q, gR: gR, hold: hold });
+      items.push({ label: label, q: seq[k].q, gR: closed, hold: 1 });
     }
-    var retract = items.pop();
-    var lowerQ = seq[seq.length - 2].q;
+    var lowerQ = seq[1].q;
+    for (var li = items.length - 1; li >= 0; li--) {
+      if (items[li].label === "Lower") { lowerQ = items[li].q; break; }
+    }
     items.push({ label: "Open", q: lowerQ.slice(), gR: open, hold: 2 });
-    items.push(retract);
-    return { error: "", keys: stamp(items) };
+    if (depart) items.push(depart);
+    if (retract) items.push(retract);
+    return items;
   }
 
   // Identity is the string field `id`, not an enum. A duplicate is a second
@@ -779,7 +864,7 @@
         object: "strut",
         jawMm: 40,
         planes: [
-          { name: "hold", x: PLACE.x, y0: PLACE.y + 0.100, z: PLACE.z, pitch: -90, yMm: 0 },
+          { name: "hold", x: PLACE.x, y0: PLACE.y + 0.100, z: PLACE.z, pitch: -90, yMm: -80 },
           { name: "release", x: PLACE.x, y0: PLACE.y, z: PLACE.z, pitch: -90, yMm: 0 }
         ]
       }
@@ -860,6 +945,199 @@
     }
   }
 
+  // Oriented bounding box of a mesh's own geometry (exact for the box
+  // links; the cylinder's box for the pole and the strut; the flat box for
+  // the ground). Not a second, invisible proxy.
+  function meshObb(mesh) {
+    var geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    var bb = geo.boundingBox;
+    var center = bb.getCenter(new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+    var half = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    var e = mesh.matrixWorld.elements;
+    var ax = [
+      new THREE.Vector3(e[0], e[1], e[2]),
+      new THREE.Vector3(e[4], e[5], e[6]),
+      new THREE.Vector3(e[8], e[9], e[10])
+    ];
+    var ex = [half.x, half.y, half.z];
+    for (var i = 0; i < 3; i++) {
+      var len = ax[i].length();
+      if (len < 1e-12) {
+        ax[i].set(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0);
+        ex[i] = 0;
+      } else {
+        ax[i].multiplyScalar(1 / len);
+        ex[i] *= len;
+      }
+    }
+    return { c: center, a: ax, e: ex };
+  }
+  function obbOverlap(A, B) {
+    var axes = [A.a[0], A.a[1], A.a[2], B.a[0], B.a[1], B.a[2]];
+    var i, j;
+    for (i = 0; i < 3; i++) {
+      for (j = 0; j < 3; j++) {
+        var cross = new THREE.Vector3().crossVectors(A.a[i], B.a[j]);
+        if (cross.lengthSq() > 1e-12) axes.push(cross.normalize());
+      }
+    }
+    for (i = 0; i < axes.length; i++) {
+      var ax = axes[i];
+      var ra = A.e[0] * Math.abs(ax.dot(A.a[0])) + A.e[1] * Math.abs(ax.dot(A.a[1])) + A.e[2] * Math.abs(ax.dot(A.a[2]));
+      var rb = B.e[0] * Math.abs(ax.dot(B.a[0])) + B.e[1] * Math.abs(ax.dot(B.a[1])) + B.e[2] * Math.abs(ax.dot(B.a[2]));
+      if (Math.abs(ax.dot(B.c) - ax.dot(A.c)) > ra + rb - 5e-4) return false;
+    }
+    return true;
+  }
+  function excludedPair(a, b, hold) {
+    if (a.link != null && b.link != null && Math.abs(a.link - b.link) <= 1) return true;
+    var x = a.name < b.name ? a.name + "|" + b.name : b.name + "|" + a.name;
+    // The base link is the child of the pole mount and is built into it.
+    // The left jaw stays closed on the pole. Every other pole or ground
+    // overlap still counts, including the strut and the right gripper.
+    if (x === "L-grip|pole" || x === "base link|pole") return true;
+    if (hold === 1 && x === "R-grip|strut") return true;
+    return false;
+  }
+  function formatHits(hits) {
+    var parts = [];
+    var seen = {};
+    for (var i = 0; i < hits.length; i++) {
+      var name = hits[i][0].name + " × " + hits[i][1].name;
+      if (seen[name]) continue;
+      seen[name] = true;
+      parts.push(name);
+    }
+    return parts.join(", ");
+  }
+  function collectHits(hold) {
+    scene.updateMatrixWorld(true);
+    var boxes = [];
+    var i, j, m;
+    for (i = 0; i < colliders.length; i++) {
+      var obbs = [];
+      for (m = 0; m < colliders[i].meshes.length; m++) obbs.push(meshObb(colliders[i].meshes[m]));
+      boxes.push(obbs);
+    }
+    var hits = [];
+    for (i = 0; i < colliders.length; i++) {
+      for (j = i + 1; j < colliders.length; j++) {
+        if (excludedPair(colliders[i], colliders[j], hold)) continue;
+        var hit = false;
+        for (var a = 0; a < boxes[i].length && !hit; a++) {
+          for (var b = 0; b < boxes[j].length; b++) {
+            if (obbOverlap(boxes[i][a], boxes[j][b])) { hit = true; break; }
+          }
+        }
+        if (hit) hits.push([colliders[i], colliders[j]]);
+      }
+    }
+    return hits;
+  }
+  function smoothInv(e) {
+    if (e <= 0) return 0;
+    if (e >= 1) return 1;
+    var u = e;
+    for (var n = 0; n < 8; n++) {
+      var f = u * u * (3 - 2 * u) - e;
+      var d = 6 * u * (1 - u);
+      if (Math.abs(d) < 1e-6) break;
+      u -= f / d;
+    }
+    if (u < 0) return 0;
+    if (u > 1) return 1;
+    return u;
+  }
+  function stepsBetween(a, b) {
+    var maxDeg = 0;
+    var k;
+    for (k = 0; k < 5; k++) maxDeg = Math.max(maxDeg, Math.abs(b.q[k] - a.q[k]));
+    var n = Math.ceil(maxDeg / 2 - 1e-9);
+    if (n < 1) n = 1;
+    var jaw = Math.abs(b.gR - a.gR);
+    if (jaw > 1e-6) {
+      var nj = Math.ceil(jaw / 2 - 1e-9);
+      if (nj > n) n = nj;
+    }
+    return n;
+  }
+  function poseOn(a, b, u) {
+    var q = [];
+    var k;
+    for (k = 0; k < 5; k++) q.push(a.q[k] + (b.q[k] - a.q[k]) * u);
+    return {
+      q: q,
+      gR: a.gR + (b.gR - a.gR) * u,
+      gL: 24,
+      hold: u >= 1 ? b.hold : a.hold,
+      label: u < 0.5 ? a.label : b.label
+    };
+  }
+  function applyPose(p) {
+    applyJoints(p.q);
+    setOpening(lNeg, lPos, p.gL, 0);
+    setOpening(rNeg, rPos, p.gR, 0.005);
+    setStrut(p.hold);
+  }
+  function sweepMotion(keys) {
+    if (!keys || keys.length < 2) return null;
+    var lastClear = null;
+    for (var i = 0; i < keys.length - 1; i++) {
+      var a = keys[i], b = keys[i + 1];
+      var n = stepsBetween(a, b);
+      for (var s = 0; s <= n; s++) {
+        if (i > 0 && s === 0) continue;
+        var u = s / n;
+        var pose = poseOn(a, b, u);
+        applyPose(pose);
+        var hits = collectHits(pose.hold);
+        var t = a.t + (b.t - a.t) * smoothInv(u);
+        if (hits.length) {
+          return {
+            stopT: lastClear ? lastClear.t : t,
+            parts: formatHits(hits),
+            hits: hits,
+            label: pose.label,
+            q: pose.q.map(function (v) { return Math.round(v * 10) / 10; }),
+            gR: Math.round(pose.gR * 10) / 10,
+            hold: pose.hold,
+            t: t
+          };
+        }
+        lastClear = { t: t, label: pose.label };
+      }
+    }
+    return null;
+  }
+  var HIT_COLOR = 0xff3b30;
+  function clearTints() {
+    for (var i = 0; i < colliders.length; i++) {
+      var meshes = colliders[i].meshes;
+      for (var m = 0; m < meshes.length; m++) {
+        if (meshes[m].userData.baseMat) meshes[m].material = meshes[m].userData.baseMat;
+      }
+    }
+  }
+  function showHits(hits) {
+    clearTints();
+    var seen = {};
+    for (var i = 0; i < hits.length; i++) {
+      for (var k = 0; k < 2; k++) {
+        var c = hits[i][k];
+        if (seen[c.name]) continue;
+        seen[c.name] = true;
+        for (var m = 0; m < c.meshes.length; m++) {
+          var mesh = c.meshes[m];
+          if (!mesh.userData.baseMat) mesh.userData.baseMat = mesh.material;
+          var mat = mesh.userData.baseMat.clone();
+          mat.color.setHex(HIT_COLOR);
+          if (mat.emissive) mat.emissive.setHex(0x5a1008);
+          mesh.material = mat;
+        }
+      }
+    }
+  }
   function smooth(u) { return u * u * (3 - 2 * u); }
   function sample(t) {
     var keys = motionKeys;
@@ -931,6 +1209,7 @@
   var playing = false, manual = false, taskT = 0;
   var curDeg = [0, 0, 0, 0, 0];
   var curGL = 24, curGR = 40;
+  var curHold = 0;
 
   function pushSliders() {
     suppress = true;
@@ -950,14 +1229,22 @@
     setOpening(rNeg, rPos, curGR, 0.005);
   }
   function applyTask(t) {
+    if (pathHit && t > pathHit.stopT) t = pathHit.stopT;
     taskT = t;
     var s = sample(t);
     curDeg = s.q.slice();
     curGL = 24;
     curGR = s.gR;
+    curHold = s.hold;
     drawModel();
     setStrut(s.hold);
-    phaseEl.textContent = motionError ? motionError : s.label;
+    if (pathHit) {
+      phaseEl.textContent = s.label + " · " + pathHit.parts;
+      showHits(pathHit.hits);
+    } else {
+      clearTints();
+      phaseEl.textContent = motionError ? motionError : s.label;
+    }
     tn.textContent = Math.round(t * 100) + "%";
     pushSliders();
   }
@@ -976,7 +1263,14 @@
     gL.num.textContent = curGL.toFixed(1) + " mm";
     gR.num.textContent = curGR.toFixed(1) + " mm";
     drawModel();
-    phaseEl.textContent = "Manual";
+    var hits = collectHits(curHold);
+    if (hits.length) {
+      showHits(hits);
+      phaseEl.textContent = "Manual · " + formatHits(hits);
+    } else {
+      clearTints();
+      phaseEl.textContent = "Manual";
+    }
   }
 
   scrub.addEventListener("input", function () {
@@ -985,6 +1279,7 @@
     playBtn.textContent = "Play";
     playBtn.classList.remove("active");
     applyTask(parseFloat(scrub.value) / 1000);
+    scrub.value = String(Math.round(taskT * 1000));
   });
   playBtn.addEventListener("click", function () {
     if (playing) {
@@ -996,6 +1291,10 @@
     if (motionError) {
       reachEl.textContent = motionError;
       phaseEl.textContent = motionError;
+      return;
+    }
+    if (pathHit && taskT >= pathHit.stopT - 1e-4) {
+      applyTask(pathHit.stopT);
       return;
     }
     manual = false;
@@ -1175,15 +1474,27 @@
     var built = buildMotion();
     motionError = built.error || "";
     motionKeys = built.keys;
+    pathHit = motionError ? null : sweepMotion(motionKeys);
     reachEl.textContent = motionError;
     layoutFrames();
-    if (motionError && playing) {
+    if ((motionError || pathHit) && playing) {
       playing = false;
       playBtn.textContent = "Play";
       playBtn.classList.remove("active");
     }
     if (!manual) applyTask(taskT);
-    else if (strut.parent !== jaw) setStrut(0);
+    else {
+      drawModel();
+      setStrut(curHold);
+      var hits = collectHits(curHold);
+      if (hits.length) {
+        showHits(hits);
+        phaseEl.textContent = "Manual · " + formatHits(hits);
+      } else {
+        clearTints();
+        phaseEl.textContent = "Manual";
+      }
+    }
   }
 
   var hashT = 0;
@@ -1200,7 +1511,12 @@
     last = now;
     if (playing && !manual) {
       taskT += dt / DURATION;
-      if (taskT >= 1) {
+      if (pathHit && taskT >= pathHit.stopT) {
+        taskT = pathHit.stopT;
+        playing = false;
+        playBtn.textContent = "Play";
+        playBtn.classList.remove("active");
+      } else if (taskT >= 1) {
         taskT = 1;
         playing = false;
         playBtn.textContent = "Play";
