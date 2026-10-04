@@ -3063,7 +3063,7 @@ function graph11() {
 }
 
 /**
- * Example 12: ICD/LIS Bamboo Mobile Robot
+ * Example 12: ICD/LIS Bamboo Mobile Robot — Pick and Place Construction
  * 
  * 5-DOF symmetric brachiation robot for bamboo bundle construction.
  * Team: Nicolas Kubail Kalousdian, Samuel Leder, Achim Menges, Marc Toussaint (ICD/LIS).
@@ -3072,6 +3072,10 @@ function graph11() {
  * Symmetric chain: Wrist(Z) - Elbow(X) - Shoulder(X) - Elbow(X) - Wrist(Z)
  * Either claw can act as base or end-effector.
  * 
+ * This example shows a construction task: one claw fixed on support, other claw
+ * picks up a strut, lifts, and places it vertically. Web viewer (12_bamboo_mobile_robot_viewer.html)
+ * shows full gripper kinematics, strut motion, and complete pick-place sequence.
+ * 
  * Note: User described as "gripper, servo, profile, two servos, profile, servo, gripper" (4 joints).
  * Papers specify 5 DOF with three middle joints (elbow-shoulder-elbow), not two. Following papers.
  */
@@ -3079,7 +3083,7 @@ function graph12() {
   // Pipeline: Robot → Env + Traj → Plan → Play
   const { title, note } = exampleHeader(
     '12 · ICD Bamboo Mobile Robot',
-    'ICD/LIS 5-DOF brachiation robot (RAL 2022). Symmetric: Wrist(Z)-Elbow(X)-Shoulder(X)-Elbow(X)-Wrist(Z). Papers specify 3 middle joints (not 2).',
+    'ICD/LIS 5-DOF brachiation: pick-and-place construction (RAL 2022). One claw fixed, other picks strut, places vertically. Web viewer shows gripper kinematics.',
   );
   const hy = PIPE.y0;
   const cy = stageContentY(hy);
@@ -3091,16 +3095,16 @@ function graph12() {
     Path: [outRef(urdfFile.node, 'Text')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
 
-  // Env + Traj — joint states showing 5-DOF motion
+  // Env + Traj — joint states showing pick-and-place construction motion
   const ex = rx + 380;
-  // Start: home position (all joints at 0)
+  // Start: home position (ready for pickup)
   const start = motusComponent('joints', ex, cy, {}, { 
-    jointValues: [0.0, 0.0, 0.0, 0.0, 0.0] 
+    jointValues: [0.0, -0.3, 0.0, 0.3, 0.0] 
   });
-  // Goal: demonstration motion through all 5 joints
-  // Wrist1 rotates, elbows bend, shoulder rotates, creating brachiation-like pose
+  // Goal: after placing strut vertically (retracted position)
+  // Represents end state of: approach pickup, grip, lift, rotate to place, release, retract
   const goal = motusComponent('joints', ex, cy + 120, {}, { 
-    jointValues: [Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4] 
+    jointValues: [0.0, -0.3, 0.5, 0.3, 0.0] 
   });
 
   // Plan — joint-linear motion
@@ -3133,7 +3137,7 @@ function graph12() {
   objs._meta = {
     fileName: '12_bamboo_mobile_robot.ghx',
     description:
-      'ICD/LIS bamboo brachiation robot (Kalousdian et al., RAL 2022): 5-DOF symmetric chain (Wrist-Elbow-Shoulder-Elbow-Wrist) → Joint-linear motion → Preview. Variable-diameter claws adapt to bamboo bundles. Planning/preview only.',
+      'ICD/LIS bamboo brachiation robot (Kalousdian et al., RAL 2022): 5-DOF symmetric chain (Wrist-Elbow-Shoulder-Elbow-Wrist) → Pick-and-place construction motion → Preview. Web viewer shows full gripper kinematics and strut placement. Planning/preview only.',
     view: { x: 580, y: 220, zoom: 0.65 },
   };
   return buildGraph(objs);

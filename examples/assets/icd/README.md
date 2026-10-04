@@ -14,14 +14,20 @@ The robot brachiates on bamboo bundle structures, using learned control policies
 
 ## Preview Without Grasshopper/Rhino
 
-**Static Web Viewer:** Open `../../12_bamboo_mobile_robot_viewer.html` in any web browser to see the robot in 3D.
+**Static Web Viewer:** Open `../../12_bamboo_mobile_robot_viewer.html` in any web browser to see a pick-and-place construction task.
+
+**Task Demonstration:** One claw is fixed to a bamboo support. The other claw picks up a strut from the ground, lifts it, rotates to placement location, and places it upright vertically.
 
 Features:
 - Interactive 3D view (drag to rotate camera)
-- Motion scrubber (slide from start pose to goal pose)
-- Animate button (3-second loop)
-- Real-time joint angle display
-- No network required at runtime (self-contained HTML/JS)
+- Motion scrubber showing full pick-place sequence
+- Animate button (8-second loop through all phases)
+- Gripper kinematics: claws open/close during approach, grip, and release
+- Visible strut: moves with carrying claw, stays at placement after release
+- Real-time shoulder angle display and task phase labels
+- Recognizable claw geometry with three-finger grippers
+- Bamboo strut (30cm × 1.4cm diameter)
+- No network required at runtime (self-contained HTML/JS, 606 KB total)
 
 ```bash
 # From repo root, open the viewer:
@@ -30,7 +36,9 @@ open examples/12_bamboo_mobile_robot_viewer.html
 firefox examples/12_bamboo_mobile_robot_viewer.html
 ```
 
-The viewer shows the same start-to-goal motion that the Grasshopper example demonstrates.
+**Phases shown:** Home → Approach Pickup (open) → Grip Strut (close) → Lift → Move to Place → At Place → Release (open) → Retract
+
+The Grasshopper example shows simplified start-to-end motion (home to retract). The web viewer demonstrates the complete construction task with gripper kinematics.
 
 ## Published Kinematics
 
@@ -109,8 +117,9 @@ Training uses simulation with automatic domain randomization (ADR) and curriculu
 
 See `12_bamboo_mobile_robot.ghx`:
 - Load URDF via Motus Robot
-- Plan joint-space motion through 5 DOF
-- Preview brachiation postures with Scrub
+- Plan joint-space motion for pick-and-place construction task
+- Preview robot postures with Scrub
+- Static web viewer shows full gripper kinematics and strut placement sequence
 
 For multi-robot collaborative assembly scenarios, multiple robot instances would coordinate via task/motion planning (Logic-Geometric Programming + RL policies).
 

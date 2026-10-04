@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Example 12: ICD/LIS Bamboo Mobile Robot</title>
+  <title>Example 12: ICD/LIS Bamboo Mobile Robot — Pick and Place</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -199,8 +199,8 @@
       color: #FFFFFF;
     }
     
-    /* Small joint details - bottom left */
-    #joint-details {
+    /* Task status - bottom left */
+    #task-status {
       position: absolute;
       bottom: 140px;
       left: 40px;
@@ -208,25 +208,21 @@
       pointer-events: none;
     }
     
-    .joint-row {
+    .status-label {
       font-family: Menlo, Monaco, "Courier New", monospace;
       font-size: 10px;
       font-weight: 400;
-      color: #666666;
-      margin-bottom: 4px;
-      letter-spacing: 0.05em;
-    }
-    
-    .joint-row .label {
-      display: inline-block;
-      width: 60px;
+      letter-spacing: 0.15em;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      color: #666666;
+      margin-bottom: 6px;
     }
     
-    .joint-row .value {
-      color: #999999;
+    .status-value {
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      font-size: 13px;
       font-weight: 400;
+      color: #E8E8E8;
     }
     
     /* Info label - top right corner */
@@ -262,12 +258,12 @@
     
     <div id="header">
       <h1>Example 12</h1>
-      <p>ICD/LIS Bamboo Mobile Robot<br>5-DOF Symmetric Brachiation</p>
+      <p>ICD/LIS Bamboo Mobile Robot<br>Pick and Place Construction</p>
     </div>
     
     <div id="info">
-      <div class="label">Structure</div>
-      <div class="value">Wrist · Elbow · Shoulder · Elbow · Wrist</div>
+      <div class="label">Task</div>
+      <div class="value">Strut Placement</div>
     </div>
     
     <div id="shoulder-display">
@@ -275,11 +271,9 @@
       <div id="shoulder-label">Shoulder θ3</div>
     </div>
     
-    <div id="joint-details">
-      <div class="joint-row"><span class="label">θ1 wrist</span><span class="value" id="j1">0.0°</span></div>
-      <div class="joint-row"><span class="label">θ2 elbow</span><span class="value" id="j2">0.0°</span></div>
-      <div class="joint-row"><span class="label">θ4 elbow</span><span class="value" id="j4">0.0°</span></div>
-      <div class="joint-row"><span class="label">θ5 wrist</span><span class="value" id="j5">0.0°</span></div>
+    <div id="task-status">
+      <div class="status-label">Phase</div>
+      <div class="status-value" id="phase-text">Approach Pickup</div>
     </div>
     
     <div id="controls">
@@ -298,33 +292,47 @@
 
   <script src="three.r128.min.js"></script>
   <script>
-    // Joint states from example 12 (unchanged)
-    const START_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0];
-    const GOAL_JOINTS = [Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4];
+    // Pick-and-place construction motion waypoints
+    // Left claw (base) is fixed on support at origin
+    // Right claw picks up strut, lifts, and places vertically
+    
+    const WAYPOINTS = [
+      // 0: Home position, both grippers open
+      { joints: [0.0, -0.3, 0.0, 0.3, 0.0], leftGrip: 0, rightGrip: 0, phase: 'Home' },
+      
+      // 1: Extend toward pickup location (strut on ground), gripper open
+      { joints: [0.0, 0.8, -0.5, 0.6, 0.3], leftGrip: 0, rightGrip: 0, phase: 'Approach Pickup' },
+      
+      // 2: At pickup position, close gripper to grip strut
+      { joints: [0.0, 0.8, -0.5, 0.6, 0.3], leftGrip: 0, rightGrip: 1, phase: 'Grip Strut' },
+      
+      // 3: Lift strut up
+      { joints: [0.0, 0.3, -0.2, 0.4, 0.3], leftGrip: 0, rightGrip: 1, phase: 'Lift' },
+      
+      // 4: Rotate and move to placement location
+      { joints: [0.0, -0.4, 0.8, -0.6, -0.5], leftGrip: 0, rightGrip: 1, phase: 'Move to Place' },
+      
+      // 5: At placement position (strut vertical)
+      { joints: [0.0, -0.5, 1.0, -0.8, -0.5], leftGrip: 0, rightGrip: 1, phase: 'At Place' },
+      
+      // 6: Release strut (open gripper)
+      { joints: [0.0, -0.5, 1.0, -0.8, -0.5], leftGrip: 0, rightGrip: 0, phase: 'Release' },
+      
+      // 7: Retract away from placed strut
+      { joints: [0.0, -0.3, 0.5, 0.3, 0.0], leftGrip: 0, rightGrip: 0, phase: 'Retract' }
+    ];
+    
     const JOINT_NAMES = ['θ1: Wrist1', 'θ2: Elbow1', 'θ3: Shoulder', 'θ4: Elbow2', 'θ5: Wrist2'];
-
-    // URDF-based link structure (unchanged)
-    const ROBOT_STRUCTURE = {
-      base_claw: { type: 'cylinder', length: 0.08, radius: 0.04, color: 0xCCCCCC },
-      wrist1: { parent: 'base_claw', offset: [0, 0, 0.04], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x999999 },
-      link1: { parent: 'wrist1', offset: [0, 0, 0.06], type: 'cylinder', length: 0.10, radius: 0.015, color: 0x666666 },
-      elbow1: { parent: 'link1', offset: [0, 0, 0.10], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0xAAAAAA },
-      link2: { parent: 'elbow1', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0x777777 },
-      shoulder: { parent: 'link2', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.07, 0.07, 0.04], color: 0xFFFFFF },
-      link3: { parent: 'shoulder', offset: [0, 0, 0.02], type: 'cylinder', length: 0.09, radius: 0.015, color: 0x777777 },
-      elbow2: { parent: 'link3', offset: [0, 0, 0.09], axis: [1, 0, 0], type: 'box', size: [0.06, 0.06, 0.04], color: 0xAAAAAA },
-      link4: { parent: 'elbow2', offset: [0, 0, 0.02], type: 'cylinder', length: 0.10, radius: 0.015, color: 0x666666 },
-      wrist2: { parent: 'link4', offset: [0, 0, 0.10], axis: [0, 0, 1], type: 'box', size: [0.05, 0.05, 0.06], color: 0x999999 },
-      right_claw: { parent: 'wrist2', offset: [0, 0, 0.06], type: 'cylinder', length: 0.08, radius: 0.04, color: 0xCCCCCC }
-    };
-
+    const START_JOINTS = WAYPOINTS[0].joints;
+    const GOAL_JOINTS = WAYPOINTS[WAYPOINTS.length - 1].joints;
+    
     // Three.js setup
     const container = document.getElementById('viewer');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
-    camera.position.set(0.65, 0.45, 0.55);
+    camera.position.set(0.8, 0.6, 0.5);
     camera.lookAt(0, 0, 0.2);
     
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -333,88 +341,320 @@
     container.appendChild(renderer.domElement);
     
     // Lighting - subtle, no color
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
     backLight.position.set(-1, 0.5, -1);
     scene.add(backLight);
     
-    // Robot parts
+    // Materials
+    const materials = {
+      claw: new THREE.MeshPhongMaterial({ color: 0xCCCCCC, shininess: 20, specular: 0x333333 }),
+      wrist: new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 20, specular: 0x222222 }),
+      link: new THREE.MeshPhongMaterial({ color: 0x666666, shininess: 15, specular: 0x111111 }),
+      elbow: new THREE.MeshPhongMaterial({ color: 0xAAAAAA, shininess: 20, specular: 0x222222 }),
+      shoulder: new THREE.MeshPhongMaterial({ color: 0xFFFFFF, shininess: 25, specular: 0x444444 }),
+      finger: new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 15 }),
+      strut: new THREE.MeshPhongMaterial({ color: 0xD4A574, shininess: 10, specular: 0x222222 }),
+      support: new THREE.MeshPhongMaterial({ color: 0x4A4A4A, shininess: 5 })
+    };
+    
+    // Create claw with fingers
+    function createClaw() {
+      const group = new THREE.Group();
+      
+      // Main claw body (cylinder)
+      const bodyGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 16);
+      bodyGeom.rotateX(Math.PI / 2);
+      const body = new THREE.Mesh(bodyGeom, materials.claw);
+      body.position.z = 0.04;
+      group.add(body);
+      
+      // Store finger groups for animation
+      group.fingers = [];
+      
+      // Three finger pairs (arranged radially)
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * Math.PI * 2) / 3;
+        const fingerGroup = new THREE.Group();
+        
+        // Finger base
+        const baseGeom = new THREE.BoxGeometry(0.008, 0.008, 0.03);
+        const base = new THREE.Mesh(baseGeom, materials.finger);
+        base.position.set(
+          Math.cos(angle) * 0.035,
+          Math.sin(angle) * 0.035,
+          0.095
+        );
+        fingerGroup.add(base);
+        
+        // Finger tip
+        const tipGeom = new THREE.BoxGeometry(0.006, 0.006, 0.025);
+        const tip = new THREE.Mesh(tipGeom, materials.finger);
+        tip.position.set(
+          Math.cos(angle) * 0.038,
+          Math.sin(angle) * 0.038,
+          0.1225
+        );
+        fingerGroup.add(tip);
+        
+        group.add(fingerGroup);
+        group.fingers.push({ group: fingerGroup, angle });
+      }
+      
+      return group;
+    }
+    
+    // Animate claw fingers (0 = open, 1 = closed)
+    function setClawGrip(claw, grip) {
+      if (!claw.fingers) return;
+      
+      const openRadius = 0.035;
+      const closedRadius = 0.015;
+      const radius = openRadius - (openRadius - closedRadius) * grip;
+      
+      claw.fingers.forEach(({ group, angle }, idx) => {
+        const children = group.children;
+        // Base finger
+        children[0].position.x = Math.cos(angle) * radius;
+        children[0].position.y = Math.sin(angle) * radius;
+        // Tip finger
+        children[1].position.x = Math.cos(angle) * (radius + 0.003);
+        children[1].position.y = Math.sin(angle) * (radius + 0.003);
+      });
+    }
+    
+    // Build robot
     const robotParts = {};
-    const jointAxes = [];
     
-    function createGeometry(spec) {
-      if (spec.type === 'cylinder') {
-        return new THREE.CylinderGeometry(spec.radius, spec.radius, spec.length, 16);
-      } else {
-        return new THREE.BoxGeometry(spec.size[0], spec.size[1], spec.size[2]);
-      }
-    }
+    // Left claw (base, fixed to support)
+    const leftClaw = createClaw();
+    scene.add(leftClaw);
+    robotParts.base_claw = leftClaw;
     
-    function buildRobot() {
-      for (const [name, spec] of Object.entries(ROBOT_STRUCTURE)) {
-        const geometry = createGeometry(spec);
-        const material = new THREE.MeshPhongMaterial({ 
-          color: spec.color,
-          shininess: 20,
-          specular: 0x222222
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        
-        if (spec.type === 'cylinder') {
-          mesh.geometry.rotateX(Math.PI / 2);
-          mesh.position.z = spec.length / 2;
-        } else {
-          mesh.position.z = spec.size[2] / 2;
-        }
-        
-        const group = new THREE.Group();
-        group.add(mesh);
-        
-        if (spec.parent) {
-          const parent = robotParts[spec.parent];
-          group.position.set(...spec.offset);
-          parent.add(group);
-          
-          if (spec.axis) {
-            jointAxes.push({ group, axis: spec.axis });
-          }
-        } else {
-          scene.add(group);
-        }
-        
-        robotParts[name] = group;
-      }
-    }
+    // Wrist1
+    const wrist1Geom = new THREE.BoxGeometry(0.05, 0.05, 0.06);
+    const wrist1 = new THREE.Mesh(wrist1Geom, materials.wrist);
+    wrist1.position.z = 0.03;
+    const wrist1Group = new THREE.Group();
+    wrist1Group.add(wrist1);
+    wrist1Group.position.set(0, 0, 0.04);
+    leftClaw.add(wrist1Group);
+    robotParts.wrist1 = wrist1Group;
     
-    buildRobot();
+    // Link1
+    const link1Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.10, 12);
+    link1Geom.rotateX(Math.PI / 2);
+    const link1 = new THREE.Mesh(link1Geom, materials.link);
+    link1.position.z = 0.05;
+    const link1Group = new THREE.Group();
+    link1Group.add(link1);
+    link1Group.position.set(0, 0, 0.06);
+    wrist1Group.add(link1Group);
+    robotParts.link1 = link1Group;
     
-    // Joint control (unchanged kinematics)
+    // Elbow1
+    const elbow1Geom = new THREE.BoxGeometry(0.06, 0.06, 0.04);
+    const elbow1 = new THREE.Mesh(elbow1Geom, materials.elbow);
+    const elbow1Group = new THREE.Group();
+    elbow1Group.add(elbow1);
+    elbow1Group.position.set(0, 0, 0.10);
+    link1Group.add(elbow1Group);
+    robotParts.elbow1 = elbow1Group;
+    
+    // Link2
+    const link2Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.09, 12);
+    link2Geom.rotateX(Math.PI / 2);
+    const link2 = new THREE.Mesh(link2Geom, materials.link);
+    link2.position.z = 0.045;
+    const link2Group = new THREE.Group();
+    link2Group.add(link2);
+    link2Group.position.set(0, 0, 0.02);
+    elbow1Group.add(link2Group);
+    robotParts.link2 = link2Group;
+    
+    // Shoulder
+    const shoulderGeom = new THREE.BoxGeometry(0.07, 0.07, 0.04);
+    const shoulder = new THREE.Mesh(shoulderGeom, materials.shoulder);
+    const shoulderGroup = new THREE.Group();
+    shoulderGroup.add(shoulder);
+    shoulderGroup.position.set(0, 0, 0.09);
+    link2Group.add(shoulderGroup);
+    robotParts.shoulder = shoulderGroup;
+    
+    // Link3
+    const link3Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.09, 12);
+    link3Geom.rotateX(Math.PI / 2);
+    const link3 = new THREE.Mesh(link3Geom, materials.link);
+    link3.position.z = 0.045;
+    const link3Group = new THREE.Group();
+    link3Group.add(link3);
+    link3Group.position.set(0, 0, 0.02);
+    shoulderGroup.add(link3Group);
+    robotParts.link3 = link3Group;
+    
+    // Elbow2
+    const elbow2Geom = new THREE.BoxGeometry(0.06, 0.06, 0.04);
+    const elbow2 = new THREE.Mesh(elbow2Geom, materials.elbow);
+    const elbow2Group = new THREE.Group();
+    elbow2Group.add(elbow2);
+    elbow2Group.position.set(0, 0, 0.09);
+    link3Group.add(elbow2Group);
+    robotParts.elbow2 = elbow2Group;
+    
+    // Link4
+    const link4Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.10, 12);
+    link4Geom.rotateX(Math.PI / 2);
+    const link4 = new THREE.Mesh(link4Geom, materials.link);
+    link4.position.z = 0.05;
+    const link4Group = new THREE.Group();
+    link4Group.add(link4);
+    link4Group.position.set(0, 0, 0.02);
+    elbow2Group.add(link4Group);
+    robotParts.link4 = link4Group;
+    
+    // Wrist2
+    const wrist2Geom = new THREE.BoxGeometry(0.05, 0.05, 0.06);
+    const wrist2 = new THREE.Mesh(wrist2Geom, materials.wrist);
+    wrist2.position.z = 0.03;
+    const wrist2Group = new THREE.Group();
+    wrist2Group.add(wrist2);
+    wrist2Group.position.set(0, 0, 0.10);
+    link4Group.add(wrist2Group);
+    robotParts.wrist2 = wrist2Group;
+    
+    // Right claw
+    const rightClaw = createClaw();
+    rightClaw.position.set(0, 0, 0.06);
+    wrist2Group.add(rightClaw);
+    robotParts.right_claw = rightClaw;
+    
+    // Bamboo strut (30cm long, ~1.4cm diameter)
+    const strutGeom = new THREE.CylinderGeometry(0.007, 0.007, 0.30, 16);
+    const strut = new THREE.Mesh(strutGeom, materials.strut);
+    strut.castShadow = true;
+    scene.add(strut);
+    
+    // Support structure (fixed bamboo bundle that left claw grips)
+    const supportGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16);
+    const support = new THREE.Mesh(supportGeom, materials.support);
+    support.position.set(0, 0, -0.25);
+    scene.add(support);
+    
+    // Ground reference
+    const groundGeom = new THREE.PlaneGeometry(2, 2);
+    const groundMat = new THREE.MeshBasicMaterial({ color: 0x0A0A0A, side: THREE.DoubleSide });
+    const ground = new THREE.Mesh(groundGeom, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.5;
+    scene.add(ground);
+    
+    // State for strut attachment and placement
+    let strutAttachedToRightClaw = false;
+    let strutPlaced = false;
+    const strutPlacedPosition = new THREE.Vector3();
+    const strutPlacedRotation = new THREE.Euler();
+    
+    // Joint control
     function setJointAngles(angles) {
-      if (jointAxes[0]) robotParts.wrist1.rotation.z = angles[0];
-      if (jointAxes[1]) robotParts.elbow1.rotation.x = angles[1];
-      if (jointAxes[2]) robotParts.shoulder.rotation.x = angles[2];
-      if (jointAxes[3]) robotParts.elbow2.rotation.x = angles[3];
-      if (jointAxes[4]) robotParts.wrist2.rotation.z = angles[4];
+      robotParts.wrist1.rotation.z = angles[0];
+      robotParts.elbow1.rotation.x = angles[1];
+      robotParts.shoulder.rotation.x = angles[2];
+      robotParts.elbow2.rotation.x = angles[3];
+      robotParts.wrist2.rotation.z = angles[4];
     }
     
-    function interpolateJoints(t) {
-      return START_JOINTS.map((start, i) => start + (GOAL_JOINTS[i] - start) * t);
+    // Interpolate between waypoints
+    function getStateAtTime(t) {
+      const totalWaypoints = WAYPOINTS.length;
+      const segment = t * (totalWaypoints - 1);
+      const idx = Math.floor(segment);
+      const localT = segment - idx;
+      
+      if (idx >= totalWaypoints - 1) {
+        return WAYPOINTS[totalWaypoints - 1];
+      }
+      
+      const w0 = WAYPOINTS[idx];
+      const w1 = WAYPOINTS[idx + 1];
+      
+      // Ease-out cubic for smooth motion
+      const eased = 1 - Math.pow(1 - localT, 3);
+      
+      const joints = w0.joints.map((j0, i) => j0 + (w1.joints[i] - j0) * eased);
+      const leftGrip = w0.leftGrip + (w1.leftGrip - w0.leftGrip) * eased;
+      const rightGrip = w0.rightGrip + (w1.rightGrip - w0.rightGrip) * eased;
+      const phase = localT < 0.5 ? w0.phase : w1.phase;
+      
+      return { joints, leftGrip, rightGrip, phase };
     }
     
-    function updateDisplay(angles) {
-      // Huge shoulder angle
-      const shoulderDeg = (angles[2] * 180 / Math.PI).toFixed(1);
+    function updateScene(t) {
+      const state = getStateAtTime(t);
+      
+      // Update joints
+      setJointAngles(state.joints);
+      
+      // Update grippers
+      setClawGrip(robotParts.base_claw, state.leftGrip);
+      setClawGrip(robotParts.right_claw, state.rightGrip);
+      
+      // Update phase display
+      document.getElementById('phase-text').textContent = state.phase;
+      
+      // Update shoulder angle display
+      const shoulderDeg = (state.joints[2] * 180 / Math.PI).toFixed(1);
       document.getElementById('shoulder-value').textContent = shoulderDeg + '°';
       
-      // Small joint details (excluding shoulder)
-      document.getElementById('j1').textContent = (angles[0] * 180 / Math.PI).toFixed(1) + '°';
-      document.getElementById('j2').textContent = (angles[1] * 180 / Math.PI).toFixed(1) + '°';
-      document.getElementById('j4').textContent = (angles[3] * 180 / Math.PI).toFixed(1) + '°';
-      document.getElementById('j5').textContent = (angles[4] * 180 / Math.PI).toFixed(1) + '°';
+      // Strut attachment logic
+      const gripThreshold = 0.5;
+      
+      // Pickup waypoint is index 1, grip happens at index 2
+      const pickupT = 2 / (WAYPOINTS.length - 1);
+      const releaseT = 6 / (WAYPOINTS.length - 1);
+      
+      if (t >= pickupT && t < releaseT && state.rightGrip > gripThreshold) {
+        if (!strutAttachedToRightClaw) {
+          strutAttachedToRightClaw = true;
+          strutPlaced = false;
+        }
+      }
+      
+      if (t >= releaseT && state.rightGrip < gripThreshold) {
+        if (strutAttachedToRightClaw) {
+          strutAttachedToRightClaw = false;
+          strutPlaced = true;
+          // Capture placed position
+          rightClaw.getWorldPosition(strutPlacedPosition);
+          strutPlacedRotation.copy(rightClaw.rotation);
+        }
+      }
+      
+      // Position strut
+      if (strutPlaced) {
+        // Strut stays at placed location (vertical)
+        strut.position.copy(strutPlacedPosition);
+        strut.position.z += 0.15; // Half strut length
+        strut.rotation.set(0, 0, 0);
+      } else if (strutAttachedToRightClaw) {
+        // Strut attached to right claw
+        const clawWorldPos = new THREE.Vector3();
+        rightClaw.getWorldPosition(clawWorldPos);
+        strut.position.copy(clawWorldPos);
+        strut.position.z += 0.15; // Offset for strut length
+        
+        // Match claw orientation
+        const clawWorldQuat = new THREE.Quaternion();
+        rightClaw.getWorldQuaternion(clawWorldQuat);
+        strut.quaternion.copy(clawWorldQuat);
+      } else {
+        // Strut at pickup location (horizontal on ground)
+        strut.position.set(0.15, -0.35, 0.007);
+        strut.rotation.set(0, 0, Math.PI / 2);
+      }
     }
     
     // Controls
@@ -427,9 +667,7 @@
     
     scrubber.addEventListener('input', (e) => {
       const t = parseFloat(e.target.value) / 100;
-      const joints = interpolateJoints(t);
-      setJointAngles(joints);
-      updateDisplay(joints);
+      updateScene(t);
       renderer.render(scene, camera);
     });
     
@@ -444,7 +682,7 @@
         animateBtn.textContent = 'Stop';
         animateBtn.classList.add('active');
         
-        const duration = 3000;
+        const duration = 8000; // 8 seconds for full pick-place
         const startTime = Date.now();
         
         function animate() {
@@ -453,13 +691,8 @@
           const elapsed = Date.now() - startTime;
           let t = (elapsed % duration) / duration;
           
-          // Ease-out cubic
-          t = 1 - Math.pow(1 - t, 3);
-          
           scrubber.value = t * 100;
-          const joints = interpolateJoints(t);
-          setJointAngles(joints);
-          updateDisplay(joints);
+          updateScene(t);
           renderer.render(scene, camera);
           
           animationId = requestAnimationFrame(animate);
@@ -475,8 +708,9 @@
       cancelAnimationFrame(animationId);
       
       scrubber.value = 0;
-      setJointAngles(START_JOINTS);
-      updateDisplay(START_JOINTS);
+      strutAttachedToRightClaw = false;
+      strutPlaced = false;
+      updateScene(0);
       renderer.render(scene, camera);
     });
     
@@ -491,9 +725,9 @@
     // Mouse controls (simple orbit)
     let mouseDown = false;
     let mouseX = 0, mouseY = 0;
-    let cameraTheta = Math.PI / 4;
-    let cameraPhi = Math.PI / 6;
-    const cameraDistance = 0.85;
+    let cameraTheta = Math.atan2(0.5, 0.8);
+    let cameraPhi = Math.atan2(Math.sqrt(0.8*0.8 + 0.5*0.5), 0.6);
+    const cameraDistance = 1.0;
     
     container.addEventListener('mousedown', (e) => {
       mouseDown = true;
@@ -526,8 +760,7 @@
     });
     
     // Initial render
-    setJointAngles(START_JOINTS);
-    updateDisplay(START_JOINTS);
+    updateScene(0);
     renderer.render(scene, camera);
   </script>
 </body>
