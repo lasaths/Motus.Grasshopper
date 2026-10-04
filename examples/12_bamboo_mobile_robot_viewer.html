@@ -16,7 +16,7 @@
   #view.drag { cursor: grabbing; }
   #view canvas { display: block; }
   #panel {
-    width: 312px;
+    width: 340px;
     flex: none;
     background: #111;
     border-left: 1px solid #2a2a2a;
@@ -96,6 +96,69 @@
     font-size: 11px; color: #aaa;
   }
   .note { margin-top: 16px; color: #666; font-size: 11px; line-height: 1.45; }
+  #tasks { margin-top: 16px; }
+  .task {
+    border: 1px solid #2c2c2c;
+    border-radius: 8px;
+    padding: 8px 8px 10px;
+    margin-top: 8px;
+  }
+  .taskhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  .used { color: #d7c392; letter-spacing: 0.08em; min-height: 1em; }
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+  }
+  .field span {
+    flex: none;
+    width: 74px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    color: #999;
+  }
+  .field input {
+    flex: 1;
+    min-width: 0;
+    background: #0c0c0c;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    padding: 4px 6px;
+    color-scheme: dark;
+  }
+  .field em {
+    flex: none;
+    font-style: normal;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    color: #777;
+    width: 20px;
+  }
+  .task .btns { margin-top: 8px; }
+  button.mini { padding: 5px 10px; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button:disabled:hover { color: #ccc; border-color: #444; }
+  .warn {
+    margin-top: 8px;
+    color: #e07a55;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
@@ -110,9 +173,11 @@
     <button id="play" type="button">Play</button>
     <button id="reset" type="button">Reset</button>
   </div>
+  <div id="tasks"></div>
+  <p class="warn" id="reach"></p>
   <div id="joints"></div>
   <label class="check"><input id="axes" type="checkbox" checked> Joint axes</label>
-  <p class="note">Drag the view to orbit. Moving a joint or gripper slider pauses playback and drives the arm directly. Lengths: pole→θ1 30, then 80, 88, 88, 88, θ5→jaw 46 mm. Bend axes local X, wrists local Y, jaws local X. Strut along the right jaw’s local Z.</p>
+  <p class="note">Drag the view to orbit. Moving a joint or gripper slider pauses playback and drives the arm directly. Play follows the first task named pick and the first named place: their planes, jawMm, and the strut pickup. Lengths: pole→θ1 30, then 80, 88, 88, 88, θ5→jaw 46 mm. Bend axes local X, wrists local Y, jaws local X. Strut along the right jaw’s local Z.</p>
 </aside>
 <script src="three.r128.min.js"></script>
 <script>
@@ -122,28 +187,15 @@
   var POLE_Y = 0.40;
   var LIM = [[-170, 170], [-90, 90], [-135, 135], [-90, 90], [-170, 170]];
   var NAMES = ["θ1", "θ2", "θ3", "θ4", "θ5"];
-  // Reachable task, degrees. Verified by solve_fk.js (same frame convention as this hierarchy).
-  var WP = [
-    { t: 0.000, label: "Home",     q: [-90, -72, -104, -24, 0],         gR: 40, hold: 0 },
-    { t: 0.120, label: "Approach", q: [-90, -39.5, 15.38, 24.12, 0],    gR: 40, hold: 0 },
-    { t: 0.180, label: "Close",    q: [-90, -39.5, 15.38, 24.12, 0],    gR: 14, hold: 1 },
-    { t: 0.320, label: "Lift",     q: [-90, -90, 20.71, 69.29, 0],      gR: 14, hold: 1 },
-    { t: 0.400, label: "Pitch",    q: [-90, -52, -58, 90, 0],           gR: 14, hold: 1 },
-    { t: 0.480, label: "Pitch",    q: [-90, -27.5, -102.5, 90, 0],      gR: 14, hold: 1 },
-    { t: 0.560, label: "Pitch",    q: [-90, -15.29, -129.5, 84.79, 0],  gR: 14, hold: 1 },
-    { t: 0.630, label: "Pitch",    q: [-90, 5.74, -131.03, 45.29, 0],   gR: 14, hold: 1 },
-    { t: 0.700, label: "Pitch",    q: [-90, 5.21, -127.97, 32.76, 0],   gR: 14, hold: 1 },
-    { t: 0.820, label: "Lower",    q: [-90, 3.45, -57.58, -35.87, 0],   gR: 14, hold: 1 },
-    { t: 0.880, label: "Open",     q: [-90, 3.45, -57.58, -35.87, 0],   gR: 40, hold: 2 },
-    { t: 0.905, label: "Withdraw", q: [-90, 13.60, -94.13, -9.47, 0],   gR: 40, hold: 2 },
-    { t: 0.930, label: "Withdraw", q: [-90, 11.78, -119.05, 17.27, 0],  gR: 40, hold: 2 },
-    { t: 0.955, label: "Withdraw", q: [-90, -6.25, -133.82, 50.08, 0],  gR: 40, hold: 2 },
-    { t: 0.975, label: "Withdraw", q: [-90, -39.92, -133.82, 83.75, 0], gR: 40, hold: 2 },
-    { t: 1.000, label: "Retract",  q: [-90, -72, -104, -24, 0],         gR: 40, hold: 2 }
-  ];
+  // Home / retract posture. The pick-and-place path is solved from task planes
+  // (same frame convention as solve_fk.js), not a fixed waypoint list.
+  var HOME_Q = [-90, -72, -104, -24, 0];
   var PICK = { x: 0, y: 0.00778, z: 0.09194 };
   var PLACE = { x: 0, y: 0.1506, z: 0.2000 };
   var DURATION = 14;
+  var tasks = [];
+  var motionKeys = [];
+  var motionError = "";
 
   function metal(hex, rough, metalness) {
     return new THREE.MeshStandardMaterial({
@@ -383,33 +435,445 @@
     j5.rotation.y = deg[4] * DEG;
   }
 
+  // FK matches solve_fk.js / Three.js r128: mount yaw +90°, θ1 and θ5 about local Y,
+  // θ2–θ4 about local X, tool origin at the right jaw. Planar task poses use θ1 = -90°, θ5 = 0.
+  function wrap180(a) {
+    var x = a;
+    while (x > 180) x -= 360;
+    while (x < -180) x += 360;
+    return x;
+  }
+  function ikSolve(y, z, alphaDeg) {
+    var alpha = alphaDeg * DEG;
+    var L = 0.088;
+    var Ljaw = 0.088 + 0.046;
+    var y2 = POLE_Y - SEG[0] - SEG[1];
+    var Ay = y2 - y - Ljaw * Math.cos(alpha);
+    var Az = -z - Ljaw * Math.sin(alpha);
+    var r = Math.hypot(Ay, Az);
+    if (r > 2 * L + 1e-5) return [];
+    var off = Math.acos(Math.min(1, Math.max(-1, r / (2 * L))));
+    var psi = Math.atan2(Az, Ay);
+    var sols = [];
+    for (var s = 0; s < 2; s++) {
+      var sign = s === 0 ? 1 : -1;
+      var beta = psi + sign * off;
+      var gamma = psi - sign * off;
+      var q = [
+        -90,
+        wrap180(beta / DEG),
+        wrap180((gamma - beta) / DEG),
+        wrap180(alphaDeg - gamma / DEG),
+        0
+      ];
+      var ok = true;
+      for (var i = 0; i < 5; i++) {
+        if (q[i] < LIM[i][0] - 1e-3 || q[i] > LIM[i][1] + 1e-3) ok = false;
+        if (q[i] < LIM[i][0]) q[i] = LIM[i][0];
+        if (q[i] > LIM[i][1]) q[i] = LIM[i][1];
+      }
+      if (!ok) continue;
+      var f = fkJaw(q);
+      if (Math.hypot(f.pos[1] - y, f.pos[2] - z) > 0.002) continue;
+      var eZ0 = 0;
+      var eZ1 = -Math.sin(alpha);
+      var eZ2 = Math.cos(alpha);
+      if (Math.hypot(f.Z[0] - eZ0, f.Z[1] - eZ1, f.Z[2] - eZ2) > 0.05) continue;
+      sols.push(q);
+    }
+    return sols;
+  }
+  function rxm(a) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return [1, 0, 0, 0, c, -s, 0, s, c];
+  }
+  function rym(a) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return [c, 0, s, 0, 1, 0, -s, 0, c];
+  }
+  function mulm(A, B) {
+    var C = new Array(9);
+    for (var r = 0; r < 3; r++) {
+      for (var c = 0; c < 3; c++) {
+        C[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+      }
+    }
+    return C;
+  }
+  function applym(R, v) {
+    return [
+      R[0] * v[0] + R[1] * v[1] + R[2] * v[2],
+      R[3] * v[0] + R[4] * v[1] + R[5] * v[2],
+      R[6] * v[0] + R[7] * v[1] + R[8] * v[2]
+    ];
+  }
+  function addm(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+  function fkJaw(deg) {
+    var q = deg.map(function (d) { return d * DEG; });
+    var R = rym(90 * DEG);
+    var p = [0, POLE_Y, 0];
+    var axes = ["Y", "X", "X", "X", "Y"];
+    var pts = [p.slice()];
+    for (var i = 0; i < 5; i++) {
+      p = addm(p, applym(R, [0, -SEG[i], 0]));
+      pts.push(p.slice());
+      R = mulm(R, axes[i] === "Y" ? rym(q[i]) : rxm(q[i]));
+    }
+    var jaw = addm(p, applym(R, [0, -SEG[5], 0]));
+    pts.push(jaw.slice());
+    return { pos: jaw, Z: applym(R, [0, 0, 1]), pts: pts };
+  }
+  function segOk(a, b, carrying) {
+    for (var s = 0; s <= 20; s++) {
+      var u = s / 20;
+      var q = a.map(function (v, k) { return v + (b[k] - v) * u; });
+      for (var i = 0; i < 5; i++) {
+        if (q[i] < LIM[i][0] - 0.05 || q[i] > LIM[i][1] + 0.05) return false;
+      }
+      var f = fkJaw(q);
+      for (var pi = 0; pi < f.pts.length; pi++) {
+        if (f.pts[pi][1] < -0.002) return false;
+      }
+      if (carrying) {
+        var ay = f.Z[1];
+        var bot = f.pos[1] - 0.15 * Math.abs(ay) - 0.007 * Math.sqrt(Math.max(0, 1 - ay * ay));
+        if (bot < -0.004) return false;
+      }
+    }
+    return true;
+  }
+  function linkStages(stages) {
+    var n = stages.length;
+    var releaseIndex = n - 2;
+    var cost = stages.map(function (st) { return st.sols.map(function () { return 1e18; }); });
+    var prev = stages.map(function (st) { return st.sols.map(function () { return -1; }); });
+    stages[0].sols.forEach(function (q, i) {
+      if (segOk(HOME_Q, q, false)) cost[0][i] = 0;
+    });
+    for (var s = 1; s < n; s++) {
+      var carry = s >= 2 && s <= releaseIndex;
+      for (var j = 0; j < stages[s].sols.length; j++) {
+        for (var i = 0; i < stages[s - 1].sols.length; i++) {
+          if (cost[s - 1][i] >= 1e17) continue;
+          if (!segOk(stages[s - 1].sols[i], stages[s].sols[j], carry)) continue;
+          var jump = 0;
+          var qa = stages[s - 1].sols[i];
+          var qb = stages[s].sols[j];
+          for (var k = 0; k < 5; k++) {
+            var d = wrap180(qb[k] - qa[k]);
+            jump += d * d;
+          }
+          var c = cost[s - 1][i] + jump;
+          if (c < cost[s][j]) {
+            cost[s][j] = c;
+            prev[s][j] = i;
+          }
+        }
+      }
+    }
+    var bi = -1;
+    var bc = 1e18;
+    for (var j2 = 0; j2 < stages[n - 1].sols.length; j2++) {
+      if (cost[n - 1][j2] < bc) { bc = cost[n - 1][j2]; bi = j2; }
+    }
+    if (bi < 0) {
+      var far = -1;
+      for (var s2 = 0; s2 < n; s2++) {
+        for (var j3 = 0; j3 < cost[s2].length; j3++) {
+          if (cost[s2][j3] < 1e17) far = s2;
+        }
+      }
+      return { ok: false, far: far, next: far + 1 < n ? stages[far + 1].name : "" };
+    }
+    var seq = [];
+    var j = bi;
+    for (var s3 = n - 1; s3 >= 0; s3--) {
+      seq.push({ name: stages[s3].name, q: stages[s3].sols[j].slice() });
+      j = prev[s3][j];
+    }
+    seq.reverse();
+    return { ok: true, cost: bc, seq: seq };
+  }
+  function stamp(items) {
+    var weights = [0];
+    for (var i = 1; i < items.length; i++) {
+      var s = 0;
+      for (var k = 0; k < 5; k++) s += Math.abs(items[i].q[k] - items[i - 1].q[k]);
+      s += Math.abs(items[i].gR - items[i - 1].gR) * 0.35;
+      if (items[i].label === "Close" || items[i].label === "Open") s += 36;
+      if (s < 4) s = 4;
+      weights.push(s);
+    }
+    var total = 0;
+    for (var w = 0; w < weights.length; w++) total += weights[w];
+    var acc = 0;
+    var keys = [];
+    for (var i2 = 0; i2 < items.length; i2++) {
+      acc += weights[i2];
+      keys.push({
+        t: i2 === items.length - 1 ? 1 : acc / total,
+        label: items[i2].label,
+        q: items[i2].q.slice(),
+        gR: items[i2].gR,
+        hold: items[i2].hold
+      });
+    }
+    keys[0].t = 0;
+    return keys;
+  }
+  function homeKeys(gR) {
+    return [
+      { t: 0, label: "Home", q: HOME_Q.slice(), gR: gR, hold: 0 },
+      { t: 1, label: "Home", q: HOME_Q.slice(), gR: gR, hold: 0 }
+    ];
+  }
+  function firstTask(identity) {
+    for (var i = 0; i < tasks.length; i++) if (tasks[i].id === identity) return tasks[i];
+    return null;
+  }
+  function findPlane(task, name) {
+    if (!task) return null;
+    for (var i = 0; i < task.planes.length; i++) if (task.planes[i].name === name) return task.planes[i];
+    return null;
+  }
+  function planeWorld(task, name) {
+    var pl = findPlane(task, name);
+    if (!pl) return null;
+    var yMm = Number(pl.yMm);
+    if (!isFinite(yMm)) yMm = 0;
+    return { x: pl.x, y: pl.y0 + yMm / 1000, z: pl.z, a: pl.pitch, yMm: yMm };
+  }
+  function buildMotion() {
+    var pick = firstTask("pick");
+    var place = firstTask("place");
+    if (!pick || !place) {
+      var missing = !pick ? "pick" : "place";
+      return { error: "No task with identity \"" + missing + "\".", keys: homeKeys(40) };
+    }
+    if (!isFinite(Number(pick.jawMm)) || !isFinite(Number(place.jawMm))) {
+      return { error: "jawMm must be a number.", keys: homeKeys(40) };
+    }
+    var want = [
+      ["approach", pick, "pick:approach"],
+      ["grasp", pick, "pick:grasp"],
+      ["hold", place, "place:hold"],
+      ["release", place, "place:release"]
+    ];
+    var pose = {};
+    var solved = {};
+    var bad = [];
+    for (var i = 0; i < want.length; i++) {
+      var w = planeWorld(want[i][1], want[i][0]);
+      if (!w) return { error: want[i][2] + " missing.", keys: homeKeys(Number(place.jawMm)) };
+      pose[want[i][0]] = w;
+      if (Math.abs(w.x) > 1e-6) {
+        bad.push(want[i][2]);
+        continue;
+      }
+      var sols = ikSolve(w.y, w.z, w.a);
+      if (!sols.length) bad.push(want[i][2]);
+      else solved[want[i][0]] = sols;
+    }
+    if (bad.length) {
+      return { error: bad.join(", ") + " unreachable", keys: homeKeys(Number(place.jawMm)) };
+    }
+    var G = pose.grasp, H = pose.hold;
+    var lifts = [];
+    var zgs = [0.25, 0.4, 0.55, 0.7, 0.15];
+    var yls = [0.02, 0.035, 0.05, 0.065];
+    for (var zi = 0; zi < zgs.length; zi++) {
+      for (var yi = 0; yi < yls.length; yi++) {
+        var lp = { y: G.y + yls[yi], z: G.z + zgs[zi] * (H.z - G.z), a: G.a };
+        var ls = ikSolve(lp.y, lp.z, lp.a);
+        if (ls.length) lifts.push({ p: lp, sols: ls });
+      }
+    }
+    if (!lifts.length) {
+      return { error: "lift toward place:hold unreachable", keys: homeKeys(Number(place.jawMm)) };
+    }
+    var best = null;
+    var failFar = -1;
+    var failNext = "";
+    for (var li = 0; li < lifts.length; li++) {
+      var stages = [
+        { name: "pick:approach", sols: solved.approach },
+        { name: "pick:grasp", sols: solved.grasp },
+        { name: "Lift", sols: lifts[li].sols }
+      ];
+      var pitchOk = true;
+      var lp0 = lifts[li].p;
+      for (var pi = 1; pi <= 3; pi++) {
+        var u = pi / 4;
+        var pp = {
+          y: lp0.y + (H.y - lp0.y) * u,
+          z: lp0.z + (H.z - lp0.z) * u,
+          a: lp0.a + (H.a - lp0.a) * u
+        };
+        var ps = ikSolve(pp.y, pp.z, pp.a);
+        if (!ps.length) { pitchOk = false; break; }
+        stages.push({ name: "Pitch", sols: ps });
+      }
+      if (!pitchOk) {
+        if (failFar < 2) { failFar = 2; failNext = "lift toward place:hold"; }
+        continue;
+      }
+      stages.push({ name: "place:hold", sols: solved.hold });
+      stages.push({ name: "place:release", sols: solved.release });
+      stages.push({ name: "Retract", sols: [HOME_Q.slice()] });
+      var chained = linkStages(stages);
+      if (!chained.ok) {
+        if (chained.far > failFar) { failFar = chained.far; failNext = chained.next; }
+        continue;
+      }
+      if (!best || chained.cost < best.cost) best = chained;
+    }
+    if (!best) {
+      var msg = "lift toward place:hold unreachable";
+      if (failFar < 0) msg = "pick:approach unreachable";
+      else if (failNext === "pick:grasp" || failNext === "place:hold" || failNext === "place:release") msg = failNext + " unreachable";
+      else if (failNext === "lift toward place:hold") msg = "lift toward place:hold unreachable";
+      return { error: msg, keys: homeKeys(Number(place.jawMm)) };
+    }
+    var open = Number(place.jawMm);
+    var closed = Number(pick.jawMm);
+    var seq = best.seq;
+    var items = [
+      { label: "Home", q: HOME_Q.slice(), gR: open, hold: 0 },
+      { label: "Approach", q: seq[0].q, gR: open, hold: 0 },
+      { label: "Grasp", q: seq[1].q, gR: open, hold: 0 },
+      { label: "Close", q: seq[1].q.slice(), gR: closed, hold: 1 },
+      { label: "Lift", q: seq[2].q, gR: closed, hold: 1 }
+    ];
+    for (var k = 3; k < seq.length; k++) {
+      var nm = seq[k].name;
+      var label = nm === "place:hold" ? "Hold" : (nm === "place:release" ? "Lower" : nm);
+      var gR = closed;
+      var hold = 1;
+      if (nm === "Retract") { label = "Retract"; gR = open; hold = 2; }
+      items.push({ label: label, q: seq[k].q, gR: gR, hold: hold });
+    }
+    var retract = items.pop();
+    var lowerQ = seq[seq.length - 2].q;
+    items.push({ label: "Open", q: lowerQ.slice(), gR: open, hold: 2 });
+    items.push(retract);
+    return { error: "", keys: stamp(items) };
+  }
+
+  // Identity is the string field `id`, not an enum. A duplicate is a second
+  // object in `tasks` with the same id and its own plane data (yMm is a
+  // millimetre nudge on that plane's y0). Playback uses the first "pick"
+  // and the first "place".
+  function defaultTasks() {
+    return [
+      {
+        id: "pick",
+        object: "strut",
+        jawMm: 14,
+        planes: [
+          { name: "approach", x: PICK.x, y0: PICK.y + 0.040, z: PICK.z, pitch: 0, yMm: 0 },
+          { name: "grasp", x: PICK.x, y0: PICK.y, z: PICK.z, pitch: 0, yMm: 0 }
+        ]
+      },
+      {
+        id: "place",
+        object: "strut",
+        jawMm: 40,
+        planes: [
+          { name: "hold", x: PLACE.x, y0: PLACE.y + 0.100, z: PLACE.z, pitch: -90, yMm: 0 },
+          { name: "release", x: PLACE.x, y0: PLACE.y, z: PLACE.z, pitch: -90, yMm: 0 }
+        ]
+      }
+    ];
+  }
+
+  var frameRoot = new THREE.Group();
+  scene.add(frameRoot);
+  function makePlaneLabel(text) {
+    var c = document.createElement("canvas");
+    c.width = 512; c.height = 128;
+    var g = c.getContext("2d");
+    g.clearRect(0, 0, 512, 128);
+    g.font = "600 54px sans-serif";
+    g.fillStyle = "#f2efe6";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    var tw = g.measureText(text).width;
+    var sc = Math.min(1, 480 / Math.max(tw, 1));
+    g.save();
+    g.translate(256, 64);
+    g.scale(sc, 1);
+    g.fillText(text, 0, 0);
+    g.restore();
+    var tex = new THREE.CanvasTexture(c);
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false
+    }));
+    spr.scale.set(0.11, 0.028, 1);
+    spr.renderOrder = 3;
+    return spr;
+  }
+  function layoutFrames() {
+    while (frameRoot.children.length) frameRoot.remove(frameRoot.children[0]);
+    tasks.forEach(function (task) {
+      task.planes.forEach(function (p) {
+        var yMm = Number(p.yMm);
+        if (!isFinite(yMm)) yMm = 0;
+        var holder = new THREE.Group();
+        holder.position.set(p.x, p.y0 + yMm / 1000, p.z);
+        var axes = new THREE.Group();
+        axes.rotation.x = p.pitch * DEG;
+        var L = 0.03;
+        function axis(dx, dy, dz, color) {
+          var geo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(dx, dy, dz)
+          ]);
+          axes.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: color })));
+        }
+        axis(L, 0, 0, 0xff3355);
+        axis(0, L, 0, 0x3ddc6a);
+        axis(0, 0, L, 0x4aa3ff);
+        holder.add(axes);
+        var lab = makePlaneLabel(String(task.id) + ":" + p.name);
+        lab.position.set(0.01, 0.026, 0);
+        holder.add(lab);
+        frameRoot.add(holder);
+      });
+    });
+  }
+
   function setStrut(hold) {
+    var g = planeWorld(firstTask("pick"), "grasp") || { x: PICK.x, y: PICK.y, z: PICK.z, a: 0 };
+    var r = planeWorld(firstTask("place"), "release") || { x: PLACE.x, y: PLACE.y, z: PLACE.z, a: -90 };
     if (hold === 1) {
       if (strut.parent !== jaw) jaw.attach(strut);
       strut.position.set(0, 0, 0);
       strut.rotation.set(0, 0, 0);
     } else if (hold === 2) {
       if (strut.parent !== scene) scene.attach(strut);
-      strut.position.set(PLACE.x, PLACE.y, PLACE.z);
-      strut.rotation.set(-Math.PI / 2, 0, 0);
+      strut.position.set(r.x, r.y, r.z);
+      strut.rotation.set(r.a * DEG, 0, 0);
     } else {
       if (strut.parent !== scene) scene.attach(strut);
-      strut.position.set(PICK.x, PICK.y, PICK.z);
-      strut.rotation.set(0, 0, 0);
+      strut.position.set(g.x, g.y, g.z);
+      strut.rotation.set(g.a * DEG, 0, 0);
     }
   }
 
   function smooth(u) { return u * u * (3 - 2 * u); }
   function sample(t) {
-    if (t <= 0) return { q: WP[0].q.slice(), gR: WP[0].gR, hold: WP[0].hold, label: WP[0].label };
+    var keys = motionKeys;
+    if (!keys.length) return { q: HOME_Q.slice(), gR: 40, hold: 0, label: "Home" };
+    if (t <= 0) return { q: keys[0].q.slice(), gR: keys[0].gR, hold: keys[0].hold, label: keys[0].label };
     if (t >= 1) {
-      var last = WP[WP.length - 1];
+      var last = keys[keys.length - 1];
       return { q: last.q.slice(), gR: last.gR, hold: last.hold, label: last.label };
     }
     var i = 0;
-    while (i < WP.length - 2 && WP[i + 1].t < t) i++;
-    var a = WP[i], b = WP[i + 1];
-    var u = (t - a.t) / (b.t - a.t);
+    while (i < keys.length - 2 && keys[i + 1].t < t) i++;
+    var a = keys[i], b = keys[i + 1];
+    var denom = b.t - a.t;
+    var u = denom <= 1e-8 ? 1 : (t - a.t) / denom;
     var e = smooth(Math.max(0, Math.min(1, u)));
     var q = a.q.map(function (v, k) { return v + (b.q[k] - v) * e; });
     return {
@@ -488,12 +952,12 @@
   function applyTask(t) {
     taskT = t;
     var s = sample(t);
-    curDeg = s.q;
+    curDeg = s.q.slice();
     curGL = 24;
     curGR = s.gR;
     drawModel();
     setStrut(s.hold);
-    phaseEl.textContent = s.label;
+    phaseEl.textContent = motionError ? motionError : s.label;
     tn.textContent = Math.round(t * 100) + "%";
     pushSliders();
   }
@@ -529,6 +993,11 @@
       playBtn.classList.remove("active");
       return;
     }
+    if (motionError) {
+      reachEl.textContent = motionError;
+      phaseEl.textContent = motionError;
+      return;
+    }
     manual = false;
     if (taskT >= 1) taskT = 0;
     playing = true;
@@ -541,6 +1010,10 @@
     playBtn.textContent = "Play";
     playBtn.classList.remove("active");
     scrub.value = "0";
+    tasks = defaultTasks();
+    renderTasks();
+    refreshMotion();
+    taskT = 0;
     applyTask(0);
   });
   document.getElementById("axes").addEventListener("change", function (e) {
@@ -580,10 +1053,146 @@
   window.addEventListener("resize", resize);
   resize();
 
+  var taskHost = document.getElementById("tasks");
+  var reachEl = document.getElementById("reach");
+  function readNumber(el, fallback) {
+    var n = Number(el.value);
+    return el.value.trim() !== "" && isFinite(n) ? n : fallback;
+  }
+  function syncTaskChrome() {
+    var picks = 0, places = 0;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === "pick") picks++;
+      if (tasks[i].id === "place") places++;
+    }
+    var seenPick = false, seenPlace = false;
+    var cards = taskHost.querySelectorAll(".task");
+    for (var c = 0; c < cards.length; c++) {
+      var t = tasks[c];
+      var used = false;
+      if (t.id === "pick" && !seenPick) { used = true; seenPick = true; }
+      if (t.id === "place" && !seenPlace) { used = true; seenPlace = true; }
+      cards[c].querySelector(".used").textContent = used ? "motion" : "";
+      var del = cards[c].querySelector("button.del");
+      var blocked = (t.id === "pick" && picks <= 1) || (t.id === "place" && places <= 1);
+      del.disabled = blocked;
+    }
+  }
+  function renderTasks() {
+    taskHost.innerHTML = "";
+    tasks.forEach(function (task, index) {
+      var card = document.createElement("div");
+      card.className = "task";
+      var head = document.createElement("div");
+      head.className = "taskhead";
+      head.appendChild(document.createTextNode("Task"));
+      var used = document.createElement("span");
+      used.className = "used";
+      head.appendChild(used);
+      card.appendChild(head);
+
+      function field(label, value, onChange, kind) {
+        var row = document.createElement("div");
+        row.className = "field";
+        var span = document.createElement("span");
+        span.textContent = label;
+        var inp = document.createElement("input");
+        inp.type = kind || "text";
+        if (kind === "number") inp.step = "1";
+        inp.value = value;
+        inp.addEventListener("input", function () { onChange(inp); });
+        row.appendChild(span);
+        row.appendChild(inp);
+        return row;
+      }
+      card.appendChild(field("identity", task.id, function (inp) {
+        task.id = inp.value;
+        syncTaskChrome();
+        refreshMotion();
+      }));
+      card.appendChild(field("object", task.object, function (inp) {
+        task.object = inp.value;
+      }));
+      var jawRow = field("jawMm", String(task.jawMm), function (inp) {
+        var n = readNumber(inp, null);
+        if (n === null) return;
+        task.jawMm = n;
+        refreshMotion();
+      }, "number");
+      var em = document.createElement("em");
+      em.textContent = "mm";
+      jawRow.appendChild(em);
+      card.appendChild(jawRow);
+      task.planes.forEach(function (plane) {
+        var row = field(plane.name, String(plane.yMm), function (inp) {
+          var n = readNumber(inp, null);
+          if (n === null) return;
+          plane.yMm = n;
+          refreshMotion();
+        }, "number");
+        row.querySelector("input").title = "Nudge " + plane.name + " along world Y, millimetres";
+        var unit = document.createElement("em");
+        unit.textContent = "mm";
+        row.appendChild(unit);
+        card.appendChild(row);
+      });
+      var btns = document.createElement("div");
+      btns.className = "btns";
+      var dup = document.createElement("button");
+      dup.type = "button";
+      dup.className = "mini";
+      dup.textContent = "Duplicate";
+      dup.addEventListener("click", function () {
+        var copy = JSON.parse(JSON.stringify(tasks[index]));
+        tasks.splice(index + 1, 0, copy);
+        renderTasks();
+        refreshMotion();
+      });
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "mini del";
+      del.textContent = "Delete";
+      del.addEventListener("click", function () {
+        var picks = 0, places = 0;
+        for (var i = 0; i < tasks.length; i++) {
+          if (tasks[i].id === "pick") picks++;
+          if (tasks[i].id === "place") places++;
+        }
+        if (task.id === "pick" && picks <= 1) return;
+        if (task.id === "place" && places <= 1) return;
+        tasks.splice(index, 1);
+        renderTasks();
+        refreshMotion();
+      });
+      btns.appendChild(dup);
+      btns.appendChild(del);
+      card.appendChild(btns);
+      taskHost.appendChild(card);
+    });
+    syncTaskChrome();
+  }
+  function refreshMotion() {
+    var built = buildMotion();
+    motionError = built.error || "";
+    motionKeys = built.keys;
+    reachEl.textContent = motionError;
+    layoutFrames();
+    if (motionError && playing) {
+      playing = false;
+      playBtn.textContent = "Play";
+      playBtn.classList.remove("active");
+    }
+    if (!manual) applyTask(taskT);
+    else if (strut.parent !== jaw) setStrut(0);
+  }
+
   var hashT = 0;
   if (location.hash.indexOf("t=") === 1) hashT = parseFloat(location.hash.slice(3)) || 0;
   scrub.value = String(Math.round(hashT * 1000));
-  applyTask(hashT);
+  taskT = hashT;
+  tasks = defaultTasks();
+  renderTasks();
+  refreshMotion();
   var last = performance.now();
   function loop(now) {
     requestAnimationFrame(loop);

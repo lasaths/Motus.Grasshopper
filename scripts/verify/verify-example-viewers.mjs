@@ -88,14 +88,16 @@ for (const viewer of EXPECTED_VIEWERS) {
   }
   
   // Check for joint state references (flexible for different formats)
-  // Either START_JOINTS/GOAL_JOINTS or waypoint array (WP) with joint data
+  // Either START_JOINTS/GOAL_JOINTS or waypoint array (WP) with joint data or tasks array
   const hasOldFormat = htmlContent.includes('START_JOINTS') && 
                        htmlContent.includes('GOAL_JOINTS') && 
                        htmlContent.includes('JOINT_NAMES');
-  const hasNewFormat = htmlContent.includes('var WP') && htmlContent.includes('label:');
+  const hasWaypointFormat = htmlContent.includes('var WP') && htmlContent.includes('label:');
+  const hasTaskFormat = htmlContent.includes('var tasks') && 
+                       (htmlContent.includes('firstTask') || htmlContent.includes('identity'));
   
-  if (!hasOldFormat && !hasNewFormat) {
-    console.error(`  ❌ HTML missing joint state data (needs START_JOINTS/GOAL_JOINTS or WP array)`);
+  if (!hasOldFormat && !hasWaypointFormat && !hasTaskFormat) {
+    console.error(`  ❌ HTML missing motion data (needs START_JOINTS/GOAL_JOINTS, WP array, or tasks array)`);
     failed++;
   }
   
