@@ -3063,41 +3063,44 @@ function graph11() {
 }
 
 /**
- * Example 12: ICD Collective Robotic Construction Actuator
+ * Example 12: ICD/LIS Bamboo Mobile Robot
  * 
- * Single-axis rotational actuator with two opposite-facing grippers for timber strut assembly.
- * Based on Samuel Leder's research at ICD/IntCDC, University of Stuttgart.
- * Demonstrates rotation motion of the actuator (classic version: 1 revolute + 2 grippers).
+ * 5-DOF symmetric brachiation robot for bamboo bundle construction.
+ * Team: Nicolas Kubail Kalousdian, Samuel Leder, Achim Menges, Marc Toussaint (ICD/LIS).
  * 
- * Reference: Leder et al., "Leveraging Building Material as Part of the In-Plane Robotic
- * Kinematic System for Collective Construction" (2022)
+ * Published kinematics (RAL 2022, ACADIA 2021):
+ * Symmetric chain: Wrist(Z) - Elbow(X) - Shoulder(X) - Elbow(X) - Wrist(Z)
+ * Either claw can act as base or end-effector.
+ * 
+ * Note: User described as "gripper, servo, profile, two servos, profile, servo, gripper" (4 joints).
+ * Papers specify 5 DOF with three middle joints (elbow-shoulder-elbow), not two. Following papers.
  */
 function graph12() {
   // Pipeline: Robot → Env + Traj → Plan → Play
   const { title, note } = exampleHeader(
-    '12 · ICD Collective Actuator',
-    'ICD timber actuator (1 revolute + 2 grippers). Joint-linear rotation → Preview. Conservative limits labeled as assumption.',
+    '12 · ICD Bamboo Mobile Robot',
+    'ICD/LIS 5-DOF brachiation robot (RAL 2022). Symmetric: Wrist(Z)-Elbow(X)-Shoulder(X)-Elbow(X)-Wrist(Z). Papers specify 3 middle joints (not 2).',
   );
   const hy = PIPE.y0;
   const cy = stageContentY(hy);
 
-  // Robot — ICD actuator from URDF
+  // Robot — ICD bamboo robot from URDF
   const rx = PIPE.x0;
-  const urdfFile = pathPanel(rx, cy, repoRel('assets', 'icd', 'collective_actuator.urdf'), 'Urdf', 160, 36);
+  const urdfFile = pathPanel(rx, cy, repoRel('assets', 'icd', 'bamboo_mobile_robot.urdf'), 'Urdf', 160, 36);
   const robot = motusComponent('robot', rx + 180, cy, {
     Path: [outRef(urdfFile.node, 'Text')],
   }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
 
-  // Env + Traj — rotation joint states
+  // Env + Traj — joint states showing 5-DOF motion
   const ex = rx + 380;
-  // Start: home position (0 rad)
+  // Start: home position (all joints at 0)
   const start = motusComponent('joints', ex, cy, {}, { 
-    jointValues: [0.0] 
+    jointValues: [0.0, 0.0, 0.0, 0.0, 0.0] 
   });
-  // Goal: 180° rotation (π rad) — conservative motion to show actuator rotation
-  // Note: Actual hardware has unlimited continuous rotation; π is demonstration only
-  const goal = motusComponent('joints', ex, cy + 100, {}, { 
-    jointValues: [Math.PI] 
+  // Goal: demonstration motion through all 5 joints
+  // Wrist1 rotates, elbows bend, shoulder rotates, creating brachiation-like pose
+  const goal = motusComponent('joints', ex, cy + 120, {}, { 
+    jointValues: [Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4] 
   });
 
   // Plan — joint-linear motion
@@ -3128,9 +3131,9 @@ function graph12() {
     gRobot.group, gEnv.group, gPlan.group, gPlay.group,
   ];
   objs._meta = {
-    fileName: '12_icd_collective_actuator.ghx',
+    fileName: '12_bamboo_mobile_robot.ghx',
     description:
-      'ICD collective robotic construction actuator (Samuel Leder, ICD/Stuttgart): URDF (1 revolute + 2 grippers) → Joint-linear rotation (0 → π rad) → Preview scrub. Conservative demo motion; hardware has unlimited rotation. 50×50mm timber struts (not shown). Planning/preview only.',
+      'ICD/LIS bamboo brachiation robot (Kalousdian et al., RAL 2022): 5-DOF symmetric chain (Wrist-Elbow-Shoulder-Elbow-Wrist) → Joint-linear motion → Preview. Variable-diameter claws adapt to bamboo bundles. Planning/preview only.',
     view: { x: 580, y: 220, zoom: 0.65 },
   };
   return buildGraph(objs);

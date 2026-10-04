@@ -1,62 +1,99 @@
-# ICD Collective Robotic Construction Actuator
+# ICD/LIS Bamboo Mobile Robot
 
-URDF model of the collective robotic construction actuator developed by Samuel Leder at the Institute for Computational Design and Construction (ICD) / IntCDC, University of Stuttgart.
+URDF model of the bamboo mobile brachiation robot developed for collaborative robotic construction with irregular natural materials.
 
-## System Overview
+## Project Overview
 
-The actuator is a modular single-axis robotic unit with two opposite-facing grippers that clamp standardized timber struts. Multiple actuators and struts combine to form reconfigurable kinematic chains for collective construction of timber structures.
+**Project:** Task and Motion Planning for Collaborative Robotic Construction with Irregular Materials  
+**Team:** Nicolas Kubail Kalousdian, Samuel Leder, Achim Menges, Marc Toussaint  
+**Institutions:**  
+- Institute for Computational Design and Construction (ICD), University of Stuttgart  
+- Learning, Intelligent Systems Lab (LIS), University of Tübingen / Max Planck Institute for Intelligent Systems
 
-## Specifications
+The robot brachiates on bamboo bundle structures, using learned control policies to transport bamboo bundles and reach goal positions by leveraging elastic bending behavior of the material.
 
-### Actuator Hardware
-- **Dimensions (closed)**: 138 (d) × 179 (w) × 309.5 (h) mm³
-- **Main axis**: Single continuous rotational joint (unlimited rotation)
-- **Grippers**: Two (upper and lower), opposite-facing
-- **Gripper function**: Open/close to grip/release struts; slight lifting capability
+## Published Kinematics
 
-### Timber Struts
-- **Cross-section**: 50 × 50 mm (standardized)
-- **Material**: Softwood (e.g., spruce)
-- **Minimum length**: 400 mm (for two-actuator kinematic chain)
-- **Surface features**: Milled grooves for gripper contact
+### 5-DOF Symmetric Chain
 
-### Motion Capabilities
-- **Rotation**: Continuous, unlimited (modeled with conservative π rad limit for demo)
-- **Gripper state**: Open/close (simplified as fixed in URDF)
+Published in RAL 2022 (Kalousdian et al., "Learning Robotic Manipulation of Natural Materials with Variable Properties for Construction Tasks"):
+
+| Joint | Type | Axis | Range | Description |
+|-------|------|------|-------|-------------|
+| θ1 | Revolute | Z | [-170°, 170°] | Left wrist (axial rotation) |
+| θ2 | Revolute | X | [-90°, 90°] | Left elbow |
+| θ3 | Revolute | X | [-135°, 135°] | Shoulder (central pivot) |
+| θ4 | Revolute | X | [-90°, 90°] | Right elbow |
+| θ5 | Revolute | Z | [-170°, 170°] | Right wrist (axial rotation) |
+
+**Morphology:** Symmetrical — two axial joints on the bases (wrists θ1 and θ5) connect to two revolute joints (elbows θ2 and θ4) that meet at a central revolute joint (shoulder θ3).
+
+**Structure:** Claw → Wrist (Z) → Link → Elbow (X) → Link → Shoulder (X) → Link → Elbow (X) → Link → Wrist (Z) → Claw
+
+### Hardware Specifications
+
+From ACADIA 2021 ("Co-Designing Material-Robot Construction Behaviors"):
+
+- **Height:** ~40 cm
+- **Mass:** 2.3 kg  
+- **Motors:**
+  - Shoulder (θ3) and elbows (θ2, θ4): Dynamixel MX-64 (2:1 and 3:1 gear ratios)
+  - Wrists (θ1, θ5) and claws: Dynamixel XL430-W250-T (2:1 gear ratio)
+- **Claws:** Variable-diameter interlocking fingers with force-feedback control
+- **Safety:** Pawl-and-ratchet mechanism to mechanically lock grip on motor failure
+- **Sensors:**
+  - Internal: IMU (accelerometer, gyroscope, magnetometer) in each end-effector
+  - Internal: Joint encoders in servos
+  - External: Multi-camera tracking system for root link position
+- **Control:** Raspberry Pi microcomputer
+- **Cost:** ~€1,800 (prototype)
 
 ## URDF Model
 
-`collective_actuator.urdf` represents the **classic version** of the actuator (single revolute + two grippers). Later 2026 variants include active tilt of the upper gripper; not modeled here.
+`bamboo_mobile_robot.urdf` represents the 5-DOF published kinematic chain.
 
 ### Simplifications and Assumptions
 
-1. **Grippers**: Modeled as fixed paddles rather than active open/close mechanisms. Full gripper actuation would require additional revolute joints with mimic constraints (similar to example 07).
+1. **Claws:** Modeled as fixed cylindrical geometry. Actual hardware has variable-diameter adaptive grippers with interlocking fingers that conform to irregular bamboo bundle cross-sections.
 
-2. **Rotation limits**: Hardware has unlimited continuous rotation via slip-ring. URDF joint is `type="continuous"` but demo motion uses conservative 0 → π rad for illustration.
+2. **Link lengths:** Estimated from ~40 cm total height and visual references in papers. Individual link segment lengths are approximations to achieve published joint structure.
 
-3. **Dimensions**: Body and gripper sizes derived from published actuator dimensions (138×179×309.5 mm³). Gripper paddle size (20×50×50 mm) is estimated to match 50×50 mm strut contact surface. Not all internal mechanical details are represented.
+3. **Link geometry:** Simplified boxes and cylinders. Actual hardware has 3D-printed Onyx/ABS chassis with aluminum parts in later prototypes.
 
-4. **Mass/Inertia**: Not specified (URDF visual/collision geometry only). Published mass and torque specs exist in supplementary materials but are not included in this planning-focused model.
+4. **Mass/Inertia:** Not specified in URDF (visual/collision geometry only). Published 2.3 kg total mass.
 
-5. **Tool frame (tool0)**: Placed at upper gripper contact point. For kinematic-chain examples with struts, attach geometry would represent the gripped strut segment.
+5. **Sensors:** Not represented. Robot uses IMU, joint encoders, and external tracking.
+
+6. **Tool frame (tool0):** Placed at right claw tip. Symmetric design means either claw can act as base or end-effector.
+
+## Usage Context
+
+The robot learns control policies via deep reinforcement learning (PPO algorithm) to:
+- **Reach:** Bend the bamboo bundle it's holding to reach goal positions
+- **Transport:** React to deformations and spring-back while manipulating bamboo elements
+- **Locomote:** Walk along bundle length via hard-coded inverse kinematics
+
+Training uses simulation with automatic domain randomization (ADR) and curriculum learning to handle bamboo's variable mechanical properties (elastic modulus, cross-section, wall thickness) before real-world transfer.
 
 ## References
 
-- Leder, S., Weber, R., Wall, A., Pettet, A., Guerrero, N., & Menges, A. (2022). "Leveraging Building Material as Part of the In-Plane Robotic Kinematic System for Collective Construction." *Advanced Intelligent Systems*, PMC9404414. https://pmc.ncbi.nlm.nih.gov/articles/PMC9404414/
+1. Kalousdian, N.K., Łochnicki, G., Hartmann, V.N., Leder, S., Oguz, O.S., Menges, A., Toussaint, M. (2022). "Learning Robotic Manipulation of Natural Materials with Variable Properties for Construction Tasks." *IEEE Robotics and Automation Letters*, 7(2), 5749-5756. https://doi.org/10.1109/LRA.2022.3159288  
+   PDF: https://argmin.lis.tu-berlin.de/papers/22-kalousdian-RAL.pdf
 
-- Leder, S. (2025). *Co-Design of Collective Robotic Construction Systems in Architecture.* Dissertation, University of Stuttgart.
+2. Łochnicki, G., Kubail Kalousdian, N., Leder, S., Maierhofer, M., Wood, D., Menges, A. (2021). "Co-Designing Material-Robot Construction Behaviors: Teaching distributed robotic systems to leverage active bending for light-touch assembly of bamboo bundle structures." *Realignments: Toward Critical Computation, Proceedings of ACADIA 2021*, 470-479. https://doi.org/10.52842/conf.acadia.2021.470  
+   PDF: https://papers.cumincad.org/data/works/att/acadia21_470.pdf
 
-- Leder, S., Kim, H., Sitti, M., & Menges, A. (2024). "Enhanced co-design and evaluation of a collective robotic construction system for the assembly of large-scale in-plane timber structures." *Automation in Construction*, 162, 105390.
+3. ICD Project Page: https://www.icd.uni-stuttgart.de/research/research-projects/task-and-motion-planning-for-collaborative-robotic-construction-with-irregular-materials/
 
 ## Usage in Grasshopper
 
-See `12_icd_collective_actuator.ghx`:
+See `12_bamboo_mobile_robot.ghx`:
 - Load URDF via Motus Robot
-- Plan joint-linear rotation (0 → π rad)
-- Preview actuator motion with Scrub
+- Plan joint-space motion through 5 DOF
+- Preview brachiation postures with Scrub
 
-For multi-actuator kinematic chains, use Motus Robot Attach to add strut geometry at gripper contact frames.
+For multi-robot collaborative assembly scenarios, multiple robot instances would coordinate via task/motion planning (Logic-Geometric Programming + RL policies).
 
 ## License / Attribution
 
-URDF model created for demonstration purposes based on published research. Actuator design © ICD, University of Stuttgart. Research led by Dr.-Ing. Samuel Leder.
+URDF model created for demonstration purposes based on published research. Robot design © ICD, University of Stuttgart. Research led by Nicolas Kubail Kalousdian and Dr.-Ing. Samuel Leder.

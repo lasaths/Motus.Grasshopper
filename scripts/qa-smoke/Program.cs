@@ -1597,50 +1597,53 @@ catch (DllNotFoundException)
     Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
 }
 
-// Example 12: ICD collective robotic construction actuator URDF load
+// Example 12: ICD/LIS bamboo mobile robot URDF load
 {
-    Console.WriteLine("\n== Example 12 ICD collective actuator ==");
-    var icdUrdfPath = Path.Combine(examples, "assets", "icd", "collective_actuator.urdf");
-    if (!File.Exists(icdUrdfPath))
-        Fail($"ICD actuator URDF not found: {icdUrdfPath}");
+    Console.WriteLine("\n== Example 12 ICD/LIS bamboo mobile robot ==");
+    var bambooUrdfPath = Path.Combine(examples, "assets", "icd", "bamboo_mobile_robot.urdf");
+    if (!File.Exists(bambooUrdfPath))
+        Fail($"ICD bamboo robot URDF not found: {bambooUrdfPath}");
     
-    var icdLoad = UrdfRobotFileLoader.LoadUrdf(icdUrdfPath, BaseFrame.Identity, ToolFrame.Identity);
-    if (!icdLoad.Succeeded)
-        Fail($"ICD URDF load failed: {string.Join("; ", icdLoad.Errors)}");
+    var bambooLoad = UrdfRobotFileLoader.LoadUrdf(bambooUrdfPath, BaseFrame.Identity, ToolFrame.Identity);
+    if (!bambooLoad.Succeeded)
+        Fail($"ICD bamboo URDF load failed: {string.Join("; ", bambooLoad.Errors)}");
     
-    var icdModel = icdLoad.RobotModel;
-    if (icdModel is null || icdModel.Preset.AxisCount != 1)
-        Fail($"ICD actuator expected 1 axis (rotation_joint), got {icdModel?.Preset.AxisCount}");
+    var bambooModel = bambooLoad.RobotModel;
+    if (bambooModel is null || bambooModel.Preset.AxisCount != 5)
+        Fail($"ICD bamboo robot expected 5 DOF (wrist-elbow-shoulder-elbow-wrist), got {bambooModel?.Preset.AxisCount}");
     
-    // Verify continuous joint (unlimited rotation)
-    if (icdModel.Tree?.Joints.Length != 1)
-        Fail($"ICD tree expected 1 joint, got {icdModel.Tree?.Joints.Length}");
+    // Verify symmetric kinematic chain structure
+    if (bambooModel.Tree?.Joints.Length != 5)
+        Fail($"ICD bamboo tree expected 5 joints, got {bambooModel.Tree?.Joints.Length}");
     
-    var rotJoint = icdModel.Tree!.Joints[0];
-    if (!string.Equals(rotJoint.Name, "rotation_joint", StringComparison.OrdinalIgnoreCase))
-        Fail($"Expected rotation_joint, got {rotJoint.Name}");
+    var joints = bambooModel.Tree!.Joints;
     
-    if (rotJoint.Type != JointType.Continuous)
-        Fail($"rotation_joint should be Continuous, got {rotJoint.Type}");
+    // θ1, θ5: wrists (Z-axis, axial rotation)
+    if (joints[0].Type != JointType.Revolute || joints[4].Type != JointType.Revolute)
+        Fail("Wrist joints (θ1, θ5) should be Revolute");
     
-    // FK sanity check: home (0) and π rotation
-    var icdFk = new SerialChainForwardKinematics(icdModel.Tree!.SerialTipChain);
-    var icdHome = new JointState(new[] { 0.0 });
-    var icdGoal = new JointState(new[] { Math.PI });
+    // θ2, θ3, θ4: elbows + shoulder (X-axis)
+    if (joints[1].Type != JointType.Revolute || joints[2].Type != JointType.Revolute || joints[3].Type != JointType.Revolute)
+        Fail("Elbow and shoulder joints (θ2, θ3, θ4) should be Revolute");
     
-    var tcpHome = icdFk.ComputeTcp(icdHome, icdModel.Preset.BaseFrame, icdModel.Preset.ToolFrame).Tcp;
-    var tcpGoal = icdFk.ComputeTcp(icdGoal, icdModel.Preset.BaseFrame, icdModel.Preset.ToolFrame).Tcp;
+    // FK sanity check: home (zeros) and demonstration pose
+    var bambooFk = new SerialChainForwardKinematics(bambooModel.Tree!.SerialTipChain);
+    var bambooHome = new JointState(new[] { 0.0, 0.0, 0.0, 0.0, 0.0 });
+    var bambooDemo = new JointState(new[] { Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4 });
     
-    // TCP should move with rotation (not at origin)
-    if (tcpHome.Origin.DistanceTo(Rhino.Geometry.Point3d.Origin) < 0.1)
-        Fail("ICD actuator TCP should not be at origin (grippers offset from base)");
+    var tcpHome = bambooFk.ComputeTcp(bambooHome, bambooModel.Preset.BaseFrame, bambooModel.Preset.ToolFrame).Tcp;
+    var tcpDemo = bambooFk.ComputeTcp(bambooDemo, bambooModel.Preset.BaseFrame, bambooModel.Preset.ToolFrame).Tcp;
     
-    // Joint-linear plan 0 → π
-    var icdPlan = new JointLinearPlanner().Plan(new PlanningRequest(icdModel, icdHome, icdGoal));
-    if (!icdPlan.Success || icdPlan.Trajectory is null || icdPlan.Trajectory.Points.Count < 2)
-        Fail($"ICD joint-linear plan failed: {string.Join("; ", icdPlan.Errors)}");
+    // TCP should move with joint motion (not at origin after 5-DOF motion)
+    if (tcpHome.Origin.DistanceTo(tcpDemo.Origin) < 0.05)
+        Fail("ICD bamboo robot TCP should move significantly with 5-DOF joint motion");
     
-    Ok("Example 12 ICD collective actuator URDF load + 1-DOF rotation plan");
+    // Joint-linear plan through 5 DOF
+    var bambooPlan = new JointLinearPlanner().Plan(new PlanningRequest(bambooModel, bambooHome, bambooDemo));
+    if (!bambooPlan.Success || bambooPlan.Trajectory is null || bambooPlan.Trajectory.Points.Count < 2)
+        Fail($"ICD bamboo 5-DOF joint-linear plan failed: {string.Join("; ", bambooPlan.Errors)}");
+    
+    Ok("Example 12 ICD/LIS bamboo mobile robot URDF load + 5-DOF plan");
 }
 
 {
