@@ -1597,6 +1597,51 @@ catch (DllNotFoundException)
     Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
 }
 
+// Example 12: ICD collective robotic construction actuator URDF load
+{
+    Console.WriteLine("\n== Example 12 ICD collective actuator ==");
+    var icdUrdfPath = Path.Combine(examples, "assets", "icd", "collective_actuator.urdf");
+    if (!File.Exists(icdUrdfPath))
+        Fail($"ICD actuator URDF not found: {icdUrdfPath}");
+    
+    var icdLoad = UrdfRobotFileLoader.LoadUrdf(icdUrdfPath, BaseFrame.Identity, ToolFrame.Identity);
+    if (!icdLoad.Succeeded)
+        Fail($"ICD URDF load failed: {string.Join("; ", icdLoad.Errors)}");
+    
+    var icdModel = icdLoad.RobotModel;
+    if (icdModel is null || icdModel.Preset.AxisCount != 1)
+        Fail($"ICD actuator expected 1 axis (rotation_joint), got {icdModel?.Preset.AxisCount}");
+    
+    // Verify continuous joint (unlimited rotation)
+    if (icdModel.Tree?.Joints.Length != 1)
+        Fail($"ICD tree expected 1 joint, got {icdModel.Tree?.Joints.Length}");
+    
+    var rotJoint = icdModel.Tree!.Joints[0];
+    if (!string.Equals(rotJoint.Name, "rotation_joint", StringComparison.OrdinalIgnoreCase))
+        Fail($"Expected rotation_joint, got {rotJoint.Name}");
+    
+    if (rotJoint.Type != JointType.Continuous)
+        Fail($"rotation_joint should be Continuous, got {rotJoint.Type}");
+    
+    // FK sanity check: home (0) and π rotation
+    var icdFk = new SerialChainForwardKinematics(icdModel.Tree!.SerialTipChain);
+    var icdHome = new JointState(new[] { 0.0 });
+    var icdGoal = new JointState(new[] { Math.PI });
+    
+    var tcpHome = icdFk.ComputeTcp(icdHome, icdModel.Preset.BaseFrame, icdModel.Preset.ToolFrame).Tcp;
+    var tcpGoal = icdFk.ComputeTcp(icdGoal, icdModel.Preset.BaseFrame, icdModel.Preset.ToolFrame).Tcp;
+    
+    // TCP should move with rotation (not at origin)
+    if (tcpHome.Origin.DistanceTo(Rhino.Geometry.Point3d.Origin) < 0.1)
+        Fail("ICD actuator TCP should not be at origin (grippers offset from base)");
+    
+    // Joint-linear plan 0 → π
+    var icdPlan = new JointLinearPlanner().Plan(new PlanningRequest(icdModel, icdHome, icdGoal));
+    if (!icdPlan.Success || icdPlan.Trajectory is null || icdPlan.Trajectory.Points.Count < 2)
+        Fail($"ICD joint-linear plan failed: {string.Join("; ", icdPlan.Errors)}");
+    
+    Ok("Example 12 ICD collective actuator URDF load + 1-DOF rotation plan");
+}
 
 {
     Console.WriteLine("\n== Stewart platform IK / path ==");

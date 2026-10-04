@@ -39,6 +39,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 | `10_pick_place.ghx` | UR10e destack: C# layout (5×4 tower → 5 columns × 4) + Collision Boxes + Pick Place (`Touch=robotiq_2f85`) → one Program; plan ColScene empty; preview ColScene = table+bricks |
 | `11_aerial_hover.ghx` | Motus 2.1: free-flyer HolonomicSE3 Start→Goal (WorldXY body); Preview / Export bodyPose; `assets/aerial/free_flyer_box.urdf` (arm pass-off deferred) |
+| `12_icd_collective_actuator.ghx` | ICD collective construction actuator (Leder, ICD/Stuttgart): single-axis rotation + 2 grippers; joint-linear motion → Preview; planning/preview only (no RTDE) |
 
 ## Component coverage (01–06 core)
 

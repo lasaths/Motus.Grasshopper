@@ -1,0 +1,130 @@
+<?xml version="1.0"?>
+<!-- ICD Collective Robotic Construction Actuator
+     Single-axis rotational joint with two opposite-facing grippers for timber strut assembly.
+     Based on Samuel Leder's research at ICD/IntCDC, University of Stuttgart.
+     
+     Dimensions:
+     - Actuator body (closed): 138 (d) × 179 (w) × 309.5 (h) mm
+     - Timber struts: 50×50 mm cross-section
+     - Rotational axis: unlimited (continuous)
+     - Reference: Leder et al., "Leveraging Building Material as Part of the In-Plane Robotic 
+       Kinematic System for Collective Construction" (2022)
+-->
+<robot name="icd_collective_actuator">
+  
+  <!-- Base link: lower gripper body -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.138 0.179 0.155"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.138 0.179 0.155"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Lower gripper (simplified as fixed paddles) -->
+  <link name="lower_gripper">
+    <visual>
+      <origin xyz="0.069 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020 0.050 0.050"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.069 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020 0.050 0.050"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="lower_gripper_mount" type="fixed">
+    <parent link="base_link"/>
+    <child link="lower_gripper"/>
+    <origin xyz="0 0 0.025" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Rotational axis link (main body rotation) -->
+  <link name="rotation_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.050" radius="0.030"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.050" radius="0.030"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Main rotation joint: unlimited continuous rotation -->
+  <joint name="rotation_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rotation_link"/>
+    <origin xyz="0 0 0.155" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- Upper gripper body -->
+  <link name="upper_body">
+    <visual>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.138 0.179 0.155"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0775" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.138 0.179 0.155"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="upper_body_mount" type="fixed">
+    <parent link="rotation_link"/>
+    <child link="upper_body"/>
+    <origin xyz="0 0 0.025" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Upper gripper (simplified as fixed paddles) -->
+  <link name="upper_gripper">
+    <visual>
+      <origin xyz="-0.069 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020 0.050 0.050"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="-0.069 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.020 0.050 0.050"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="upper_gripper_mount" type="fixed">
+    <parent link="upper_body"/>
+    <child link="upper_gripper"/>
+    <origin xyz="0 0 0.155" rpy="0 0 0"/>
+  </joint>
+
+  <!-- TCP: centered at upper gripper contact point -->
+  <link name="tool0"/>
+
+  <joint name="tool0_joint" type="fixed">
+    <parent link="upper_gripper"/>
+    <child link="tool0"/>
+    <origin xyz="-0.069 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

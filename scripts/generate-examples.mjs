@@ -3062,7 +3062,81 @@ function graph11() {
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11];
+/**
+ * Example 12: ICD Collective Robotic Construction Actuator
+ * 
+ * Single-axis rotational actuator with two opposite-facing grippers for timber strut assembly.
+ * Based on Samuel Leder's research at ICD/IntCDC, University of Stuttgart.
+ * Demonstrates rotation motion of the actuator (classic version: 1 revolute + 2 grippers).
+ * 
+ * Reference: Leder et al., "Leveraging Building Material as Part of the In-Plane Robotic
+ * Kinematic System for Collective Construction" (2022)
+ */
+function graph12() {
+  // Pipeline: Robot → Env + Traj → Plan → Play
+  const { title, note } = exampleHeader(
+    '12 · ICD Collective Actuator',
+    'ICD timber actuator (1 revolute + 2 grippers). Joint-linear rotation → Preview. Conservative limits labeled as assumption.',
+  );
+  const hy = PIPE.y0;
+  const cy = stageContentY(hy);
+
+  // Robot — ICD actuator from URDF
+  const rx = PIPE.x0;
+  const urdfFile = pathPanel(rx, cy, repoRel('assets', 'icd', 'collective_actuator.urdf'), 'Urdf', 160, 36);
+  const robot = motusComponent('robot', rx + 180, cy, {
+    Path: [outRef(urdfFile.node, 'Text')],
+  }, { text: { BaseLink: 'base_link', TipLink: 'tool0' }, hidden: true });
+
+  // Env + Traj — rotation joint states
+  const ex = rx + 380;
+  // Start: home position (0 rad)
+  const start = motusComponent('joints', ex, cy, {}, { 
+    jointValues: [0.0] 
+  });
+  // Goal: 180° rotation (π rad) — conservative motion to show actuator rotation
+  // Note: Actual hardware has unlimited continuous rotation; π is demonstration only
+  const goal = motusComponent('joints', ex, cy + 100, {}, { 
+    jointValues: [Math.PI] 
+  });
+
+  // Plan — joint-linear motion
+  const planX = ex + 180;
+  const plan = motusComponent('plan', planX, cy, {
+    Robot: [outRef(robot.node, 'Robot')],
+    Goal: [outRef(goal.node, 'State')],
+    Start: [outRef(start.node, 'State')],
+  });
+
+  // Play — Preview + Scrub + Waypoints
+  const { scrub, preview } = previewWithScrub(planX, cy, outRef(plan.node, 'Trajectory'));
+  const stackX = planX + PLAN_PREVIEW_DX;
+  const waypoints = motusComponent('waypoints', stackX, belowPreview(cy), {
+    Trajectory: [outRef(plan.node, 'Trajectory')],
+  });
+
+  // Groups
+  const gRobot = stageGroup('Robot', [urdfFile, robot], GROUP_COLOUR.robot, rx, hy);
+  const gEnv = stageGroup('Env + Traj', [start, goal], GROUP_COLOUR.goals, ex, hy);
+  const gPlan = stageGroup('Plan', [plan], GROUP_COLOUR.plan, planX, hy);
+  const gPlay = stageGroup('Play', [scrub, preview, waypoints], GROUP_COLOUR.play, planX + PIPE.playHeaderDx, hy);
+
+  const objs = [
+    title, note,
+    urdfFile, robot, start, goal, plan, scrub, preview, waypoints,
+    gRobot.header, gEnv.header, gPlan.header, gPlay.header,
+    gRobot.group, gEnv.group, gPlan.group, gPlay.group,
+  ];
+  objs._meta = {
+    fileName: '12_icd_collective_actuator.ghx',
+    description:
+      'ICD collective robotic construction actuator (Samuel Leder, ICD/Stuttgart): URDF (1 revolute + 2 grippers) → Joint-linear rotation (0 → π rad) → Preview scrub. Conservative demo motion; hardware has unlimited rotation. 50×50mm timber struts (not shown). Planning/preview only.',
+    view: { x: 580, y: 220, zoom: 0.65 },
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11, graph12];
 // graph10 (10_pick_place.ghx) is Cassis-authored — not in default regen list.
 const legacy = [
   '01_basic_planning.ghx',
@@ -3091,7 +3165,7 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const onlyGraph = onlyArg?.slice('--only='.length);
 const onlyBuilders = {
   1: graph01, 2: graph02, 3: graph03, 4: graph04, 5: graph05,
-  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11,
+  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11, 12: graph12,
 };
 
 const buildList = onlyGraph
