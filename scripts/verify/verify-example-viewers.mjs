@@ -45,12 +45,10 @@ for (const viewer of EXPECTED_VIEWERS) {
   // Validate HTML structure
   const htmlContent = fs.readFileSync(htmlPath, 'utf8');
   
-  // Check for required elements
+  // Check for required elements (flexible for different viewer versions)
   const requiredElements = [
     '<!DOCTYPE html>',
-    '<title>',
-    'id="viewer"',
-    'id="scrubber"'
+    '<title>'
   ];
   
   for (const element of requiredElements) {
@@ -58,6 +56,18 @@ for (const viewer of EXPECTED_VIEWERS) {
       console.error(`  ❌ HTML missing required element: ${element}`);
       failed++;
     }
+  }
+  
+  // Check for viewer container (either id="viewer" or id="view")
+  if (!htmlContent.includes('id="viewer"') && !htmlContent.includes('id="view"')) {
+    console.error(`  ❌ HTML missing viewer container (id="viewer" or id="view")`);
+    failed++;
+  }
+  
+  // Check for scrubber (either id="scrubber" or id="scrub")
+  if (!htmlContent.includes('id="scrubber"') && !htmlContent.includes('id="scrub"')) {
+    console.error(`  ❌ HTML missing scrubber control (id="scrubber" or id="scrub")`);
+    failed++;
   }
   
   // Check for Three.js (CDN or local)
@@ -77,18 +87,16 @@ for (const viewer of EXPECTED_VIEWERS) {
     }
   }
   
-  // Check for joint state references
-  const requiredData = [
-    'START_JOINTS',
-    'GOAL_JOINTS',
-    'JOINT_NAMES'
-  ];
+  // Check for joint state references (flexible for different formats)
+  // Either START_JOINTS/GOAL_JOINTS or waypoint array (WP) with joint data
+  const hasOldFormat = htmlContent.includes('START_JOINTS') && 
+                       htmlContent.includes('GOAL_JOINTS') && 
+                       htmlContent.includes('JOINT_NAMES');
+  const hasNewFormat = htmlContent.includes('var WP') && htmlContent.includes('label:');
   
-  for (const data of requiredData) {
-    if (!htmlContent.includes(data)) {
-      console.error(`  ❌ HTML missing required data: ${data}`);
-      failed++;
-    }
+  if (!hasOldFormat && !hasNewFormat) {
+    console.error(`  ❌ HTML missing joint state data (needs START_JOINTS/GOAL_JOINTS or WP array)`);
+    failed++;
   }
   
   console.log(`  ✓ HTML structure validated`);

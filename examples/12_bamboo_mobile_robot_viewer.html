@@ -1,767 +1,609 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Example 12: ICD/LIS Bamboo Mobile Robot — Pick and Place</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #000000;
-      color: #E8E8E8;
-      overflow: hidden;
-      position: relative;
-    }
-    
-    #container {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      position: relative;
-    }
-    
-    #viewer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-    }
-    
-    /* Huge shoulder angle number - dominant visual element */
-    #shoulder-display {
-      position: absolute;
-      top: 15vh;
-      right: 8vw;
-      z-index: 10;
-      pointer-events: none;
-    }
-    
-    #shoulder-value {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: clamp(120px, 18vw, 240px);
-      font-weight: 500;
-      color: #FFFFFF;
-      line-height: 0.9;
-      letter-spacing: -0.02em;
-    }
-    
-    #shoulder-label {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.15em;
-      color: #666666;
-      text-transform: uppercase;
-      margin-top: 12px;
-    }
-    
-    /* Top left title */
-    #header {
-      position: absolute;
-      top: 40px;
-      left: 40px;
-      z-index: 10;
-      pointer-events: none;
-    }
-    
-    #header h1 {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: #999999;
-      margin-bottom: 6px;
-    }
-    
-    #header p {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 13px;
-      font-weight: 400;
-      color: #666666;
-      max-width: 280px;
-    }
-    
-    /* Bottom controls - minimal surface */
-    #controls {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #111111;
-      border-top: 1px solid #222222;
-      padding: 32px 40px;
-      z-index: 10;
-    }
-    
-    .control-row {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      max-width: 1200px;
-    }
-    
-    .control-label {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: #666666;
-      min-width: 80px;
-    }
-    
-    /* Scrubber */
-    #scrubber-container {
-      flex: 1;
-      max-width: 600px;
-    }
-    
-    #scrubber {
-      width: 100%;
-      height: 2px;
-      -webkit-appearance: none;
-      appearance: none;
-      background: #333333;
-      outline: none;
-      cursor: pointer;
-      border-radius: 0;
-      transition: background 0.2s ease-out;
-    }
-    
-    #scrubber:hover {
-      background: #444444;
-    }
-    
-    #scrubber::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 12px;
-      height: 12px;
-      background: #FFFFFF;
-      cursor: pointer;
-      border-radius: 6px;
-      transition: background 0.15s ease-out;
-    }
-    
-    #scrubber::-moz-range-thumb {
-      width: 12px;
-      height: 12px;
-      background: #FFFFFF;
-      cursor: pointer;
-      border-radius: 6px;
-      border: none;
-      transition: background 0.15s ease-out;
-    }
-    
-    #scrubber:active::-webkit-slider-thumb {
-      background: #D71921;
-    }
-    
-    #scrubber:active::-moz-range-thumb {
-      background: #D71921;
-    }
-    
-    /* Buttons - pill shape */
-    .button-group {
-      display: flex;
-      gap: 12px;
-    }
-    
-    button {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 10px 20px;
-      background: transparent;
-      color: #999999;
-      border: 1px solid #333333;
-      border-radius: 20px;
-      cursor: pointer;
-      transition: all 0.15s ease-out;
-      white-space: nowrap;
-    }
-    
-    button:hover {
-      border-color: #666666;
-      color: #E8E8E8;
-    }
-    
-    button.active {
-      background: #D71921;
-      border-color: #D71921;
-      color: #FFFFFF;
-    }
-    
-    /* Task status - bottom left */
-    #task-status {
-      position: absolute;
-      bottom: 140px;
-      left: 40px;
-      z-index: 10;
-      pointer-events: none;
-    }
-    
-    .status-label {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: #666666;
-      margin-bottom: 6px;
-    }
-    
-    .status-value {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 13px;
-      font-weight: 400;
-      color: #E8E8E8;
-    }
-    
-    /* Info label - top right corner */
-    #info {
-      position: absolute;
-      top: 40px;
-      right: 40px;
-      z-index: 10;
-      pointer-events: none;
-      text-align: right;
-    }
-    
-    #info .label {
-      font-family: Menlo, Monaco, "Courier New", monospace;
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: #666666;
-    }
-    
-    #info .value {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 13px;
-      color: #999999;
-      margin-top: 4px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICD/LIS bamboo arm — kinematic preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; color: #e8e8e8; }
+  body {
+    display: flex;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  #view { flex: 1; position: relative; min-width: 0; cursor: grab; }
+  #view.drag { cursor: grabbing; }
+  #view canvas { display: block; }
+  #panel {
+    width: 312px;
+    flex: none;
+    background: #111;
+    border-left: 1px solid #2a2a2a;
+    overflow: auto;
+    padding: 18px 16px 28px;
+  }
+  h1 {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #aaa;
+    font-weight: 700;
+  }
+  .sub { color: #777; font-size: 12px; line-height: 1.45; margin: 8px 0 14px; }
+  .phase {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .row { margin: 8px 0 4px; }
+  .row label {
+    display: flex;
+    justify-content: space-between;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    color: #bbb;
+    margin-bottom: 3px;
+  }
+  .row label span { color: #fff; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    background: #333;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 6px;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+  }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  button {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    background: transparent;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 16px;
+    cursor: pointer;
+  }
+  button:hover { color: #fff; border-color: #888; }
+  button.active { background: #c4552a; border-color: #c4552a; color: #fff; }
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px; color: #aaa;
+  }
+  .note { margin-top: 16px; color: #666; font-size: 11px; line-height: 1.45; }
+</style>
 </head>
 <body>
-  <div id="container">
-    <div id="viewer"></div>
-    
-    <div id="header">
-      <h1>Example 12</h1>
-      <p>ICD/LIS Bamboo Mobile Robot<br>Pick and Place Construction</p>
-    </div>
-    
-    <div id="info">
-      <div class="label">Task</div>
-      <div class="value">Strut Placement</div>
-    </div>
-    
-    <div id="shoulder-display">
-      <div id="shoulder-value">0.0°</div>
-      <div id="shoulder-label">Shoulder θ3</div>
-    </div>
-    
-    <div id="task-status">
-      <div class="status-label">Phase</div>
-      <div class="status-value" id="phase-text">Approach Pickup</div>
-    </div>
-    
-    <div id="controls">
-      <div class="control-row">
-        <span class="control-label">Motion</span>
-        <div id="scrubber-container">
-          <input type="range" id="scrubber" min="0" max="100" value="0" step="0.5">
-        </div>
-        <div class="button-group">
-          <button id="animate-btn">Animate</button>
-          <button id="reset-btn">Reset</button>
-        </div>
-      </div>
-    </div>
+<div id="view"></div>
+<aside id="panel">
+  <h1>ICD / LIS bamboo arm</h1>
+  <p class="sub">5-DoF kinematic preview. Parallel-jaw grippers. Left jaw stays closed on the support pole during the task.</p>
+  <div class="phase" id="phase">Home</div>
+  <div class="row"><label>Motion <span id="tn">0%</span></label>
+    <input id="scrub" type="range" min="0" max="1000" step="1" value="0"></div>
+  <div class="btns">
+    <button id="play" type="button">Play</button>
+    <button id="reset" type="button">Reset</button>
   </div>
+  <div id="joints"></div>
+  <label class="check"><input id="axes" type="checkbox" checked> Joint axes</label>
+  <p class="note">Drag the view to orbit. Moving a joint or gripper slider pauses playback and drives the arm directly. Lengths: pole→θ1 30, then 80, 88, 88, 88, θ5→jaw 46 mm. Bend axes local X, wrists local Y, jaws local X. Strut along the right jaw’s local Z.</p>
+</aside>
+<script src="three.r128.min.js"></script>
+<script>
+(function () {
+  var DEG = Math.PI / 180;
+  var SEG = [0.030, 0.080, 0.088, 0.088, 0.088, 0.046];
+  var POLE_Y = 0.40;
+  var LIM = [[-170, 170], [-90, 90], [-135, 135], [-90, 90], [-170, 170]];
+  var NAMES = ["θ1", "θ2", "θ3", "θ4", "θ5"];
+  // Reachable task, degrees. Verified by solve_fk.js (same frame convention as this hierarchy).
+  var WP = [
+    { t: 0.000, label: "Home",     q: [-90, -72, -104, -24, 0],         gR: 40, hold: 0 },
+    { t: 0.120, label: "Approach", q: [-90, -39.5, 15.38, 24.12, 0],    gR: 40, hold: 0 },
+    { t: 0.180, label: "Close",    q: [-90, -39.5, 15.38, 24.12, 0],    gR: 14, hold: 1 },
+    { t: 0.320, label: "Lift",     q: [-90, -90, 20.71, 69.29, 0],      gR: 14, hold: 1 },
+    { t: 0.400, label: "Pitch",    q: [-90, -52, -58, 90, 0],           gR: 14, hold: 1 },
+    { t: 0.480, label: "Pitch",    q: [-90, -27.5, -102.5, 90, 0],      gR: 14, hold: 1 },
+    { t: 0.560, label: "Pitch",    q: [-90, -15.29, -129.5, 84.79, 0],  gR: 14, hold: 1 },
+    { t: 0.630, label: "Pitch",    q: [-90, 5.74, -131.03, 45.29, 0],   gR: 14, hold: 1 },
+    { t: 0.700, label: "Pitch",    q: [-90, 5.21, -127.97, 32.76, 0],   gR: 14, hold: 1 },
+    { t: 0.820, label: "Lower",    q: [-90, 3.45, -57.58, -35.87, 0],   gR: 14, hold: 1 },
+    { t: 0.880, label: "Open",     q: [-90, 3.45, -57.58, -35.87, 0],   gR: 40, hold: 2 },
+    { t: 0.905, label: "Withdraw", q: [-90, 13.60, -94.13, -9.47, 0],   gR: 40, hold: 2 },
+    { t: 0.930, label: "Withdraw", q: [-90, 11.78, -119.05, 17.27, 0],  gR: 40, hold: 2 },
+    { t: 0.955, label: "Withdraw", q: [-90, -6.25, -133.82, 50.08, 0],  gR: 40, hold: 2 },
+    { t: 0.975, label: "Withdraw", q: [-90, -39.92, -133.82, 83.75, 0], gR: 40, hold: 2 },
+    { t: 1.000, label: "Retract",  q: [-90, -72, -104, -24, 0],         gR: 40, hold: 2 }
+  ];
+  var PICK = { x: 0, y: 0.00778, z: 0.09194 };
+  var PLACE = { x: 0, y: 0.1506, z: 0.2000 };
+  var DURATION = 14;
 
-  <script src="three.r128.min.js"></script>
-  <script>
-    // Pick-and-place construction motion waypoints
-    // Left claw (base) is fixed on support at origin
-    // Right claw picks up strut, lifts, and places vertically
-    
-    const WAYPOINTS = [
-      // 0: Home position, both grippers open
-      { joints: [0.0, -0.3, 0.0, 0.3, 0.0], leftGrip: 0, rightGrip: 0, phase: 'Home' },
-      
-      // 1: Extend toward pickup location (strut on ground), gripper open
-      { joints: [0.0, 0.8, -0.5, 0.6, 0.3], leftGrip: 0, rightGrip: 0, phase: 'Approach Pickup' },
-      
-      // 2: At pickup position, close gripper to grip strut
-      { joints: [0.0, 0.8, -0.5, 0.6, 0.3], leftGrip: 0, rightGrip: 1, phase: 'Grip Strut' },
-      
-      // 3: Lift strut up
-      { joints: [0.0, 0.3, -0.2, 0.4, 0.3], leftGrip: 0, rightGrip: 1, phase: 'Lift' },
-      
-      // 4: Rotate and move to placement location
-      { joints: [0.0, -0.4, 0.8, -0.6, -0.5], leftGrip: 0, rightGrip: 1, phase: 'Move to Place' },
-      
-      // 5: At placement position (strut vertical)
-      { joints: [0.0, -0.5, 1.0, -0.8, -0.5], leftGrip: 0, rightGrip: 1, phase: 'At Place' },
-      
-      // 6: Release strut (open gripper)
-      { joints: [0.0, -0.5, 1.0, -0.8, -0.5], leftGrip: 0, rightGrip: 0, phase: 'Release' },
-      
-      // 7: Retract away from placed strut
-      { joints: [0.0, -0.3, 0.5, 0.3, 0.0], leftGrip: 0, rightGrip: 0, phase: 'Retract' }
-    ];
-    
-    const JOINT_NAMES = ['θ1: Wrist1', 'θ2: Elbow1', 'θ3: Shoulder', 'θ4: Elbow2', 'θ5: Wrist2'];
-    const START_JOINTS = WAYPOINTS[0].joints;
-    const GOAL_JOINTS = WAYPOINTS[WAYPOINTS.length - 1].joints;
-    
-    // Three.js setup
-    const container = document.getElementById('viewer');
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
-    
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
-    camera.position.set(0.8, 0.6, 0.5);
-    camera.lookAt(0, 0, 0.2);
-    
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
-    
-    // Lighting - subtle, no color
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
-    directionalLight.position.set(1, 1, 1);
-    scene.add(directionalLight);
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    backLight.position.set(-1, 0.5, -1);
-    scene.add(backLight);
-    
-    // Materials
-    const materials = {
-      claw: new THREE.MeshPhongMaterial({ color: 0xCCCCCC, shininess: 20, specular: 0x333333 }),
-      wrist: new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 20, specular: 0x222222 }),
-      link: new THREE.MeshPhongMaterial({ color: 0x666666, shininess: 15, specular: 0x111111 }),
-      elbow: new THREE.MeshPhongMaterial({ color: 0xAAAAAA, shininess: 20, specular: 0x222222 }),
-      shoulder: new THREE.MeshPhongMaterial({ color: 0xFFFFFF, shininess: 25, specular: 0x444444 }),
-      finger: new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 15 }),
-      strut: new THREE.MeshPhongMaterial({ color: 0xD4A574, shininess: 10, specular: 0x222222 }),
-      support: new THREE.MeshPhongMaterial({ color: 0x4A4A4A, shininess: 5 })
+  function metal(hex, rough, metalness) {
+    return new THREE.MeshStandardMaterial({
+      color: hex, roughness: rough, metalness: metalness
+    });
+  }
+  var mats = {
+    tube: metal(0x8b939a, 0.62, 0.28),
+    elbow: metal(0x646c74, 0.55, 0.38),
+    shoulder: metal(0x8e969e, 0.5, 0.42),
+    wrist: metal(0x525a62, 0.58, 0.32),
+    carriage: metal(0x4a525a, 0.6, 0.3),
+    jaw: metal(0x3c444c, 0.5, 0.4),
+    rail: metal(0xb7c0c8, 0.35, 0.55),
+    pole: new THREE.MeshStandardMaterial({ color: 0xc4a15a, roughness: 0.86, metalness: 0.02 }),
+    strut: new THREE.MeshStandardMaterial({ color: 0xd2b06a, roughness: 0.84, metalness: 0.02 }),
+    node: new THREE.MeshStandardMaterial({ color: 0x9a7840, roughness: 0.9, metalness: 0.02 })
+  };
+
+  var view = document.getElementById("view");
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 1);
+  view.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(34, 1, 0.01, 30);
+  var look = new THREE.Vector3(0, 0.20, 0.09);
+  var theta = 0.62, phi = 1.12, dist = 1.12;
+
+  function updateCamera() {
+    camera.position.set(
+      look.x + dist * Math.sin(phi) * Math.sin(theta),
+      look.y + dist * Math.cos(phi),
+      look.z + dist * Math.sin(phi) * Math.cos(theta)
+    );
+    camera.lookAt(look);
+  }
+  updateCamera();
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+  var key = new THREE.DirectionalLight(0xffffff, 1.05);
+  key.position.set(0.6, 1.2, 0.7);
+  scene.add(key);
+  var fill = new THREE.DirectionalLight(0xc8d0e0, 0.38);
+  fill.position.set(-0.7, 0.4, -0.4);
+  scene.add(fill);
+
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x070707, roughness: 1, metalness: 0 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  var grid = new THREE.GridHelper(1.4, 14, 0x3a3a3a, 0x242424);
+  grid.position.y = 0.0006;
+  scene.add(grid);
+  var ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.020, 0.025, 64),
+    new THREE.MeshBasicMaterial({ color: 0xd7c392, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(PLACE.x, 0.0016, PLACE.z);
+  scene.add(ring);
+
+  var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.66, 24), mats.pole);
+  pole.rotation.z = Math.PI / 2;
+  pole.position.set(0, POLE_Y, 0);
+  scene.add(pole);
+  [-0.22, 0.16, 0.26].forEach(function (x) {
+    var n = new THREE.Mesh(new THREE.TorusGeometry(0.0126, 0.0013, 6, 18), mats.node);
+    n.rotation.y = Math.PI / 2;
+    n.position.set(x, POLE_Y, 0);
+    scene.add(n);
+  });
+
+  function makeLabel(text, css) {
+    var c = document.createElement("canvas");
+    c.width = 256; c.height = 128;
+    var g = c.getContext("2d");
+    g.clearRect(0, 0, 256, 128);
+    g.font = "600 64px sans-serif";
+    g.fillStyle = css;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, 128, 68);
+    var tex = new THREE.CanvasTexture(c);
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false
+    }));
+    spr.scale.set(0.072, 0.036, 1);
+    spr.renderOrder = 2;
+    return spr;
+  }
+  function axisX(color, css, text) {
+    var g = new THREE.Group();
+    var mat = new THREE.MeshBasicMaterial({ color: color });
+    var shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.062, 10), mat);
+    shaft.rotation.z = -Math.PI / 2;
+    g.add(shaft);
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.014, 10), mat);
+    cone.rotation.z = -Math.PI / 2;
+    cone.position.x = 0.036;
+    g.add(cone);
+    var lab = makeLabel(text, css);
+    lab.position.set(0.018, 0.026, 0);
+    g.add(lab);
+    return g;
+  }
+  function axisY(color, css, text) {
+    var g = new THREE.Group();
+    var mat = new THREE.MeshBasicMaterial({ color: color });
+    var shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.062, 10), mat);
+    g.add(shaft);
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.014, 10), mat);
+    cone.position.y = 0.036;
+    g.add(cone);
+    var lab = makeLabel(text, css);
+    lab.position.set(0.032, 0.016, 0);
+    g.add(lab);
+    return g;
+  }
+
+  var axisGroups = [];
+  function track(obj) { axisGroups.push(obj); return obj; }
+
+  function addTube(parent, span) {
+    var L = Math.max(0.008, span - 0.016);
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(0.012, L, 0.016), mats.tube);
+    mesh.position.y = -span / 2;
+    parent.add(mesh);
+  }
+  function housing(parent, size, mat) {
+    parent.add(new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat));
+  }
+
+  // Left gripper frame: local Z along the pole (world +X), jaw travel along local X.
+  var mount = new THREE.Group();
+  mount.position.set(0, POLE_Y, 0);
+  mount.rotation.y = Math.PI / 2;
+  scene.add(mount);
+  var lbody = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.016, 0.026), mats.carriage);
+  lbody.position.y = 0.020;
+  mount.add(lbody);
+  var lrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
+  lrail.position.y = 0.014;
+  mount.add(lrail);
+  function jawPlate(w, h, d, mat) {
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  }
+  var lNeg = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
+  var lPos = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
+  mount.add(lNeg); mount.add(lPos);
+  mount.add(track(axisX(0x3ddc6a, "#3ddc6a", "L-grip")));
+
+  addTube(mount, SEG[0]);
+  var j1 = new THREE.Group();
+  j1.position.y = -SEG[0];
+  mount.add(j1);
+  housing(j1, [0.046, 0.029, 0.034], mats.wrist);
+  j1.add(track(axisY(0x33e0e0, "#33e0e0", "θ1")));
+
+  addTube(j1, SEG[1]);
+  var j2 = new THREE.Group();
+  j2.position.y = -SEG[1];
+  j1.add(j2);
+  housing(j2, [0.041, 0.061, 0.040], mats.elbow);
+  j2.add(track(axisX(0xff8800, "#ff8800", "θ2")));
+
+  addTube(j2, SEG[2]);
+  var j3 = new THREE.Group();
+  j3.position.y = -SEG[2];
+  j2.add(j3);
+  housing(j3, [0.041, 0.061, 0.040], mats.shoulder);
+  j3.add(track(axisX(0xffffff, "#ffffff", "θ3")));
+
+  addTube(j3, SEG[3]);
+  var j4 = new THREE.Group();
+  j4.position.y = -SEG[3];
+  j3.add(j4);
+  housing(j4, [0.041, 0.061, 0.040], mats.elbow);
+  j4.add(track(axisX(0xff8800, "#ff8800", "θ4")));
+
+  addTube(j4, SEG[4]);
+  var j5 = new THREE.Group();
+  j5.position.y = -SEG[4];
+  j4.add(j5);
+  housing(j5, [0.046, 0.029, 0.034], mats.wrist);
+  j5.add(track(axisY(0x33e0e0, "#33e0e0", "θ5")));
+
+  var neck = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.016), mats.tube);
+  neck.position.y = -0.024;
+  j5.add(neck);
+
+  var jaw = new THREE.Group();
+  jaw.position.y = -SEG[5];
+  j5.add(jaw);
+  var carriage = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.022), mats.carriage);
+  carriage.position.y = 0.022;
+  jaw.add(carriage);
+  var rrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
+  rrail.position.set(0, 0.012, 0);
+  jaw.add(rrail);
+  var rNeg = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
+  var rPos = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
+  rNeg.position.y = 0.005;
+  rPos.position.y = 0.005;
+  jaw.add(rNeg); jaw.add(rPos);
+  jaw.add(track(axisX(0x3ddc6a, "#3ddc6a", "R-grip")));
+
+  var strutGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.30, 20);
+  strutGeo.rotateX(Math.PI / 2);
+  var strut = new THREE.Mesh(strutGeo, mats.strut);
+  [-0.09, 0, 0.09].forEach(function (z) {
+    var n = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0012, 6, 16), mats.node);
+    n.position.z = z;
+    strut.add(n);
+  });
+  scene.add(strut);
+
+  function setOpening(neg, pos, mm, yLift) {
+    var half = (mm / 1000) / 2;
+    var shift = half + 0.002;
+    neg.position.x = -shift;
+    pos.position.x = shift;
+    if (yLift) {
+      neg.position.y = yLift;
+      pos.position.y = yLift;
+    }
+  }
+
+  function applyJoints(deg) {
+    j1.rotation.y = deg[0] * DEG;
+    j2.rotation.x = deg[1] * DEG;
+    j3.rotation.x = deg[2] * DEG;
+    j4.rotation.x = deg[3] * DEG;
+    j5.rotation.y = deg[4] * DEG;
+  }
+
+  function setStrut(hold) {
+    if (hold === 1) {
+      if (strut.parent !== jaw) jaw.attach(strut);
+      strut.position.set(0, 0, 0);
+      strut.rotation.set(0, 0, 0);
+    } else if (hold === 2) {
+      if (strut.parent !== scene) scene.attach(strut);
+      strut.position.set(PLACE.x, PLACE.y, PLACE.z);
+      strut.rotation.set(-Math.PI / 2, 0, 0);
+    } else {
+      if (strut.parent !== scene) scene.attach(strut);
+      strut.position.set(PICK.x, PICK.y, PICK.z);
+      strut.rotation.set(0, 0, 0);
+    }
+  }
+
+  function smooth(u) { return u * u * (3 - 2 * u); }
+  function sample(t) {
+    if (t <= 0) return { q: WP[0].q.slice(), gR: WP[0].gR, hold: WP[0].hold, label: WP[0].label };
+    if (t >= 1) {
+      var last = WP[WP.length - 1];
+      return { q: last.q.slice(), gR: last.gR, hold: last.hold, label: last.label };
+    }
+    var i = 0;
+    while (i < WP.length - 2 && WP[i + 1].t < t) i++;
+    var a = WP[i], b = WP[i + 1];
+    var u = (t - a.t) / (b.t - a.t);
+    var e = smooth(Math.max(0, Math.min(1, u)));
+    var q = a.q.map(function (v, k) { return v + (b.q[k] - v) * e; });
+    return {
+      q: q,
+      gR: a.gR + (b.gR - a.gR) * e,
+      hold: u >= 1 ? b.hold : a.hold,
+      label: e < 0.5 ? a.label : b.label
     };
-    
-    // Create claw with fingers
-    function createClaw() {
-      const group = new THREE.Group();
-      
-      // Main claw body (cylinder)
-      const bodyGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 16);
-      bodyGeom.rotateX(Math.PI / 2);
-      const body = new THREE.Mesh(bodyGeom, materials.claw);
-      body.position.z = 0.04;
-      group.add(body);
-      
-      // Store finger groups for animation
-      group.fingers = [];
-      
-      // Three finger pairs (arranged radially)
-      for (let i = 0; i < 3; i++) {
-        const angle = (i * Math.PI * 2) / 3;
-        const fingerGroup = new THREE.Group();
-        
-        // Finger base
-        const baseGeom = new THREE.BoxGeometry(0.008, 0.008, 0.03);
-        const base = new THREE.Mesh(baseGeom, materials.finger);
-        base.position.set(
-          Math.cos(angle) * 0.035,
-          Math.sin(angle) * 0.035,
-          0.095
-        );
-        fingerGroup.add(base);
-        
-        // Finger tip
-        const tipGeom = new THREE.BoxGeometry(0.006, 0.006, 0.025);
-        const tip = new THREE.Mesh(tipGeom, materials.finger);
-        tip.position.set(
-          Math.cos(angle) * 0.038,
-          Math.sin(angle) * 0.038,
-          0.1225
-        );
-        fingerGroup.add(tip);
-        
-        group.add(fingerGroup);
-        group.fingers.push({ group: fingerGroup, angle });
-      }
-      
-      return group;
+  }
+
+  var jointHost = document.getElementById("joints");
+  var sliders = [];
+  var readouts = [];
+  var suppress = false;
+  for (var i = 0; i < 5; i++) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var lab = document.createElement("label");
+    lab.appendChild(document.createTextNode(NAMES[i]));
+    var num = document.createElement("span");
+    lab.appendChild(num);
+    var inp = document.createElement("input");
+    inp.type = "range";
+    inp.min = String(LIM[i][0]);
+    inp.max = String(LIM[i][1]);
+    inp.step = "0.1";
+    row.appendChild(lab);
+    row.appendChild(inp);
+    jointHost.appendChild(row);
+    sliders.push(inp);
+    readouts.push(num);
+    inp.addEventListener("input", onManual);
+  }
+  function gripRow(title) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var lab = document.createElement("label");
+    lab.appendChild(document.createTextNode(title));
+    var num = document.createElement("span");
+    lab.appendChild(num);
+    var inp = document.createElement("input");
+    inp.type = "range"; inp.min = "8"; inp.max = "45"; inp.step = "0.1";
+    row.appendChild(lab); row.appendChild(inp);
+    jointHost.appendChild(row);
+    inp.addEventListener("input", onManual);
+    return { inp: inp, num: num };
+  }
+  var gL = gripRow("L-grip");
+  var gR = gripRow("R-grip");
+
+  var phaseEl = document.getElementById("phase");
+  var scrub = document.getElementById("scrub");
+  var tn = document.getElementById("tn");
+  var playBtn = document.getElementById("play");
+  var playing = false, manual = false, taskT = 0;
+  var curDeg = [0, 0, 0, 0, 0];
+  var curGL = 24, curGR = 40;
+
+  function pushSliders() {
+    suppress = true;
+    for (var k = 0; k < 5; k++) {
+      sliders[k].value = String(curDeg[k]);
+      readouts[k].textContent = curDeg[k].toFixed(1) + "°";
     }
-    
-    // Animate claw fingers (0 = open, 1 = closed)
-    function setClawGrip(claw, grip) {
-      if (!claw.fingers) return;
-      
-      const openRadius = 0.035;
-      const closedRadius = 0.015;
-      const radius = openRadius - (openRadius - closedRadius) * grip;
-      
-      claw.fingers.forEach(({ group, angle }, idx) => {
-        const children = group.children;
-        // Base finger
-        children[0].position.x = Math.cos(angle) * radius;
-        children[0].position.y = Math.sin(angle) * radius;
-        // Tip finger
-        children[1].position.x = Math.cos(angle) * (radius + 0.003);
-        children[1].position.y = Math.sin(angle) * (radius + 0.003);
-      });
+    gL.inp.value = String(curGL);
+    gL.num.textContent = curGL.toFixed(1) + " mm";
+    gR.inp.value = String(curGR);
+    gR.num.textContent = curGR.toFixed(1) + " mm";
+    suppress = false;
+  }
+  function drawModel() {
+    applyJoints(curDeg);
+    setOpening(lNeg, lPos, curGL, 0);
+    setOpening(rNeg, rPos, curGR, 0.005);
+  }
+  function applyTask(t) {
+    taskT = t;
+    var s = sample(t);
+    curDeg = s.q;
+    curGL = 24;
+    curGR = s.gR;
+    drawModel();
+    setStrut(s.hold);
+    phaseEl.textContent = s.label;
+    tn.textContent = Math.round(t * 100) + "%";
+    pushSliders();
+  }
+  function onManual() {
+    if (suppress) return;
+    playing = false;
+    manual = true;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    for (var k = 0; k < 5; k++) {
+      curDeg[k] = parseFloat(sliders[k].value);
+      readouts[k].textContent = curDeg[k].toFixed(1) + "°";
     }
-    
-    // Build robot
-    const robotParts = {};
-    
-    // Left claw (base, fixed to support)
-    const leftClaw = createClaw();
-    scene.add(leftClaw);
-    robotParts.base_claw = leftClaw;
-    
-    // Wrist1
-    const wrist1Geom = new THREE.BoxGeometry(0.05, 0.05, 0.06);
-    const wrist1 = new THREE.Mesh(wrist1Geom, materials.wrist);
-    wrist1.position.z = 0.03;
-    const wrist1Group = new THREE.Group();
-    wrist1Group.add(wrist1);
-    wrist1Group.position.set(0, 0, 0.04);
-    leftClaw.add(wrist1Group);
-    robotParts.wrist1 = wrist1Group;
-    
-    // Link1
-    const link1Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.10, 12);
-    link1Geom.rotateX(Math.PI / 2);
-    const link1 = new THREE.Mesh(link1Geom, materials.link);
-    link1.position.z = 0.05;
-    const link1Group = new THREE.Group();
-    link1Group.add(link1);
-    link1Group.position.set(0, 0, 0.06);
-    wrist1Group.add(link1Group);
-    robotParts.link1 = link1Group;
-    
-    // Elbow1
-    const elbow1Geom = new THREE.BoxGeometry(0.06, 0.06, 0.04);
-    const elbow1 = new THREE.Mesh(elbow1Geom, materials.elbow);
-    const elbow1Group = new THREE.Group();
-    elbow1Group.add(elbow1);
-    elbow1Group.position.set(0, 0, 0.10);
-    link1Group.add(elbow1Group);
-    robotParts.elbow1 = elbow1Group;
-    
-    // Link2
-    const link2Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.09, 12);
-    link2Geom.rotateX(Math.PI / 2);
-    const link2 = new THREE.Mesh(link2Geom, materials.link);
-    link2.position.z = 0.045;
-    const link2Group = new THREE.Group();
-    link2Group.add(link2);
-    link2Group.position.set(0, 0, 0.02);
-    elbow1Group.add(link2Group);
-    robotParts.link2 = link2Group;
-    
-    // Shoulder
-    const shoulderGeom = new THREE.BoxGeometry(0.07, 0.07, 0.04);
-    const shoulder = new THREE.Mesh(shoulderGeom, materials.shoulder);
-    const shoulderGroup = new THREE.Group();
-    shoulderGroup.add(shoulder);
-    shoulderGroup.position.set(0, 0, 0.09);
-    link2Group.add(shoulderGroup);
-    robotParts.shoulder = shoulderGroup;
-    
-    // Link3
-    const link3Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.09, 12);
-    link3Geom.rotateX(Math.PI / 2);
-    const link3 = new THREE.Mesh(link3Geom, materials.link);
-    link3.position.z = 0.045;
-    const link3Group = new THREE.Group();
-    link3Group.add(link3);
-    link3Group.position.set(0, 0, 0.02);
-    shoulderGroup.add(link3Group);
-    robotParts.link3 = link3Group;
-    
-    // Elbow2
-    const elbow2Geom = new THREE.BoxGeometry(0.06, 0.06, 0.04);
-    const elbow2 = new THREE.Mesh(elbow2Geom, materials.elbow);
-    const elbow2Group = new THREE.Group();
-    elbow2Group.add(elbow2);
-    elbow2Group.position.set(0, 0, 0.09);
-    link3Group.add(elbow2Group);
-    robotParts.elbow2 = elbow2Group;
-    
-    // Link4
-    const link4Geom = new THREE.CylinderGeometry(0.015, 0.015, 0.10, 12);
-    link4Geom.rotateX(Math.PI / 2);
-    const link4 = new THREE.Mesh(link4Geom, materials.link);
-    link4.position.z = 0.05;
-    const link4Group = new THREE.Group();
-    link4Group.add(link4);
-    link4Group.position.set(0, 0, 0.02);
-    elbow2Group.add(link4Group);
-    robotParts.link4 = link4Group;
-    
-    // Wrist2
-    const wrist2Geom = new THREE.BoxGeometry(0.05, 0.05, 0.06);
-    const wrist2 = new THREE.Mesh(wrist2Geom, materials.wrist);
-    wrist2.position.z = 0.03;
-    const wrist2Group = new THREE.Group();
-    wrist2Group.add(wrist2);
-    wrist2Group.position.set(0, 0, 0.10);
-    link4Group.add(wrist2Group);
-    robotParts.wrist2 = wrist2Group;
-    
-    // Right claw
-    const rightClaw = createClaw();
-    rightClaw.position.set(0, 0, 0.06);
-    wrist2Group.add(rightClaw);
-    robotParts.right_claw = rightClaw;
-    
-    // Bamboo strut (30cm long, ~1.4cm diameter)
-    const strutGeom = new THREE.CylinderGeometry(0.007, 0.007, 0.30, 16);
-    const strut = new THREE.Mesh(strutGeom, materials.strut);
-    strut.castShadow = true;
-    scene.add(strut);
-    
-    // Support structure (fixed bamboo bundle that left claw grips)
-    const supportGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16);
-    const support = new THREE.Mesh(supportGeom, materials.support);
-    support.position.set(0, 0, -0.25);
-    scene.add(support);
-    
-    // Ground reference
-    const groundGeom = new THREE.PlaneGeometry(2, 2);
-    const groundMat = new THREE.MeshBasicMaterial({ color: 0x0A0A0A, side: THREE.DoubleSide });
-    const ground = new THREE.Mesh(groundGeom, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.5;
-    scene.add(ground);
-    
-    // State for strut attachment and placement
-    let strutAttachedToRightClaw = false;
-    let strutPlaced = false;
-    const strutPlacedPosition = new THREE.Vector3();
-    const strutPlacedRotation = new THREE.Euler();
-    
-    // Joint control
-    function setJointAngles(angles) {
-      robotParts.wrist1.rotation.z = angles[0];
-      robotParts.elbow1.rotation.x = angles[1];
-      robotParts.shoulder.rotation.x = angles[2];
-      robotParts.elbow2.rotation.x = angles[3];
-      robotParts.wrist2.rotation.z = angles[4];
+    curGL = parseFloat(gL.inp.value);
+    curGR = parseFloat(gR.inp.value);
+    gL.num.textContent = curGL.toFixed(1) + " mm";
+    gR.num.textContent = curGR.toFixed(1) + " mm";
+    drawModel();
+    phaseEl.textContent = "Manual";
+  }
+
+  scrub.addEventListener("input", function () {
+    playing = false;
+    manual = false;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    applyTask(parseFloat(scrub.value) / 1000);
+  });
+  playBtn.addEventListener("click", function () {
+    if (playing) {
+      playing = false;
+      playBtn.textContent = "Play";
+      playBtn.classList.remove("active");
+      return;
     }
-    
-    // Interpolate between waypoints
-    function getStateAtTime(t) {
-      const totalWaypoints = WAYPOINTS.length;
-      const segment = t * (totalWaypoints - 1);
-      const idx = Math.floor(segment);
-      const localT = segment - idx;
-      
-      if (idx >= totalWaypoints - 1) {
-        return WAYPOINTS[totalWaypoints - 1];
+    manual = false;
+    if (taskT >= 1) taskT = 0;
+    playing = true;
+    playBtn.textContent = "Pause";
+    playBtn.classList.add("active");
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    playing = false;
+    manual = false;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    scrub.value = "0";
+    applyTask(0);
+  });
+  document.getElementById("axes").addEventListener("change", function (e) {
+    var on = e.target.checked;
+    axisGroups.forEach(function (g) { g.visible = on; });
+  });
+
+  var dragging = false, lx = 0, ly = 0;
+  view.addEventListener("mousedown", function (e) {
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    view.classList.add("drag");
+  });
+  window.addEventListener("mouseup", function () {
+    dragging = false; view.classList.remove("drag");
+  });
+  window.addEventListener("mousemove", function (e) {
+    if (!dragging) return;
+    var dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX; ly = e.clientY;
+    theta -= dx * 0.005;
+    phi = Math.max(0.25, Math.min(1.45, phi - dy * 0.005));
+    updateCamera();
+  });
+  view.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    dist = Math.max(0.35, Math.min(2.4, dist * (1 + Math.sign(e.deltaY) * 0.06)));
+    updateCamera();
+  }, { passive: false });
+
+  function resize() {
+    var w = view.clientWidth, h = view.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  var hashT = 0;
+  if (location.hash.indexOf("t=") === 1) hashT = parseFloat(location.hash.slice(3)) || 0;
+  scrub.value = String(Math.round(hashT * 1000));
+  applyTask(hashT);
+  var last = performance.now();
+  function loop(now) {
+    requestAnimationFrame(loop);
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (playing && !manual) {
+      taskT += dt / DURATION;
+      if (taskT >= 1) {
+        taskT = 1;
+        playing = false;
+        playBtn.textContent = "Play";
+        playBtn.classList.remove("active");
       }
-      
-      const w0 = WAYPOINTS[idx];
-      const w1 = WAYPOINTS[idx + 1];
-      
-      // Ease-out cubic for smooth motion
-      const eased = 1 - Math.pow(1 - localT, 3);
-      
-      const joints = w0.joints.map((j0, i) => j0 + (w1.joints[i] - j0) * eased);
-      const leftGrip = w0.leftGrip + (w1.leftGrip - w0.leftGrip) * eased;
-      const rightGrip = w0.rightGrip + (w1.rightGrip - w0.rightGrip) * eased;
-      const phase = localT < 0.5 ? w0.phase : w1.phase;
-      
-      return { joints, leftGrip, rightGrip, phase };
+      scrub.value = String(Math.round(taskT * 1000));
+      applyTask(taskT);
     }
-    
-    function updateScene(t) {
-      const state = getStateAtTime(t);
-      
-      // Update joints
-      setJointAngles(state.joints);
-      
-      // Update grippers
-      setClawGrip(robotParts.base_claw, state.leftGrip);
-      setClawGrip(robotParts.right_claw, state.rightGrip);
-      
-      // Update phase display
-      document.getElementById('phase-text').textContent = state.phase;
-      
-      // Update shoulder angle display
-      const shoulderDeg = (state.joints[2] * 180 / Math.PI).toFixed(1);
-      document.getElementById('shoulder-value').textContent = shoulderDeg + '°';
-      
-      // Strut attachment logic
-      const gripThreshold = 0.5;
-      
-      // Pickup waypoint is index 1, grip happens at index 2
-      const pickupT = 2 / (WAYPOINTS.length - 1);
-      const releaseT = 6 / (WAYPOINTS.length - 1);
-      
-      if (t >= pickupT && t < releaseT && state.rightGrip > gripThreshold) {
-        if (!strutAttachedToRightClaw) {
-          strutAttachedToRightClaw = true;
-          strutPlaced = false;
-        }
-      }
-      
-      if (t >= releaseT && state.rightGrip < gripThreshold) {
-        if (strutAttachedToRightClaw) {
-          strutAttachedToRightClaw = false;
-          strutPlaced = true;
-          // Capture placed position
-          rightClaw.getWorldPosition(strutPlacedPosition);
-          strutPlacedRotation.copy(rightClaw.rotation);
-        }
-      }
-      
-      // Position strut
-      if (strutPlaced) {
-        // Strut stays at placed location (vertical)
-        strut.position.copy(strutPlacedPosition);
-        strut.position.z += 0.15; // Half strut length
-        strut.rotation.set(0, 0, 0);
-      } else if (strutAttachedToRightClaw) {
-        // Strut attached to right claw
-        const clawWorldPos = new THREE.Vector3();
-        rightClaw.getWorldPosition(clawWorldPos);
-        strut.position.copy(clawWorldPos);
-        strut.position.z += 0.15; // Offset for strut length
-        
-        // Match claw orientation
-        const clawWorldQuat = new THREE.Quaternion();
-        rightClaw.getWorldQuaternion(clawWorldQuat);
-        strut.quaternion.copy(clawWorldQuat);
-      } else {
-        // Strut at pickup location (horizontal on ground)
-        strut.position.set(0.15, -0.35, 0.007);
-        strut.rotation.set(0, 0, Math.PI / 2);
-      }
-    }
-    
-    // Controls
-    const scrubber = document.getElementById('scrubber');
-    const animateBtn = document.getElementById('animate-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    
-    let animating = false;
-    let animationId = null;
-    
-    scrubber.addEventListener('input', (e) => {
-      const t = parseFloat(e.target.value) / 100;
-      updateScene(t);
-      renderer.render(scene, camera);
-    });
-    
-    animateBtn.addEventListener('click', () => {
-      if (animating) {
-        animating = false;
-        animateBtn.textContent = 'Animate';
-        animateBtn.classList.remove('active');
-        cancelAnimationFrame(animationId);
-      } else {
-        animating = true;
-        animateBtn.textContent = 'Stop';
-        animateBtn.classList.add('active');
-        
-        const duration = 8000; // 8 seconds for full pick-place
-        const startTime = Date.now();
-        
-        function animate() {
-          if (!animating) return;
-          
-          const elapsed = Date.now() - startTime;
-          let t = (elapsed % duration) / duration;
-          
-          scrubber.value = t * 100;
-          updateScene(t);
-          renderer.render(scene, camera);
-          
-          animationId = requestAnimationFrame(animate);
-        }
-        animate();
-      }
-    });
-    
-    resetBtn.addEventListener('click', () => {
-      animating = false;
-      animateBtn.textContent = 'Animate';
-      animateBtn.classList.remove('active');
-      cancelAnimationFrame(animationId);
-      
-      scrubber.value = 0;
-      strutAttachedToRightClaw = false;
-      strutPlaced = false;
-      updateScene(0);
-      renderer.render(scene, camera);
-    });
-    
-    // Window resize
-    window.addEventListener('resize', () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-      renderer.render(scene, camera);
-    });
-    
-    // Mouse controls (simple orbit)
-    let mouseDown = false;
-    let mouseX = 0, mouseY = 0;
-    let cameraTheta = Math.atan2(0.5, 0.8);
-    let cameraPhi = Math.atan2(Math.sqrt(0.8*0.8 + 0.5*0.5), 0.6);
-    const cameraDistance = 1.0;
-    
-    container.addEventListener('mousedown', (e) => {
-      mouseDown = true;
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-    });
-    
-    container.addEventListener('mousemove', (e) => {
-      if (!mouseDown) return;
-      
-      const dx = e.clientX - mouseX;
-      const dy = e.clientY - mouseY;
-      
-      cameraTheta -= dx * 0.005;
-      cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi - dy * 0.005));
-      
-      camera.position.x = cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta);
-      camera.position.y = cameraDistance * Math.cos(cameraPhi);
-      camera.position.z = cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta) + 0.2;
-      camera.lookAt(0, 0, 0.2);
-      
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-      
-      renderer.render(scene, camera);
-    });
-    
-    container.addEventListener('mouseup', () => {
-      mouseDown = false;
-    });
-    
-    // Initial render
-    updateScene(0);
     renderer.render(scene, camera);
-  </script>
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
 </body>
 </html>
