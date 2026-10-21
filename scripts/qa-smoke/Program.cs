@@ -1597,54 +1597,41 @@ catch (DllNotFoundException)
     Ok("Example 09 walking hex logic (arc + box terrain Z=0.02) — no .ghx solve");
 }
 
-// Example 12: ICD/LIS bamboo mobile robot URDF load
+#if MOTUS_CONSTRUCTION
+// Example 12: Warren truss assembly plan from Rhino lines (Motus.Construction via AssemblyRhino) — no .ghx solve
 {
-    Console.WriteLine("\n== Example 12 ICD/LIS bamboo mobile robot ==");
-    var bambooUrdfPath = Path.Combine(examples, "assets", "icd", "bamboo_mobile_robot.urdf");
-    if (!File.Exists(bambooUrdfPath))
-        Fail($"ICD bamboo robot URDF not found: {bambooUrdfPath}");
-    
-    var bambooLoad = UrdfRobotFileLoader.LoadUrdf(bambooUrdfPath, BaseFrame.Identity, ToolFrame.Identity);
-    if (!bambooLoad.Succeeded)
-        Fail($"ICD bamboo URDF load failed: {string.Join("; ", bambooLoad.Errors)}");
-    
-    var bambooModel = bambooLoad.RobotModel;
-    if (bambooModel is null || bambooModel.Preset.AxisCount != 5)
-        Fail($"ICD bamboo robot expected 5 DOF (wrist-elbow-shoulder-elbow-wrist), got {bambooModel?.Preset.AxisCount}");
-    
-    // Verify symmetric kinematic chain structure
-    if (bambooModel.Tree?.Joints.Length != 5)
-        Fail($"ICD bamboo tree expected 5 joints, got {bambooModel.Tree?.Joints.Length}");
-    
-    var joints = bambooModel.Tree!.Joints;
-    
-    // θ1, θ5: wrists (Z-axis, axial rotation)
-    if (joints[0].Type != JointType.Revolute || joints[4].Type != JointType.Revolute)
-        Fail("Wrist joints (θ1, θ5) should be Revolute");
-    
-    // θ2, θ3, θ4: elbows + shoulder (X-axis)
-    if (joints[1].Type != JointType.Revolute || joints[2].Type != JointType.Revolute || joints[3].Type != JointType.Revolute)
-        Fail("Elbow and shoulder joints (θ2, θ3, θ4) should be Revolute");
-    
-    // FK sanity check: home (zeros) and demonstration pose
-    var bambooFk = new SerialChainForwardKinematics(bambooModel.Tree!.SerialTipChain);
-    var bambooHome = new JointState(new[] { 0.0, 0.0, 0.0, 0.0, 0.0 });
-    var bambooDemo = new JointState(new[] { Math.PI / 4, Math.PI / 6, Math.PI / 3, Math.PI / 6, -Math.PI / 4 });
-    
-    var tcpHome = bambooFk.ComputeTcp(bambooHome, bambooModel.Preset.BaseFrame, bambooModel.Preset.ToolFrame).Tcp;
-    var tcpDemo = bambooFk.ComputeTcp(bambooDemo, bambooModel.Preset.BaseFrame, bambooModel.Preset.ToolFrame).Tcp;
-    
-    // TCP should move with joint motion (not at origin after 5-DOF motion)
-    if (tcpHome.Origin.DistanceTo(tcpDemo.Origin) < 0.05)
-        Fail("ICD bamboo robot TCP should move significantly with 5-DOF joint motion");
-    
-    // Joint-linear plan through 5 DOF
-    var bambooPlan = new JointLinearPlanner().Plan(new PlanningRequest(bambooModel, bambooHome, bambooDemo));
-    if (!bambooPlan.Success || bambooPlan.Trajectory is null || bambooPlan.Trajectory.Points.Count < 2)
-        Fail($"ICD bamboo 5-DOF joint-linear plan failed: {string.Join("; ", bambooPlan.Errors)}");
-    
-    Ok("Example 12 ICD/LIS bamboo mobile robot URDF load + 5-DOF plan");
+    Console.WriteLine("\n== Example 12 assembly planner (Warren truss) ==");
+    var urdf12 = File.ReadAllText(FindExampleUrdf(Path.Combine("examples", "assets", "icd", "bamboo_icd.urdf")));
+    double p12 = 0.30, h12 = p12 * Math.Sqrt(3) / 2, y12 = -0.11, z12 = 0.19;
+    var n12 = new[] { new Point3d(-p12, y12, z12), new Point3d(0, y12, z12), new Point3d(p12, y12, z12),
+        new Point3d(-p12 / 2, y12, z12 + h12), new Point3d(p12 / 2, y12, z12 + h12) };
+    int A = 0, M = 1, D = 2, T1 = 3, T2 = 4;
+    var l12 = new[] { (A, M), (A, T1), (T1, M), (M, T2), (T1, T2), (M, D), (T2, D) }
+        .Select(e => new Line(n12[e.Item1], n12[e.Item2])).ToList();
+    var s12 = AssemblyRhino.Structure(l12, n12, new[] { "A", "M", "D", "T1", "T2" });
+    if (string.Join(",", s12.Definition.Members.Select(m => m.Id)) != "AM,AT1,T1M,MT2,T1T2,MD,T2D")
+        Fail($"Example 12 member ids: {string.Join(",", s12.Definition.Members.Select(m => m.Id))}");
+    var site12 = new AssemblySite(new[] { n12[A], n12[D] }, [], [], null, null, null);
+    var live12 = Environment.GetEnvironmentVariable("MOTUS_QA_ASSEMBLY_LIVE") == "1";
+    var warn12 = new List<string>();
+    var req12 = AssemblyRhino.Request(s12, site12, urdf12, 0.002, useShippedPlan: !live12, warn12);
+    var sw12 = System.Diagnostics.Stopwatch.StartNew();
+    var run12 = AssemblyRhino.Run(req12);
+    sw12.Stop();
+    foreach (var w in warn12.Concat(run12.Warnings)) Console.WriteLine($"  note: {w}");
+    Console.WriteLine($"  {(live12 ? "live" : "shipped-if-match")} plan {sw12.Elapsed.TotalSeconds:F1}s: {run12.Plan.Verdict}; tasks {run12.Plan.Build.Tasks.Count}; frames {run12.Frames.Count}");
+    if (run12.BuiltCount != 7 || run12.MemberCount != 7)
+        Fail($"Example 12 expected 7/7 built, got {run12.BuiltCount}/{run12.MemberCount}");
+    if (!run12.Plan.CollisionFree)
+        Fail($"Example 12 plan not collision-free: {run12.Plan.Verdict}");
+    if (run12.Frames.Count < 2 || run12.Frames[^1].Robot.Count == 0)
+        Fail("Example 12 preview frames empty");
+    var last12 = AssemblyRhino.FrameAt(run12, 1.0)!;
+    if (last12.Canes.Count(c => c.Name != Motus.Construction.BambooIcdCell.Strut) < 7)
+        Fail($"Example 12 final frame expected 7 placed canes, got {last12.Canes.Count}");
+    Ok($"Example 12 Warren truss 7/7 collision-free ({run12.Frames.Count} preview frames)");
 }
+#endif
 
 {
     Console.WriteLine("\n== Stewart platform IK / path ==");

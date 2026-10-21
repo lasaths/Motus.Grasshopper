@@ -66,6 +66,7 @@ internal static class MotusIcon
         "Collision" => MotusPalette.Collision,   // peach → chrome
         "Preview" => MotusPalette.Preview,       // lavender → chrome
         "Export" => MotusPalette.Export,         // #AFFC41
+        "Assembly" => MotusPalette.Plan,         // Motus.Construction assembly planning
         _ => MotusPalette.Model,
     };
 

@@ -115,11 +115,10 @@ Training uses simulation with automatic domain randomization (ADR) and curriculu
 
 ## Usage in Grasshopper
 
-See `12_bamboo_mobile_robot.ghx`:
-- Load URDF via Motus Robot
-- Plan joint-space motion for pick-and-place construction task
-- Preview robot postures with Scrub
-- Static web viewer shows full gripper kinematics and strut placement sequence
+See `12_bamboo_truss_assembly.ghx` (`-UseLocal` build with the sibling Motus.NET):
+- `bamboo_icd.urdf` (copy of Motus.NET `tests/fixtures/bamboo_icd/bamboo_icd.urdf`; collision primitives, no meshes) feeds **Motus Assembly Plan** `U`
+- Warren truss lines + support points → Assembly Structure / Site → Assembly Plan (**Run**) → Assembly Preview (`t`)
+- `bamboo_mobile_robot.urdf` stays for the static web viewer
 
 For multi-robot collaborative assembly scenarios, multiple robot instances would coordinate via task/motion planning (Logic-Geometric Programming + RL policies).
 

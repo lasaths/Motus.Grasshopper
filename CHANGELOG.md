@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Assembly (experimental, `-UseLocal` only): **Motus Assembly Structure / Site / Plan / Preview** wrap Motus.NET `Motus.Construction` `AssemblyPlanner` (compiled with `MOTUS_CONSTRUCTION` when the sibling has it). Example `12_bamboo_truss_assembly.ghx` (Warren truss, `assets/icd/bamboo_icd.urdf`) replaces `12_bamboo_mobile_robot.ghx`; qa-smoke checks 7/7 collision-free.
+
+### Fixed
+
+- qa-smoke: Example 12 block no longer references undefined `examples` / missing types (PR #36 smoke compile failure).
+
 ## 2.0.0 — Public product · Yak GA — 2026-09-20
 
 Aligned with **Motus.NET 2.0.0** on [nuget.org](https://www.nuget.org/packages/Motus.Core/2.0.0). CI `build-*-nuget` uses the props pin (no last-published override). **Yak `motus` 2.0.0 is live** on Rhino Package Manager (`yak search --all motus`). Pack rebuilds: `./build.ps1 -Yak` or `./scripts/pack-yak.sh`.

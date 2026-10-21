@@ -54,6 +54,10 @@ const MOTUS_COMPONENTS = new Map([
   ['5e6f7a8b-9c0d-4e5f-ca6b-7c8d9eafb0c5', 'Motus Urdf Explode'],
   ['6f7a8b9c-0d1e-4f60-db7c-8d9eafb0c1d6', 'Motus Urdf Attach'],
   ['2f6c1d3a-9b7e-4c5a-8e2d-6a1f4b3c7d90', 'Motus Export URDF'],
+  ['8585f8a2-f9c2-46a2-8216-959233e54b3d', 'Motus Assembly Structure'],
+  ['d627c341-a801-4299-9c9e-dfe45d11a642', 'Motus Assembly Site'],
+  ['dacb82c2-aaaa-4703-a074-ce482518c24f', 'Motus Assembly Plan'],
+  ['edc2b97a-2acb-461b-95af-0530cd3c983d', 'Motus Assembly Preview'],
 ]);
 
 const MOTUS_LIB = 'dc547e55-81a8-c313-e25d-e1468ddecddb';

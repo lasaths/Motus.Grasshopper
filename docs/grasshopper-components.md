@@ -21,6 +21,7 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | PTP/LIN/CIRC program | **Motus Move** → **Motus Program** |
 | Pick-and-place / destack | **C# layout script** → **Motus Collision Boxes** + **Motus Pick Place** → one **Motus Program** (Attach/Detach mid-program); plan **ColScene** = table only — see `examples/10_pick_place.ghx` |
 | Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
+| Robotic assembly sequence (bamboo canes) | **Motus Assembly Structure** + **Assembly Site** → **Assembly Plan** → **Assembly Preview** (`-UseLocal` only; see [Assembly](#assembly)) |
 
 ```
 Model / Legged / Urdf ──► Plan ──► Preview
@@ -33,6 +34,19 @@ Model / Legged / Urdf ──► Plan ──► Preview
 Product tiers (Supported / Advanced / Experimental) toward Yak GA **2.0.0**: [supported-surface.md](supported-surface.md).
 
 **Experimental (Motus.NET tip, not GH GA):** `HolonomicSE3` free-flyer mobility and Unitree H2 meshless fixture live on Motus.NET master ahead of some NuGet cuts. Motus.Grasshopper has **no** Aerial / H2 GA components — optional Motus Robot URDF load via `-UseLocal` only; Status must stay experimental. See [regression-matrix.md](regression-matrix.md).
+
+## Assembly
+
+Experimental, **`-UseLocal` builds only**: compiled when the sibling Motus.NET has `src/Motus.Construction` (`MOTUS_CONSTRUCTION`); NuGet builds omit the panel. Thin wrappers over Motus.NET `AssemblyPlanner.Plan` — the structure is input data (no Warren-specific code in GH). Planning / preview only. Example: `examples/12_bamboo_truss_assembly.ghx`.
+
+| Component | Inputs | Outputs |
+|-----------|--------|---------|
+| **Motus Assembly Structure** (`AStruct`) | `M` member lines (m; list order = default build order), `N` node points (optional, default line ends), `Nm` node names (optional), `L` cane length per member (optional) | `S` structure, `Id` member ids (start + end node name) |
+| **Motus Assembly Site** (`ASite`) | `Sp` support points on nodes (first = start support), `O` obstacle Breps/Meshes, `G` ground pads, `St` stock point, `Ch` clamp height (m), `Hd` clamp heading per support (deg) — all but `Sp` optional | `Si` site |
+| **Motus Assembly Plan** (`APlan`) | `S`, `Si`, `U` robot URDF (path or XML), `Cm` clearance margin (m, 0.002), `Sh` use the embedded plan when the layout matches, `R` Run | `P` plan, `T` tasks, `V` verdict, `Ok` all built and collision-free |
+| **Motus Assembly Preview** (`APrev`) | `P`, `t` normalised time 0..1 | `R` robot meshes, `C` placed canes, `A` active cane, `L` task label, `H` holding |
+
+Assembly Plan runs in the background while `R` is true and re-plans only when the inputs change; check `Ok` / `V` before use. A live plan (no embedded match) can take minutes.
 
 ## Model
 
