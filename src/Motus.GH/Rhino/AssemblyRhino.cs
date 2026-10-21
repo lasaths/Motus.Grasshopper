@@ -243,10 +243,37 @@ public static class AssemblyRhino
     {
         lock (Sync)
         {
-            var plan = AssemblyPlanner.Plan(request);
+            var plan = AssemblyPlanner.Plan(ForPlanner(request));
             var warnings = new List<string>();
             var frames = plan.Keys.Count == 0 ? new List<AssemblyFrame>() : SampleFrames(request, plan, samples, warnings);
             return new AssemblyRun(request, plan, frames, warnings);
+        }
+    }
+
+    /// <summary>
+    /// The planner tags the fingerprint of any URDF-loaded robot, so an embedded plan never matches a URDF input.
+    /// When the shipped plan is wanted and the URDF is the built-in bamboo_icd chain, bind its cell instead of passing XML.
+    /// </summary>
+    static AssemblyPlanRequest ForPlanner(AssemblyPlanRequest request)
+    {
+        if (!request.UseShippedPlan || request.RobotUrdfXml is not { } xml || request.Robot is { } r && !ReferenceEquals(r, RobotDefinition.BambooIcd))
+            return request;
+        var oldSite = BambooTrussLayout.Current;
+        var oldScene = BambooTrussLayout.Scene;
+        try
+        {
+            if (request.Scene is not null) BambooTrussLayout.UseScene(request.Scene);
+            BambooTrussLayout.Use(request.Site!);
+            var cell = BambooIcdCell.Load(xml, BambooTrussLayout.StrutLength, RobotDefinition.BambooIcd);
+            if (!cell.Seg.SequenceEqual(BambooIcdMotion.BambooIcdSeg) || !cell.LimitsDeg.SequenceEqual(BambooIcdMotion.BambooIcdLimitsDeg))
+                return request;
+            BambooTrussMotion.UseCell(cell);
+            return request with { RobotUrdfXml = null, Robot = null };
+        }
+        finally
+        {
+            BambooTrussLayout.UseScene(oldScene);
+            BambooTrussLayout.Use(oldSite);
         }
     }
 
