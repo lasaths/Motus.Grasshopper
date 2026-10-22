@@ -1,6 +1,12 @@
 <Project>
   <PropertyGroup>
-    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">2.0.0</MotusNetVersion>
+    <MotusNetVersion Condition="'$(MotusNetVersion)' == ''">2.1.0</MotusNetVersion>
+  </PropertyGroup>
+
+  <!-- Motus.Construction (assembly planner) is on nuget.org from 2.1.0: Assembly components compile in NuGet builds too. -->
+  <PropertyGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and ('$(MSBuildProjectName)' == 'Motus.GH' or '$(MSBuildProjectName)' == 'QaSmoke')">
+    <MotusConstruction>true</MotusConstruction>
+    <DefineConstants>$(DefineConstants);MOTUS_CONSTRUCTION</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'Motus.GH'">
@@ -8,6 +14,7 @@
     <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.Construction" Version="$(MotusNetVersion)" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseMotusNetProjectReference)' != 'true' and '$(MSBuildProjectName)' == 'QaSmoke'">
@@ -15,5 +22,6 @@
     <PackageReference Include="Motus.Geometry" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.Presets" Version="$(MotusNetVersion)" />
     <PackageReference Include="Motus.OMPL.NET" Version="$(MotusNetVersion)" />
+    <PackageReference Include="Motus.Construction" Version="$(MotusNetVersion)" />
   </ItemGroup>
 </Project>

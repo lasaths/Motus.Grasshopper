@@ -21,7 +21,7 @@ All components live under the **Motus** tab. Motus.Grasshopper is **thin wiring*
 | PTP/LIN/CIRC program | **Motus Move** → **Motus Program** |
 | Pick-and-place / destack | **C# layout script** → **Motus Collision Boxes** + **Motus Pick Place** → one **Motus Program** (Attach/Detach mid-program); plan **ColScene** = table only — see `examples/10_pick_place.ghx` |
 | Author URDF in GH | **Urdf Link / Joint / Assemble / Attach** → optional **Export URDF** |
-| Robotic assembly sequence (bamboo canes) | **Motus Assembly Structure** + **Assembly Site** → **Assembly Plan** → **Assembly Preview** (`-UseLocal` only; see [Assembly](#assembly)) |
+| Robotic assembly sequence (bamboo canes) | **Motus Assembly Structure** + **Assembly Site** → **Assembly Plan** → **Assembly Preview** (experimental; see [Assembly](#assembly)) |
 
 ```
 Model / Legged / Urdf ──► Plan ──► Preview
@@ -37,7 +37,7 @@ Product tiers (Supported / Advanced / Experimental) toward Yak GA **2.0.0**: [su
 
 ## Assembly
 
-Experimental, **`-UseLocal` builds only**: compiled when the sibling Motus.NET has `src/Motus.Construction` (`MOTUS_CONSTRUCTION`); NuGet builds omit the panel. Thin wrappers over Motus.NET `AssemblyPlanner.Plan` — the structure is input data (no Warren-specific code in GH). Planning / preview only. Example: `examples/12_bamboo_truss_assembly.ghx`.
+Experimental: compiled with `MOTUS_CONSTRUCTION` — NuGet builds reference the `Motus.Construction` **2.1.0** package; `-UseLocal` builds use the sibling Motus.NET `src/Motus.Construction`. Thin wrappers over Motus.NET `AssemblyPlanner.Plan` — the structure is input data (no Warren-specific code in GH). Planning / preview only. Example: `examples/12_bamboo_truss_assembly.ghx`.
 
 | Component | Inputs | Outputs |
 |-----------|--------|---------|

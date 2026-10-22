@@ -4,7 +4,11 @@
 
 ### Added
 
-- Assembly (experimental, `-UseLocal` only): **Motus Assembly Structure / Site / Plan / Preview** wrap Motus.NET `Motus.Construction` `AssemblyPlanner` (compiled with `MOTUS_CONSTRUCTION` when the sibling has it). Example `12_bamboo_truss_assembly.ghx` (Warren truss, `assets/icd/bamboo_icd.urdf`) replaces `12_bamboo_mobile_robot.ghx`; qa-smoke checks 7/7 collision-free.
+- Assembly (experimental): **Motus Assembly Structure / Site / Plan / Preview** wrap Motus.NET `Motus.Construction` `AssemblyPlanner` (compiled with `MOTUS_CONSTRUCTION`: NuGet builds reference the `Motus.Construction` 2.1.0 package; `-UseLocal` uses the sibling). Example `12_bamboo_truss_assembly.ghx` (Warren truss, `assets/icd/bamboo_icd.urdf`) replaces `12_bamboo_mobile_robot.ghx`; qa-smoke checks 7/7 collision-free.
+
+### Changed
+
+- `MotusNetVersion` pin **2.0.0 → 2.1.0** ([Motus.NET 2.1.0](https://www.nuget.org/packages/Motus.Core/2.1.0) on nuget.org); NuGet mode adds the `Motus.Construction` package reference. Plugin / Yak version stays **2.0.0** (no Yak publish).
 
 ### Fixed
 

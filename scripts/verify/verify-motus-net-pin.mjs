@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const EXPECTED = "2.0.0";
+const EXPECTED = "2.1.0";
 
 function fail(msg) {
   console.error(`verify-motus-net-pin: ${msg}`);
@@ -72,7 +72,7 @@ if (onNuget) {
       if (re.test(slice)) fail(`${rel} still claims "${label}" after ${EXPECTED} is on nuget.org`);
     }
   }
-  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak 2.0.0 live on Package Manager.`);
+  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak motus 2.0.0 live on Package Manager.`);
 } else {
   // Pre-publish: require at least one doc to mention UseLocal / pending publish for this cut.
   const joined = docFiles.map(read).join("\n");
