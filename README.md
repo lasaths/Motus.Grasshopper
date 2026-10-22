@@ -5,7 +5,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.0.0**) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.1.0**) |
 
 **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
@@ -136,7 +136,7 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-- Motus.NET **2.0.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
+- Motus.NET **2.1.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
 - **Yak live** — `motus` **2.0.0** on Rhino Package Manager (`yak search --all motus`). Source install still supported for tip / CI.
 
 ## Install
@@ -148,7 +148,7 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 **Windows**
 
 ```powershell
-./build.ps1                      # Release (NuGet Motus.NET 2.0.0)
+./build.ps1                      # Release (NuGet Motus.NET 2.1.0)
 ./build.ps1 -UseLocal            # sibling Motus.NET project refs (tip / CI)
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
 ./build.ps1 -Yak                 # pack → dist/motus-*-rh8_*-any.yak
@@ -173,7 +173,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 |----------|---------|
 | `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
 | `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
-| `MotusNetVersion` | Override NuGet pin (default `2.0.0`) |
+| `MotusNetVersion` | Override NuGet pin (default `2.1.0`) |
 
 ## Common workflows
 

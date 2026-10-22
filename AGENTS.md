@@ -39,7 +39,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **2.0.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) — Motus.Core **2.0.0** is live on nuget.org. Default build restores NuGet; optional `-p:UseMotusNetProjectReference=true` / `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)) for sibling tip. CI NuGet jobs use the props pin; Prefer UseLocal jobs still checkout `lasaths/Motus.NET`. Yak `motus` **2.0.0** is live on Rhino Package Manager; pack with `-Yak` / `./scripts/pack-yak.sh` for local rebuilds.
+Pinned **2.1.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) — Motus.NET **2.1.0** (incl. Motus.Construction) is live on nuget.org. Default build restores NuGet; optional `-p:UseMotusNetProjectReference=true` / `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)) for sibling tip. CI NuGet jobs use the props pin; Prefer UseLocal jobs still checkout `lasaths/Motus.NET`. Yak `motus` **2.0.0** is live on Rhino Package Manager; pack with `-Yak` / `./scripts/pack-yak.sh` for local rebuilds.
 
 | Package | Role |
 |---------|------|
@@ -107,6 +107,7 @@ Also check in Rhino (full list: [docs/regression-matrix.md](docs/regression-matr
 - `10_pick_place`: UR10e fingers-down home (Rhino TCP Z = world −Z); C# layout script (5×4 rotating destack → 5 columns × 4) + Collision Boxes + Pick Place → one Program (Auto Plan); SET open `0.085` / close `0.04`; Pick Place `Touch=robotiq_2f85` (**required** — empty Touch Errors, no Seg); plan ColScene = **empty** (Robotiq closed-envelope hull intersects the table at grasp — preview ColScene still has table+bricks); Cassis-authored (not `generate-examples.mjs --only=10`)
 - `11_aerial_hover`: free-flyer HolonomicSE3 Start→Goal (WorldXY body planes); Preview scrub + Export bodyPose; `assets/aerial/free_flyer_box.urdf`; generate with `--only=11`; Motus.NET HolonomicSE3 / `AerialExportTests` (arm pass-off deferred)
 - Legged Plan gait: Walk `Rb` (Mechanism handle) + Motus Plan ≥2 planes → `PlanBodyPath` full-driver `Tr` (hard SSM); tip joint / 1-plane LIN unchanged
+- `12_bamboo_truss_assembly` (`-UseLocal`): toggle **Run** → Assembly Plan `Ok` true, `V` 7/7 built; drag `t` → robot + canes animate; generate with `--only=12`
 - Example **logic** (not .ghx solve): Motus.NET `Example09_WalkingHexapod_ArcAndBoxTerrain` + qa-smoke “Example 09 walking hex logic”; Motus.NET `Example10_PickAndPlace_Box` for example 10 attach/SET contract; Motus.NET HolonomicSE3 / `AerialExportTests` for example 11 hover
 
 ## Example layout (agents)

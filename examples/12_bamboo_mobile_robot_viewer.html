@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICD/LIS bamboo arm — kinematic preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; color: #e8e8e8; }
+  body {
+    display: flex;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  #view { flex: 1; position: relative; min-width: 0; cursor: grab; }
+  #view.drag { cursor: grabbing; }
+  #view canvas { display: block; }
+  #panel {
+    width: 340px;
+    flex: none;
+    background: #111;
+    border-left: 1px solid #2a2a2a;
+    overflow: auto;
+    padding: 18px 16px 28px;
+  }
+  h1 {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #aaa;
+    font-weight: 700;
+  }
+  .sub { color: #777; font-size: 12px; line-height: 1.45; margin: 8px 0 14px; }
+  .phase {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .row { margin: 8px 0 4px; }
+  .row label {
+    display: flex;
+    justify-content: space-between;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    color: #bbb;
+    margin-bottom: 3px;
+  }
+  .row label span { color: #fff; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    background: #333;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px;
+    border-radius: 6px;
+    background: #fff;
+    border: none;
+    cursor: pointer;
+  }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  button {
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    background: transparent;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 16px;
+    cursor: pointer;
+  }
+  button:hover { color: #fff; border-color: #888; }
+  button.active { background: #c4552a; border-color: #c4552a; color: #fff; }
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px; color: #aaa;
+  }
+  .note { margin-top: 16px; color: #666; font-size: 11px; line-height: 1.45; }
+  #tasks { margin-top: 16px; }
+  .task {
+    border: 1px solid #2c2c2c;
+    border-radius: 8px;
+    padding: 8px 8px 10px;
+    margin-top: 8px;
+  }
+  .taskhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #888;
+  }
+  .used { color: #d7c392; letter-spacing: 0.08em; min-height: 1em; }
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+  }
+  .field span {
+    flex: none;
+    width: 74px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    color: #999;
+  }
+  .field input {
+    flex: 1;
+    min-width: 0;
+    background: #0c0c0c;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    padding: 4px 6px;
+    color-scheme: dark;
+  }
+  .field em {
+    flex: none;
+    font-style: normal;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 10px;
+    color: #777;
+    width: 20px;
+  }
+  .task .btns { margin-top: 8px; }
+  button.mini { padding: 5px 10px; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button:disabled:hover { color: #ccc; border-color: #444; }
+  .warn {
+    margin-top: 8px;
+    color: #e07a55;
+    font-family: Menlo, Monaco, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<aside id="panel">
+  <h1>ICD / LIS bamboo arm</h1>
+  <p class="sub">5-DoF kinematic preview. Parallel-jaw grippers. Left jaw stays closed on the support pole during the task.</p>
+  <div class="phase" id="phase">Home</div>
+  <div class="row"><label>Motion <span id="tn">0%</span></label>
+    <input id="scrub" type="range" min="0" max="1000" step="1" value="0"></div>
+  <div class="btns">
+    <button id="play" type="button">Play</button>
+    <button id="reset" type="button">Reset</button>
+  </div>
+  <div id="tasks"></div>
+  <p class="warn" id="reach"></p>
+  <div id="joints"></div>
+  <label class="check"><input id="axes" type="checkbox" checked> Joint axes</label>
+  <p class="note">Drag the view to orbit. Moving a joint or gripper slider pauses playback and drives the arm directly. Play follows the first task named pick and the first named place: their planes, jawMm, and the strut pickup. Lengths: pole→θ1 30, then 80, 88, 88, 88, θ5→jaw 46 mm. Bend axes local X, wrists local Y, jaws local X. Strut along the right jaw’s local Z.</p>
+</aside>
+<script src="three.r128.min.js"></script>
+<script>
+(function () {
+  var DEG = Math.PI / 180;
+  var SEG = [0.030, 0.080, 0.088, 0.088, 0.088, 0.046];
+  var POLE_Y = 0.40;
+  var LIM = [[-170, 170], [-90, 90], [-135, 135], [-90, 90], [-170, 170]];
+  var NAMES = ["θ1", "θ2", "θ3", "θ4", "θ5"];
+  // Home / retract posture. The pick-and-place path is solved from task planes
+  // (same frame convention as solve_fk.js), not a fixed waypoint list.
+  var HOME_Q = [-90, -72, -80, -24, 0];
+  var PICK = { x: 0, y: 0.00778, z: 0.09194 };
+  var PLACE = { x: 0, y: 0.1506, z: 0.2000 };
+  var DURATION = 14;
+  var tasks = [];
+  var motionKeys = [];
+  var motionError = "";
+  var pathHit = null;
+
+  function metal(hex, rough, metalness) {
+    return new THREE.MeshStandardMaterial({
+      color: hex, roughness: rough, metalness: metalness
+    });
+  }
+  var mats = {
+    tube: metal(0x8b939a, 0.62, 0.28),
+    elbow: metal(0x646c74, 0.55, 0.38),
+    shoulder: metal(0x8e969e, 0.5, 0.42),
+    wrist: metal(0x525a62, 0.58, 0.32),
+    carriage: metal(0x4a525a, 0.6, 0.3),
+    jaw: metal(0x3c444c, 0.5, 0.4),
+    rail: metal(0xb7c0c8, 0.35, 0.55),
+    pole: new THREE.MeshStandardMaterial({ color: 0xc4a15a, roughness: 0.86, metalness: 0.02 }),
+    strut: new THREE.MeshStandardMaterial({ color: 0xd2b06a, roughness: 0.84, metalness: 0.02 }),
+    node: new THREE.MeshStandardMaterial({ color: 0x9a7840, roughness: 0.9, metalness: 0.02 })
+  };
+
+  var view = document.getElementById("view");
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 1);
+  view.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(34, 1, 0.01, 30);
+  var look = new THREE.Vector3(0, 0.20, 0.09);
+  var theta = 0.62, phi = 1.12, dist = 1.12;
+
+  function updateCamera() {
+    camera.position.set(
+      look.x + dist * Math.sin(phi) * Math.sin(theta),
+      look.y + dist * Math.cos(phi),
+      look.z + dist * Math.sin(phi) * Math.cos(theta)
+    );
+    camera.lookAt(look);
+  }
+  updateCamera();
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.38));
+  var key = new THREE.DirectionalLight(0xffffff, 1.05);
+  key.position.set(0.6, 1.2, 0.7);
+  scene.add(key);
+  var fill = new THREE.DirectionalLight(0xc8d0e0, 0.38);
+  fill.position.set(-0.7, 0.4, -0.4);
+  scene.add(fill);
+
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x070707, roughness: 1, metalness: 0 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  var grid = new THREE.GridHelper(1.4, 14, 0x3a3a3a, 0x242424);
+  grid.position.y = 0.0006;
+  scene.add(grid);
+  var ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.020, 0.025, 64),
+    new THREE.MeshBasicMaterial({ color: 0xd7c392, side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(PLACE.x, 0.0016, PLACE.z);
+  scene.add(ring);
+
+  var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.66, 24), mats.pole);
+  pole.rotation.z = Math.PI / 2;
+  pole.position.set(0, POLE_Y, 0);
+  scene.add(pole);
+  [-0.22, 0.16, 0.26].forEach(function (x) {
+    var n = new THREE.Mesh(new THREE.TorusGeometry(0.0126, 0.0013, 6, 18), mats.node);
+    n.rotation.y = Math.PI / 2;
+    n.position.set(x, POLE_Y, 0);
+    scene.add(n);
+  });
+
+  function makeLabel(text, css) {
+    var c = document.createElement("canvas");
+    c.width = 256; c.height = 128;
+    var g = c.getContext("2d");
+    g.clearRect(0, 0, 256, 128);
+    g.font = "600 64px sans-serif";
+    g.fillStyle = css;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, 128, 68);
+    var tex = new THREE.CanvasTexture(c);
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false
+    }));
+    spr.scale.set(0.072, 0.036, 1);
+    spr.renderOrder = 2;
+    return spr;
+  }
+  function axisX(color, css, text) {
+    var g = new THREE.Group();
+    var mat = new THREE.MeshBasicMaterial({ color: color });
+    var shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.062, 10), mat);
+    shaft.rotation.z = -Math.PI / 2;
+    g.add(shaft);
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.014, 10), mat);
+    cone.rotation.z = -Math.PI / 2;
+    cone.position.x = 0.036;
+    g.add(cone);
+    var lab = makeLabel(text, css);
+    lab.position.set(0.018, 0.026, 0);
+    g.add(lab);
+    return g;
+  }
+  function axisY(color, css, text) {
+    var g = new THREE.Group();
+    var mat = new THREE.MeshBasicMaterial({ color: color });
+    var shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.062, 10), mat);
+    g.add(shaft);
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.014, 10), mat);
+    cone.position.y = 0.036;
+    g.add(cone);
+    var lab = makeLabel(text, css);
+    lab.position.set(0.032, 0.016, 0);
+    g.add(lab);
+    return g;
+  }
+
+  var axisGroups = [];
+  function track(obj) { axisGroups.push(obj); return obj; }
+
+  // Collision parts are the meshes already in the scene. link is the
+  // kinematic index; parent/child links (|Δlink| ≤ 1) meet at a joint.
+  var colliders = [];
+  function collider(name, link) {
+    var c = { name: name, link: link, meshes: [] };
+    colliders.push(c);
+    return c;
+  }
+  function addTube(parent, span, col) {
+    var L = Math.max(0.008, span - 0.016);
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(0.012, L, 0.016), mats.tube);
+    mesh.position.y = -span / 2;
+    parent.add(mesh);
+    if (col) col.meshes.push(mesh);
+    return mesh;
+  }
+  function housing(parent, size, mat, col) {
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat);
+    parent.add(mesh);
+    if (col) col.meshes.push(mesh);
+    return mesh;
+  }
+
+  // Left gripper frame: local Z along the pole (world +X), jaw travel along local X.
+  var mount = new THREE.Group();
+  mount.position.set(0, POLE_Y, 0);
+  mount.rotation.y = Math.PI / 2;
+  scene.add(mount);
+  var colL = collider("L-grip", 0);
+  var lbody = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.016, 0.026), mats.carriage);
+  lbody.position.y = 0.020;
+  mount.add(lbody);
+  colL.meshes.push(lbody);
+  var lrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
+  lrail.position.y = 0.014;
+  mount.add(lrail);
+  colL.meshes.push(lrail);
+  function jawPlate(w, h, d, mat) {
+    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  }
+  var lNeg = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
+  var lPos = jawPlate(0.0045, 0.030, 0.024, mats.jaw);
+  mount.add(lNeg); mount.add(lPos);
+  colL.meshes.push(lNeg); colL.meshes.push(lPos);
+  mount.add(track(axisX(0x3ddc6a, "#3ddc6a", "L-grip")));
+
+  var colBase = collider("base link", 1);
+  addTube(mount, SEG[0], colBase);
+  var j1 = new THREE.Group();
+  j1.position.y = -SEG[0];
+  mount.add(j1);
+  housing(j1, [0.046, 0.029, 0.034], mats.wrist, collider("θ1", 2));
+  j1.add(track(axisY(0x33e0e0, "#33e0e0", "θ1")));
+
+  addTube(j1, SEG[1], collider("link θ2", 3));
+  var j2 = new THREE.Group();
+  j2.position.y = -SEG[1];
+  j1.add(j2);
+  housing(j2, [0.041, 0.061, 0.040], mats.elbow, collider("θ2", 4));
+  j2.add(track(axisX(0xff8800, "#ff8800", "θ2")));
+
+  addTube(j2, SEG[2], collider("link θ3", 5));
+  var j3 = new THREE.Group();
+  j3.position.y = -SEG[2];
+  j2.add(j3);
+  housing(j3, [0.041, 0.061, 0.040], mats.shoulder, collider("θ3", 6));
+  j3.add(track(axisX(0xffffff, "#ffffff", "θ3")));
+
+  addTube(j3, SEG[3], collider("link θ4", 7));
+  var j4 = new THREE.Group();
+  j4.position.y = -SEG[3];
+  j3.add(j4);
+  housing(j4, [0.041, 0.061, 0.040], mats.elbow, collider("θ4", 8));
+  j4.add(track(axisX(0xff8800, "#ff8800", "θ4")));
+
+  addTube(j4, SEG[4], collider("link θ5", 9));
+  var j5 = new THREE.Group();
+  j5.position.y = -SEG[4];
+  j4.add(j5);
+  housing(j5, [0.046, 0.029, 0.034], mats.wrist, collider("θ5", 10));
+  j5.add(track(axisY(0x33e0e0, "#33e0e0", "θ5")));
+
+  var colNeck = collider("neck", 11);
+  var neck = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.028, 0.016), mats.tube);
+  neck.position.y = -0.024;
+  j5.add(neck);
+  colNeck.meshes.push(neck);
+
+  var jaw = new THREE.Group();
+  jaw.position.y = -SEG[5];
+  j5.add(jaw);
+  var colR = collider("R-grip", 12);
+  var carriage = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.022), mats.carriage);
+  carriage.position.y = 0.022;
+  jaw.add(carriage);
+  colR.meshes.push(carriage);
+  var rrail = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.004, 0.004), mats.rail);
+  rrail.position.set(0, 0.012, 0);
+  jaw.add(rrail);
+  colR.meshes.push(rrail);
+  var rNeg = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
+  var rPos = jawPlate(0.0045, 0.020, 0.022, mats.jaw);
+  rNeg.position.y = 0.005;
+  rPos.position.y = 0.005;
+  jaw.add(rNeg); jaw.add(rPos);
+  colR.meshes.push(rNeg); colR.meshes.push(rPos);
+  jaw.add(track(axisX(0x3ddc6a, "#3ddc6a", "R-grip")));
+
+  var strutGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.30, 20);
+  strutGeo.rotateX(Math.PI / 2);
+  var strut = new THREE.Mesh(strutGeo, mats.strut);
+  [-0.09, 0, 0.09].forEach(function (z) {
+    var n = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0012, 6, 16), mats.node);
+    n.position.z = z;
+    strut.add(n);
+  });
+  scene.add(strut);
+  collider("pole", null).meshes.push(pole);
+  collider("ground", null).meshes.push(ground);
+  collider("strut", null).meshes.push(strut);
+
+  function setOpening(neg, pos, mm, yLift) {
+    var half = (mm / 1000) / 2;
+    var shift = half + 0.002;
+    neg.position.x = -shift;
+    pos.position.x = shift;
+    if (yLift) {
+      neg.position.y = yLift;
+      pos.position.y = yLift;
+    }
+  }
+
+  function applyJoints(deg) {
+    j1.rotation.y = deg[0] * DEG;
+    j2.rotation.x = deg[1] * DEG;
+    j3.rotation.x = deg[2] * DEG;
+    j4.rotation.x = deg[3] * DEG;
+    j5.rotation.y = deg[4] * DEG;
+  }
+
+  // FK matches solve_fk.js / Three.js r128: mount yaw +90°, θ1 and θ5 about local Y,
+  // θ2–θ4 about local X, tool origin at the right jaw. Planar task poses use θ1 = -90°, θ5 = 0.
+  function wrap180(a) {
+    var x = a;
+    while (x > 180) x -= 360;
+    while (x < -180) x += 360;
+    return x;
+  }
+  function ikSolve(y, z, alphaDeg) {
+    var alpha = alphaDeg * DEG;
+    var L = 0.088;
+    var Ljaw = 0.088 + 0.046;
+    var y2 = POLE_Y - SEG[0] - SEG[1];
+    var Ay = y2 - y - Ljaw * Math.cos(alpha);
+    var Az = -z - Ljaw * Math.sin(alpha);
+    var r = Math.hypot(Ay, Az);
+    if (r > 2 * L + 1e-5) return [];
+    var off = Math.acos(Math.min(1, Math.max(-1, r / (2 * L))));
+    var psi = Math.atan2(Az, Ay);
+    var sols = [];
+    for (var s = 0; s < 2; s++) {
+      var sign = s === 0 ? 1 : -1;
+      var beta = psi + sign * off;
+      var gamma = psi - sign * off;
+      var q = [
+        -90,
+        wrap180(beta / DEG),
+        wrap180((gamma - beta) / DEG),
+        wrap180(alphaDeg - gamma / DEG),
+        0
+      ];
+      var ok = true;
+      for (var i = 0; i < 5; i++) {
+        if (q[i] < LIM[i][0] - 1e-3 || q[i] > LIM[i][1] + 1e-3) ok = false;
+        if (q[i] < LIM[i][0]) q[i] = LIM[i][0];
+        if (q[i] > LIM[i][1]) q[i] = LIM[i][1];
+      }
+      if (!ok) continue;
+      var f = fkJaw(q);
+      if (Math.hypot(f.pos[1] - y, f.pos[2] - z) > 0.002) continue;
+      var eZ0 = 0;
+      var eZ1 = -Math.sin(alpha);
+      var eZ2 = Math.cos(alpha);
+      if (Math.hypot(f.Z[0] - eZ0, f.Z[1] - eZ1, f.Z[2] - eZ2) > 0.05) continue;
+      sols.push(q);
+    }
+    return sols;
+  }
+  function rxm(a) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return [1, 0, 0, 0, c, -s, 0, s, c];
+  }
+  function rym(a) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return [c, 0, s, 0, 1, 0, -s, 0, c];
+  }
+  function mulm(A, B) {
+    var C = new Array(9);
+    for (var r = 0; r < 3; r++) {
+      for (var c = 0; c < 3; c++) {
+        C[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+      }
+    }
+    return C;
+  }
+  function applym(R, v) {
+    return [
+      R[0] * v[0] + R[1] * v[1] + R[2] * v[2],
+      R[3] * v[0] + R[4] * v[1] + R[5] * v[2],
+      R[6] * v[0] + R[7] * v[1] + R[8] * v[2]
+    ];
+  }
+  function addm(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+  function fkJaw(deg) {
+    var q = deg.map(function (d) { return d * DEG; });
+    var R = rym(90 * DEG);
+    var p = [0, POLE_Y, 0];
+    var axes = ["Y", "X", "X", "X", "Y"];
+    var pts = [p.slice()];
+    for (var i = 0; i < 5; i++) {
+      p = addm(p, applym(R, [0, -SEG[i], 0]));
+      pts.push(p.slice());
+      R = mulm(R, axes[i] === "Y" ? rym(q[i]) : rxm(q[i]));
+    }
+    var jaw = addm(p, applym(R, [0, -SEG[5], 0]));
+    pts.push(jaw.slice());
+    return { pos: jaw, Z: applym(R, [0, 0, 1]), pts: pts };
+  }
+  function segOk(a, b, carrying) {
+    for (var s = 0; s <= 20; s++) {
+      var u = s / 20;
+      var q = a.map(function (v, k) { return v + (b[k] - v) * u; });
+      for (var i = 0; i < 5; i++) {
+        if (q[i] < LIM[i][0] - 0.05 || q[i] > LIM[i][1] + 0.05) return false;
+      }
+      var f = fkJaw(q);
+      for (var pi = 0; pi < f.pts.length; pi++) {
+        if (f.pts[pi][1] < -0.002) return false;
+      }
+      if (carrying) {
+        var ay = f.Z[1];
+        var bot = f.pos[1] - 0.15 * Math.abs(ay) - 0.007 * Math.sqrt(Math.max(0, 1 - ay * ay));
+        if (bot < -0.004) return false;
+      }
+    }
+    return true;
+  }
+  function linkStages(stages) {
+    var n = stages.length;
+    var cost = stages.map(function (st) { return st.sols.map(function () { return 1e18; }); });
+    var prev = stages.map(function (st) { return st.sols.map(function () { return -1; }); });
+    stages[0].sols.forEach(function (q, i) {
+      if (segOk(HOME_Q, q, false)) cost[0][i] = 0;
+    });
+    for (var s = 1; s < n; s++) {
+      // Carrying ends at release. Depart and retract leave the strut standing.
+      var carry = s >= 2 && stages[s].name !== "Retract" && stages[s].name !== "Depart";
+      for (var j = 0; j < stages[s].sols.length; j++) {
+        for (var i = 0; i < stages[s - 1].sols.length; i++) {
+          if (cost[s - 1][i] >= 1e17) continue;
+          if (!segOk(stages[s - 1].sols[i], stages[s].sols[j], carry)) continue;
+          var jump = 0;
+          var qa = stages[s - 1].sols[i];
+          var qb = stages[s].sols[j];
+          for (var k = 0; k < 5; k++) {
+            var d = wrap180(qb[k] - qa[k]);
+            jump += d * d;
+          }
+          var c = cost[s - 1][i] + jump;
+          if (c < cost[s][j]) {
+            cost[s][j] = c;
+            prev[s][j] = i;
+          }
+        }
+      }
+    }
+    var bi = -1;
+    var bc = 1e18;
+    for (var j2 = 0; j2 < stages[n - 1].sols.length; j2++) {
+      if (cost[n - 1][j2] < bc) { bc = cost[n - 1][j2]; bi = j2; }
+    }
+    if (bi < 0) {
+      var far = -1;
+      for (var s2 = 0; s2 < n; s2++) {
+        for (var j3 = 0; j3 < cost[s2].length; j3++) {
+          if (cost[s2][j3] < 1e17) far = s2;
+        }
+      }
+      return { ok: false, far: far, next: far + 1 < n ? stages[far + 1].name : "" };
+    }
+    var seq = [];
+    var j = bi;
+    for (var s3 = n - 1; s3 >= 0; s3--) {
+      seq.push({ name: stages[s3].name, q: stages[s3].sols[j].slice() });
+      j = prev[s3][j];
+    }
+    seq.reverse();
+    return { ok: true, cost: bc, seq: seq };
+  }
+  function stamp(items) {
+    var weights = [0];
+    for (var i = 1; i < items.length; i++) {
+      var s = 0;
+      for (var k = 0; k < 5; k++) s += Math.abs(items[i].q[k] - items[i - 1].q[k]);
+      s += Math.abs(items[i].gR - items[i - 1].gR) * 0.35;
+      if (items[i].label === "Close" || items[i].label === "Open") s += 36;
+      if (s < 4) s = 4;
+      weights.push(s);
+    }
+    var total = 0;
+    for (var w = 0; w < weights.length; w++) total += weights[w];
+    var acc = 0;
+    var keys = [];
+    for (var i2 = 0; i2 < items.length; i2++) {
+      acc += weights[i2];
+      keys.push({
+        t: i2 === items.length - 1 ? 1 : acc / total,
+        label: items[i2].label,
+        q: items[i2].q.slice(),
+        gR: items[i2].gR,
+        hold: items[i2].hold
+      });
+    }
+    keys[0].t = 0;
+    return keys;
+  }
+  function homeKeys(gR) {
+    return [
+      { t: 0, label: "Home", q: HOME_Q.slice(), gR: gR, hold: 0 },
+      { t: 1, label: "Home", q: HOME_Q.slice(), gR: gR, hold: 0 }
+    ];
+  }
+  function firstTask(identity) {
+    for (var i = 0; i < tasks.length; i++) if (tasks[i].id === identity) return tasks[i];
+    return null;
+  }
+  function findPlane(task, name) {
+    if (!task) return null;
+    for (var i = 0; i < task.planes.length; i++) if (task.planes[i].name === name) return task.planes[i];
+    return null;
+  }
+  function planeWorld(task, name) {
+    var pl = findPlane(task, name);
+    if (!pl) return null;
+    var yMm = Number(pl.yMm);
+    if (!isFinite(yMm)) yMm = 0;
+    return { x: pl.x, y: pl.y0 + yMm / 1000, z: pl.z, a: pl.pitch, yMm: yMm };
+  }
+  function buildMotion() {
+    var pick = firstTask("pick");
+    var place = firstTask("place");
+    if (!pick || !place) {
+      var missing = !pick ? "pick" : "place";
+      return { error: "No task with identity \"" + missing + "\".", keys: homeKeys(40) };
+    }
+    if (!isFinite(Number(pick.jawMm)) || !isFinite(Number(place.jawMm))) {
+      return { error: "jawMm must be a number.", keys: homeKeys(40) };
+    }
+    var want = [
+      ["approach", pick, "pick:approach"],
+      ["grasp", pick, "pick:grasp"],
+      ["hold", place, "place:hold"],
+      ["release", place, "place:release"]
+    ];
+    var pose = {};
+    var solved = {};
+    var bad = [];
+    for (var i = 0; i < want.length; i++) {
+      var w = planeWorld(want[i][1], want[i][0]);
+      if (!w) return { error: want[i][2] + " missing.", keys: homeKeys(Number(place.jawMm)) };
+      pose[want[i][0]] = w;
+      if (Math.abs(w.x) > 1e-6) {
+        bad.push(want[i][2]);
+        continue;
+      }
+      var sols = ikSolve(w.y, w.z, w.a);
+      if (!sols.length) bad.push(want[i][2]);
+      else solved[want[i][0]] = sols;
+    }
+    if (bad.length) {
+      return { error: bad.join(", ") + " unreachable", keys: homeKeys(Number(place.jawMm)) };
+    }
+    var G = pose.grasp, H = pose.hold;
+    var R = pose.release;
+    function elbowSols(y, z, a) {
+      var sols = ikSolve(y, z, a);
+      var mild = [];
+      for (var i = 0; i < sols.length; i++) if (Math.abs(sols[i][2]) <= 88) mild.push(sols[i]);
+      return mild.length ? mild : sols;
+    }
+    // Swing out before pitching so the elbow stays open and the strut clears
+    // the ground, then pull off the standing strut before folding home.
+    var tuned = [
+      { name: "pick:approach", sols: solved.approach },
+      { name: "pick:grasp", sols: solved.grasp }
+    ];
+    var viaPts = [
+      ["Lift", G.y + 0.07222, G.z + 0.04806, G.a],
+      ["Pitch", 0.16, 0.22, -30],
+      ["Pitch", 0.18, 0.26, -45],
+      ["Pitch", 0.22, 0.26, -60],
+      ["Pitch", 0.20, 0.26, -75]
+    ];
+    var viaOk = true;
+    for (var vi = 0; vi < viaPts.length; vi++) {
+      var vs = elbowSols(viaPts[vi][1], viaPts[vi][2], viaPts[vi][3]);
+      if (!vs.length) { viaOk = false; break; }
+      tuned.push({ name: viaPts[vi][0], sols: vs });
+    }
+    if (viaOk) {
+      tuned.push({ name: "place:hold", sols: solved.hold });
+      tuned.push({ name: "place:release", sols: solved.release });
+      var dep = elbowSols(R.y + 0.0294, R.z - 0.14, R.a);
+      if (dep.length) tuned.push({ name: "Depart", sols: dep });
+      tuned.push({ name: "Retract", sols: [HOME_Q.slice()] });
+      var tunedChain = linkStages(tuned);
+      if (tunedChain.ok) {
+        var tunedKeys = stamp(chainItems(tunedChain.seq, Number(place.jawMm), Number(pick.jawMm)));
+        if (!sweepMotion(tunedKeys)) return { error: "", keys: tunedKeys };
+      }
+    }
+    var lifts = [];
+    var zgs = [0.25, 0.4, 0.55, 0.7, 0.15];
+    var yls = [0.02, 0.035, 0.05, 0.065];
+    for (var zi = 0; zi < zgs.length; zi++) {
+      for (var yi = 0; yi < yls.length; yi++) {
+        var lp = { y: G.y + yls[yi], z: G.z + zgs[zi] * (H.z - G.z), a: G.a };
+        var ls = ikSolve(lp.y, lp.z, lp.a);
+        if (ls.length) lifts.push({ p: lp, sols: ls });
+      }
+    }
+    if (!lifts.length) {
+      return { error: "lift toward place:hold unreachable", keys: homeKeys(Number(place.jawMm)) };
+    }
+    var candidates = [];
+    var failFar = -1;
+    var failNext = "";
+    for (var li = 0; li < lifts.length; li++) {
+      var stages = [
+        { name: "pick:approach", sols: solved.approach },
+        { name: "pick:grasp", sols: solved.grasp },
+        { name: "Lift", sols: lifts[li].sols }
+      ];
+      var pitchOk = true;
+      var lp0 = lifts[li].p;
+      for (var pi = 1; pi <= 3; pi++) {
+        var u = pi / 4;
+        var pp = {
+          y: lp0.y + (H.y - lp0.y) * u,
+          z: lp0.z + (H.z - lp0.z) * u,
+          a: lp0.a + (H.a - lp0.a) * u
+        };
+        var ps = ikSolve(pp.y, pp.z, pp.a);
+        if (!ps.length) { pitchOk = false; break; }
+        stages.push({ name: "Pitch", sols: ps });
+      }
+      if (!pitchOk) {
+        if (failFar < 2) { failFar = 2; failNext = "lift toward place:hold"; }
+        continue;
+      }
+      stages.push({ name: "place:hold", sols: solved.hold });
+      stages.push({ name: "place:release", sols: solved.release });
+      stages.push({ name: "Retract", sols: [HOME_Q.slice()] });
+      var chained = linkStages(stages);
+      if (!chained.ok) {
+        if (chained.far > failFar) { failFar = chained.far; failNext = chained.next; }
+        continue;
+      }
+      candidates.push(chained);
+    }
+    if (!candidates.length) {
+      var msg = "lift toward place:hold unreachable";
+      if (failFar < 0) msg = "pick:approach unreachable";
+      else if (failNext === "pick:grasp" || failNext === "place:hold" || failNext === "place:release") msg = failNext + " unreachable";
+      else if (failNext === "lift toward place:hold") msg = "lift toward place:hold unreachable";
+      return { error: msg, keys: homeKeys(Number(place.jawMm)) };
+    }
+    var open = Number(place.jawMm);
+    var closed = Number(pick.jawMm);
+    candidates.sort(function (a, b) { return a.cost - b.cost; });
+    var chosen = null;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var keysTry = stamp(chainItems(candidates[ci].seq, open, closed));
+      if (!sweepMotion(keysTry)) { chosen = keysTry; break; }
+    }
+    if (!chosen) chosen = stamp(chainItems(candidates[0].seq, open, closed));
+    return { error: "", keys: chosen };
+  }
+  function chainItems(seq, open, closed) {
+    var items = [
+      { label: "Home", q: HOME_Q.slice(), gR: open, hold: 0 },
+      { label: "Approach", q: seq[0].q, gR: open, hold: 0 },
+      { label: "Grasp", q: seq[1].q, gR: open, hold: 0 },
+      { label: "Close", q: seq[1].q.slice(), gR: closed, hold: 1 },
+      { label: "Lift", q: seq[2].q, gR: closed, hold: 1 }
+    ];
+    var depart = null;
+    var retract = null;
+    for (var k = 3; k < seq.length; k++) {
+      var nm = seq[k].name;
+      if (nm === "Retract") {
+        retract = { label: "Retract", q: seq[k].q, gR: open, hold: 2 };
+        continue;
+      }
+      if (nm === "Depart") {
+        depart = { label: "Depart", q: seq[k].q, gR: open, hold: 2 };
+        continue;
+      }
+      var label = nm === "place:hold" ? "Hold" : (nm === "place:release" ? "Lower" : nm);
+      items.push({ label: label, q: seq[k].q, gR: closed, hold: 1 });
+    }
+    var lowerQ = seq[1].q;
+    for (var li = items.length - 1; li >= 0; li--) {
+      if (items[li].label === "Lower") { lowerQ = items[li].q; break; }
+    }
+    items.push({ label: "Open", q: lowerQ.slice(), gR: open, hold: 2 });
+    if (depart) items.push(depart);
+    if (retract) items.push(retract);
+    return items;
+  }
+
+  // Identity is the string field `id`, not an enum. A duplicate is a second
+  // object in `tasks` with the same id and its own plane data (yMm is a
+  // millimetre nudge on that plane's y0). Playback uses the first "pick"
+  // and the first "place".
+  function defaultTasks() {
+    return [
+      {
+        id: "pick",
+        object: "strut",
+        jawMm: 14,
+        planes: [
+          { name: "approach", x: PICK.x, y0: PICK.y + 0.040, z: PICK.z, pitch: 0, yMm: 0 },
+          { name: "grasp", x: PICK.x, y0: PICK.y, z: PICK.z, pitch: 0, yMm: 0 }
+        ]
+      },
+      {
+        id: "place",
+        object: "strut",
+        jawMm: 40,
+        planes: [
+          { name: "hold", x: PLACE.x, y0: PLACE.y + 0.100, z: PLACE.z, pitch: -90, yMm: -80 },
+          { name: "release", x: PLACE.x, y0: PLACE.y, z: PLACE.z, pitch: -90, yMm: 0 }
+        ]
+      }
+    ];
+  }
+
+  var frameRoot = new THREE.Group();
+  scene.add(frameRoot);
+  function makePlaneLabel(text) {
+    var c = document.createElement("canvas");
+    c.width = 512; c.height = 128;
+    var g = c.getContext("2d");
+    g.clearRect(0, 0, 512, 128);
+    g.font = "600 54px sans-serif";
+    g.fillStyle = "#f2efe6";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    var tw = g.measureText(text).width;
+    var sc = Math.min(1, 480 / Math.max(tw, 1));
+    g.save();
+    g.translate(256, 64);
+    g.scale(sc, 1);
+    g.fillText(text, 0, 0);
+    g.restore();
+    var tex = new THREE.CanvasTexture(c);
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false
+    }));
+    spr.scale.set(0.11, 0.028, 1);
+    spr.renderOrder = 3;
+    return spr;
+  }
+  function layoutFrames() {
+    while (frameRoot.children.length) frameRoot.remove(frameRoot.children[0]);
+    tasks.forEach(function (task) {
+      task.planes.forEach(function (p) {
+        var yMm = Number(p.yMm);
+        if (!isFinite(yMm)) yMm = 0;
+        var holder = new THREE.Group();
+        holder.position.set(p.x, p.y0 + yMm / 1000, p.z);
+        var axes = new THREE.Group();
+        axes.rotation.x = p.pitch * DEG;
+        var L = 0.03;
+        function axis(dx, dy, dz, color) {
+          var geo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(dx, dy, dz)
+          ]);
+          axes.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: color })));
+        }
+        axis(L, 0, 0, 0xff3355);
+        axis(0, L, 0, 0x3ddc6a);
+        axis(0, 0, L, 0x4aa3ff);
+        holder.add(axes);
+        var lab = makePlaneLabel(String(task.id) + ":" + p.name);
+        lab.position.set(0.01, 0.026, 0);
+        holder.add(lab);
+        frameRoot.add(holder);
+      });
+    });
+  }
+
+  function setStrut(hold) {
+    var g = planeWorld(firstTask("pick"), "grasp") || { x: PICK.x, y: PICK.y, z: PICK.z, a: 0 };
+    var r = planeWorld(firstTask("place"), "release") || { x: PLACE.x, y: PLACE.y, z: PLACE.z, a: -90 };
+    if (hold === 1) {
+      if (strut.parent !== jaw) jaw.attach(strut);
+      strut.position.set(0, 0, 0);
+      strut.rotation.set(0, 0, 0);
+    } else if (hold === 2) {
+      if (strut.parent !== scene) scene.attach(strut);
+      strut.position.set(r.x, r.y, r.z);
+      strut.rotation.set(r.a * DEG, 0, 0);
+    } else {
+      if (strut.parent !== scene) scene.attach(strut);
+      strut.position.set(g.x, g.y, g.z);
+      strut.rotation.set(g.a * DEG, 0, 0);
+    }
+  }
+
+  // Oriented bounding box of a mesh's own geometry (exact for the box
+  // links; the cylinder's box for the pole and the strut; the flat box for
+  // the ground). Not a second, invisible proxy.
+  function meshObb(mesh) {
+    var geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    var bb = geo.boundingBox;
+    var center = bb.getCenter(new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+    var half = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    var e = mesh.matrixWorld.elements;
+    var ax = [
+      new THREE.Vector3(e[0], e[1], e[2]),
+      new THREE.Vector3(e[4], e[5], e[6]),
+      new THREE.Vector3(e[8], e[9], e[10])
+    ];
+    var ex = [half.x, half.y, half.z];
+    for (var i = 0; i < 3; i++) {
+      var len = ax[i].length();
+      if (len < 1e-12) {
+        ax[i].set(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0);
+        ex[i] = 0;
+      } else {
+        ax[i].multiplyScalar(1 / len);
+        ex[i] *= len;
+      }
+    }
+    return { c: center, a: ax, e: ex };
+  }
+  function obbOverlap(A, B) {
+    var axes = [A.a[0], A.a[1], A.a[2], B.a[0], B.a[1], B.a[2]];
+    var i, j;
+    for (i = 0; i < 3; i++) {
+      for (j = 0; j < 3; j++) {
+        var cross = new THREE.Vector3().crossVectors(A.a[i], B.a[j]);
+        if (cross.lengthSq() > 1e-12) axes.push(cross.normalize());
+      }
+    }
+    for (i = 0; i < axes.length; i++) {
+      var ax = axes[i];
+      var ra = A.e[0] * Math.abs(ax.dot(A.a[0])) + A.e[1] * Math.abs(ax.dot(A.a[1])) + A.e[2] * Math.abs(ax.dot(A.a[2]));
+      var rb = B.e[0] * Math.abs(ax.dot(B.a[0])) + B.e[1] * Math.abs(ax.dot(B.a[1])) + B.e[2] * Math.abs(ax.dot(B.a[2]));
+      if (Math.abs(ax.dot(B.c) - ax.dot(A.c)) > ra + rb - 5e-4) return false;
+    }
+    return true;
+  }
+  function excludedPair(a, b, hold) {
+    if (a.link != null && b.link != null && Math.abs(a.link - b.link) <= 1) return true;
+    var x = a.name < b.name ? a.name + "|" + b.name : b.name + "|" + a.name;
+    // The base link is the child of the pole mount and is built into it.
+    // The left jaw stays closed on the pole. Every other pole or ground
+    // overlap still counts, including the strut and the right gripper.
+    if (x === "L-grip|pole" || x === "base link|pole") return true;
+    if (hold === 1 && x === "R-grip|strut") return true;
+    return false;
+  }
+  function formatHits(hits) {
+    var parts = [];
+    var seen = {};
+    for (var i = 0; i < hits.length; i++) {
+      var name = hits[i][0].name + " × " + hits[i][1].name;
+      if (seen[name]) continue;
+      seen[name] = true;
+      parts.push(name);
+    }
+    return parts.join(", ");
+  }
+  function collectHits(hold) {
+    scene.updateMatrixWorld(true);
+    var boxes = [];
+    var i, j, m;
+    for (i = 0; i < colliders.length; i++) {
+      var obbs = [];
+      for (m = 0; m < colliders[i].meshes.length; m++) obbs.push(meshObb(colliders[i].meshes[m]));
+      boxes.push(obbs);
+    }
+    var hits = [];
+    for (i = 0; i < colliders.length; i++) {
+      for (j = i + 1; j < colliders.length; j++) {
+        if (excludedPair(colliders[i], colliders[j], hold)) continue;
+        var hit = false;
+        for (var a = 0; a < boxes[i].length && !hit; a++) {
+          for (var b = 0; b < boxes[j].length; b++) {
+            if (obbOverlap(boxes[i][a], boxes[j][b])) { hit = true; break; }
+          }
+        }
+        if (hit) hits.push([colliders[i], colliders[j]]);
+      }
+    }
+    return hits;
+  }
+  function smoothInv(e) {
+    if (e <= 0) return 0;
+    if (e >= 1) return 1;
+    var u = e;
+    for (var n = 0; n < 8; n++) {
+      var f = u * u * (3 - 2 * u) - e;
+      var d = 6 * u * (1 - u);
+      if (Math.abs(d) < 1e-6) break;
+      u -= f / d;
+    }
+    if (u < 0) return 0;
+    if (u > 1) return 1;
+    return u;
+  }
+  function stepsBetween(a, b) {
+    var maxDeg = 0;
+    var k;
+    for (k = 0; k < 5; k++) maxDeg = Math.max(maxDeg, Math.abs(b.q[k] - a.q[k]));
+    var n = Math.ceil(maxDeg / 2 - 1e-9);
+    if (n < 1) n = 1;
+    var jaw = Math.abs(b.gR - a.gR);
+    if (jaw > 1e-6) {
+      var nj = Math.ceil(jaw / 2 - 1e-9);
+      if (nj > n) n = nj;
+    }
+    return n;
+  }
+  function poseOn(a, b, u) {
+    var q = [];
+    var k;
+    for (k = 0; k < 5; k++) q.push(a.q[k] + (b.q[k] - a.q[k]) * u);
+    return {
+      q: q,
+      gR: a.gR + (b.gR - a.gR) * u,
+      gL: 24,
+      hold: u >= 1 ? b.hold : a.hold,
+      label: u < 0.5 ? a.label : b.label
+    };
+  }
+  function applyPose(p) {
+    applyJoints(p.q);
+    setOpening(lNeg, lPos, p.gL, 0);
+    setOpening(rNeg, rPos, p.gR, 0.005);
+    setStrut(p.hold);
+  }
+  function sweepMotion(keys) {
+    if (!keys || keys.length < 2) return null;
+    var lastClear = null;
+    for (var i = 0; i < keys.length - 1; i++) {
+      var a = keys[i], b = keys[i + 1];
+      var n = stepsBetween(a, b);
+      for (var s = 0; s <= n; s++) {
+        if (i > 0 && s === 0) continue;
+        var u = s / n;
+        var pose = poseOn(a, b, u);
+        applyPose(pose);
+        var hits = collectHits(pose.hold);
+        var t = a.t + (b.t - a.t) * smoothInv(u);
+        if (hits.length) {
+          return {
+            stopT: lastClear ? lastClear.t : t,
+            parts: formatHits(hits),
+            hits: hits,
+            label: pose.label,
+            q: pose.q.map(function (v) { return Math.round(v * 10) / 10; }),
+            gR: Math.round(pose.gR * 10) / 10,
+            hold: pose.hold,
+            t: t
+          };
+        }
+        lastClear = { t: t, label: pose.label };
+      }
+    }
+    return null;
+  }
+  var HIT_COLOR = 0xff3b30;
+  function clearTints() {
+    for (var i = 0; i < colliders.length; i++) {
+      var meshes = colliders[i].meshes;
+      for (var m = 0; m < meshes.length; m++) {
+        if (meshes[m].userData.baseMat) meshes[m].material = meshes[m].userData.baseMat;
+      }
+    }
+  }
+  function showHits(hits) {
+    clearTints();
+    var seen = {};
+    for (var i = 0; i < hits.length; i++) {
+      for (var k = 0; k < 2; k++) {
+        var c = hits[i][k];
+        if (seen[c.name]) continue;
+        seen[c.name] = true;
+        for (var m = 0; m < c.meshes.length; m++) {
+          var mesh = c.meshes[m];
+          if (!mesh.userData.baseMat) mesh.userData.baseMat = mesh.material;
+          var mat = mesh.userData.baseMat.clone();
+          mat.color.setHex(HIT_COLOR);
+          if (mat.emissive) mat.emissive.setHex(0x5a1008);
+          mesh.material = mat;
+        }
+      }
+    }
+  }
+  function smooth(u) { return u * u * (3 - 2 * u); }
+  function sample(t) {
+    var keys = motionKeys;
+    if (!keys.length) return { q: HOME_Q.slice(), gR: 40, hold: 0, label: "Home" };
+    if (t <= 0) return { q: keys[0].q.slice(), gR: keys[0].gR, hold: keys[0].hold, label: keys[0].label };
+    if (t >= 1) {
+      var last = keys[keys.length - 1];
+      return { q: last.q.slice(), gR: last.gR, hold: last.hold, label: last.label };
+    }
+    var i = 0;
+    while (i < keys.length - 2 && keys[i + 1].t < t) i++;
+    var a = keys[i], b = keys[i + 1];
+    var denom = b.t - a.t;
+    var u = denom <= 1e-8 ? 1 : (t - a.t) / denom;
+    var e = smooth(Math.max(0, Math.min(1, u)));
+    var q = a.q.map(function (v, k) { return v + (b.q[k] - v) * e; });
+    return {
+      q: q,
+      gR: a.gR + (b.gR - a.gR) * e,
+      hold: u >= 1 ? b.hold : a.hold,
+      label: e < 0.5 ? a.label : b.label
+    };
+  }
+
+  var jointHost = document.getElementById("joints");
+  var sliders = [];
+  var readouts = [];
+  var suppress = false;
+  for (var i = 0; i < 5; i++) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var lab = document.createElement("label");
+    lab.appendChild(document.createTextNode(NAMES[i]));
+    var num = document.createElement("span");
+    lab.appendChild(num);
+    var inp = document.createElement("input");
+    inp.type = "range";
+    inp.min = String(LIM[i][0]);
+    inp.max = String(LIM[i][1]);
+    inp.step = "0.1";
+    row.appendChild(lab);
+    row.appendChild(inp);
+    jointHost.appendChild(row);
+    sliders.push(inp);
+    readouts.push(num);
+    inp.addEventListener("input", onManual);
+  }
+  function gripRow(title) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var lab = document.createElement("label");
+    lab.appendChild(document.createTextNode(title));
+    var num = document.createElement("span");
+    lab.appendChild(num);
+    var inp = document.createElement("input");
+    inp.type = "range"; inp.min = "8"; inp.max = "45"; inp.step = "0.1";
+    row.appendChild(lab); row.appendChild(inp);
+    jointHost.appendChild(row);
+    inp.addEventListener("input", onManual);
+    return { inp: inp, num: num };
+  }
+  var gL = gripRow("L-grip");
+  var gR = gripRow("R-grip");
+
+  var phaseEl = document.getElementById("phase");
+  var scrub = document.getElementById("scrub");
+  var tn = document.getElementById("tn");
+  var playBtn = document.getElementById("play");
+  var playing = false, manual = false, taskT = 0;
+  var curDeg = [0, 0, 0, 0, 0];
+  var curGL = 24, curGR = 40;
+  var curHold = 0;
+
+  function pushSliders() {
+    suppress = true;
+    for (var k = 0; k < 5; k++) {
+      sliders[k].value = String(curDeg[k]);
+      readouts[k].textContent = curDeg[k].toFixed(1) + "°";
+    }
+    gL.inp.value = String(curGL);
+    gL.num.textContent = curGL.toFixed(1) + " mm";
+    gR.inp.value = String(curGR);
+    gR.num.textContent = curGR.toFixed(1) + " mm";
+    suppress = false;
+  }
+  function drawModel() {
+    applyJoints(curDeg);
+    setOpening(lNeg, lPos, curGL, 0);
+    setOpening(rNeg, rPos, curGR, 0.005);
+  }
+  function applyTask(t) {
+    if (pathHit && t > pathHit.stopT) t = pathHit.stopT;
+    taskT = t;
+    var s = sample(t);
+    curDeg = s.q.slice();
+    curGL = 24;
+    curGR = s.gR;
+    curHold = s.hold;
+    drawModel();
+    setStrut(s.hold);
+    if (pathHit) {
+      phaseEl.textContent = s.label + " · " + pathHit.parts;
+      showHits(pathHit.hits);
+    } else {
+      clearTints();
+      phaseEl.textContent = motionError ? motionError : s.label;
+    }
+    tn.textContent = Math.round(t * 100) + "%";
+    pushSliders();
+  }
+  function onManual() {
+    if (suppress) return;
+    playing = false;
+    manual = true;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    for (var k = 0; k < 5; k++) {
+      curDeg[k] = parseFloat(sliders[k].value);
+      readouts[k].textContent = curDeg[k].toFixed(1) + "°";
+    }
+    curGL = parseFloat(gL.inp.value);
+    curGR = parseFloat(gR.inp.value);
+    gL.num.textContent = curGL.toFixed(1) + " mm";
+    gR.num.textContent = curGR.toFixed(1) + " mm";
+    drawModel();
+    var hits = collectHits(curHold);
+    if (hits.length) {
+      showHits(hits);
+      phaseEl.textContent = "Manual · " + formatHits(hits);
+    } else {
+      clearTints();
+      phaseEl.textContent = "Manual";
+    }
+  }
+
+  scrub.addEventListener("input", function () {
+    playing = false;
+    manual = false;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    applyTask(parseFloat(scrub.value) / 1000);
+    scrub.value = String(Math.round(taskT * 1000));
+  });
+  playBtn.addEventListener("click", function () {
+    if (playing) {
+      playing = false;
+      playBtn.textContent = "Play";
+      playBtn.classList.remove("active");
+      return;
+    }
+    if (motionError) {
+      reachEl.textContent = motionError;
+      phaseEl.textContent = motionError;
+      return;
+    }
+    if (pathHit && taskT >= pathHit.stopT - 1e-4) {
+      applyTask(pathHit.stopT);
+      return;
+    }
+    manual = false;
+    if (taskT >= 1) taskT = 0;
+    playing = true;
+    playBtn.textContent = "Pause";
+    playBtn.classList.add("active");
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    playing = false;
+    manual = false;
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("active");
+    scrub.value = "0";
+    tasks = defaultTasks();
+    renderTasks();
+    refreshMotion();
+    taskT = 0;
+    applyTask(0);
+  });
+  document.getElementById("axes").addEventListener("change", function (e) {
+    var on = e.target.checked;
+    axisGroups.forEach(function (g) { g.visible = on; });
+  });
+
+  var dragging = false, lx = 0, ly = 0;
+  view.addEventListener("mousedown", function (e) {
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    view.classList.add("drag");
+  });
+  window.addEventListener("mouseup", function () {
+    dragging = false; view.classList.remove("drag");
+  });
+  window.addEventListener("mousemove", function (e) {
+    if (!dragging) return;
+    var dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX; ly = e.clientY;
+    theta -= dx * 0.005;
+    phi = Math.max(0.25, Math.min(1.45, phi - dy * 0.005));
+    updateCamera();
+  });
+  view.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    dist = Math.max(0.35, Math.min(2.4, dist * (1 + Math.sign(e.deltaY) * 0.06)));
+    updateCamera();
+  }, { passive: false });
+
+  function resize() {
+    var w = view.clientWidth, h = view.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  var taskHost = document.getElementById("tasks");
+  var reachEl = document.getElementById("reach");
+  function readNumber(el, fallback) {
+    var n = Number(el.value);
+    return el.value.trim() !== "" && isFinite(n) ? n : fallback;
+  }
+  function syncTaskChrome() {
+    var picks = 0, places = 0;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === "pick") picks++;
+      if (tasks[i].id === "place") places++;
+    }
+    var seenPick = false, seenPlace = false;
+    var cards = taskHost.querySelectorAll(".task");
+    for (var c = 0; c < cards.length; c++) {
+      var t = tasks[c];
+      var used = false;
+      if (t.id === "pick" && !seenPick) { used = true; seenPick = true; }
+      if (t.id === "place" && !seenPlace) { used = true; seenPlace = true; }
+      cards[c].querySelector(".used").textContent = used ? "motion" : "";
+      var del = cards[c].querySelector("button.del");
+      var blocked = (t.id === "pick" && picks <= 1) || (t.id === "place" && places <= 1);
+      del.disabled = blocked;
+    }
+  }
+  function renderTasks() {
+    taskHost.innerHTML = "";
+    tasks.forEach(function (task, index) {
+      var card = document.createElement("div");
+      card.className = "task";
+      var head = document.createElement("div");
+      head.className = "taskhead";
+      head.appendChild(document.createTextNode("Task"));
+      var used = document.createElement("span");
+      used.className = "used";
+      head.appendChild(used);
+      card.appendChild(head);
+
+      function field(label, value, onChange, kind) {
+        var row = document.createElement("div");
+        row.className = "field";
+        var span = document.createElement("span");
+        span.textContent = label;
+        var inp = document.createElement("input");
+        inp.type = kind || "text";
+        if (kind === "number") inp.step = "1";
+        inp.value = value;
+        inp.addEventListener("input", function () { onChange(inp); });
+        row.appendChild(span);
+        row.appendChild(inp);
+        return row;
+      }
+      card.appendChild(field("identity", task.id, function (inp) {
+        task.id = inp.value;
+        syncTaskChrome();
+        refreshMotion();
+      }));
+      card.appendChild(field("object", task.object, function (inp) {
+        task.object = inp.value;
+      }));
+      var jawRow = field("jawMm", String(task.jawMm), function (inp) {
+        var n = readNumber(inp, null);
+        if (n === null) return;
+        task.jawMm = n;
+        refreshMotion();
+      }, "number");
+      var em = document.createElement("em");
+      em.textContent = "mm";
+      jawRow.appendChild(em);
+      card.appendChild(jawRow);
+      task.planes.forEach(function (plane) {
+        var row = field(plane.name, String(plane.yMm), function (inp) {
+          var n = readNumber(inp, null);
+          if (n === null) return;
+          plane.yMm = n;
+          refreshMotion();
+        }, "number");
+        row.querySelector("input").title = "Nudge " + plane.name + " along world Y, millimetres";
+        var unit = document.createElement("em");
+        unit.textContent = "mm";
+        row.appendChild(unit);
+        card.appendChild(row);
+      });
+      var btns = document.createElement("div");
+      btns.className = "btns";
+      var dup = document.createElement("button");
+      dup.type = "button";
+      dup.className = "mini";
+      dup.textContent = "Duplicate";
+      dup.addEventListener("click", function () {
+        var copy = JSON.parse(JSON.stringify(tasks[index]));
+        tasks.splice(index + 1, 0, copy);
+        renderTasks();
+        refreshMotion();
+      });
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "mini del";
+      del.textContent = "Delete";
+      del.addEventListener("click", function () {
+        var picks = 0, places = 0;
+        for (var i = 0; i < tasks.length; i++) {
+          if (tasks[i].id === "pick") picks++;
+          if (tasks[i].id === "place") places++;
+        }
+        if (task.id === "pick" && picks <= 1) return;
+        if (task.id === "place" && places <= 1) return;
+        tasks.splice(index, 1);
+        renderTasks();
+        refreshMotion();
+      });
+      btns.appendChild(dup);
+      btns.appendChild(del);
+      card.appendChild(btns);
+      taskHost.appendChild(card);
+    });
+    syncTaskChrome();
+  }
+  function refreshMotion() {
+    var built = buildMotion();
+    motionError = built.error || "";
+    motionKeys = built.keys;
+    pathHit = motionError ? null : sweepMotion(motionKeys);
+    reachEl.textContent = motionError;
+    layoutFrames();
+    if ((motionError || pathHit) && playing) {
+      playing = false;
+      playBtn.textContent = "Play";
+      playBtn.classList.remove("active");
+    }
+    if (!manual) applyTask(taskT);
+    else {
+      drawModel();
+      setStrut(curHold);
+      var hits = collectHits(curHold);
+      if (hits.length) {
+        showHits(hits);
+        phaseEl.textContent = "Manual · " + formatHits(hits);
+      } else {
+        clearTints();
+        phaseEl.textContent = "Manual";
+      }
+    }
+  }
+
+  var hashT = 0;
+  if (location.hash.indexOf("t=") === 1) hashT = parseFloat(location.hash.slice(3)) || 0;
+  scrub.value = String(Math.round(hashT * 1000));
+  taskT = hashT;
+  tasks = defaultTasks();
+  renderTasks();
+  refreshMotion();
+  var last = performance.now();
+  function loop(now) {
+    requestAnimationFrame(loop);
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (playing && !manual) {
+      taskT += dt / DURATION;
+      if (pathHit && taskT >= pathHit.stopT) {
+        taskT = pathHit.stopT;
+        playing = false;
+        playBtn.textContent = "Play";
+        playBtn.classList.remove("active");
+      } else if (taskT >= 1) {
+        taskT = 1;
+        playing = false;
+        playBtn.textContent = "Play";
+        playBtn.classList.remove("active");
+      }
+      scrub.value = String(Math.round(taskT * 1000));
+      applyTask(taskT);
+    }
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
