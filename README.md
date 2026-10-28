@@ -7,12 +7,17 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
 | Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.1.0**) |
 
-**Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
+**Version 2.1.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
+
+![Bamboo arm placing the 7 members of a Warren truss over a pit, replayed from the shipped Motus.Construction plan](docs/media/bamboo-truss-assembly.gif)
+
+*Example 12: the shipped `AssemblyPlanner` plan for the 7-member Warren truss (21 tasks, collision-free), replayed in the Motus.NET viewer.*
 
 ## Contents
 
 - [First plan](#first-plan)
 - [What the Motus tab does](#what-the-motus-tab-does)
+- [Experimental surface](#experimental-surface)
 - [Algorithms and references](#algorithms-and-references)
 - [Requirements](#requirements)
 - [Install from source](#install-from-source)
@@ -54,6 +59,8 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 | <img src="src/Motus.GH/Resources/icons/download-simple-duotone.png" width="24" alt="" /> | **Load Mesh** | STL for Tool geometry |
 | <img src="src/Motus.GH/Resources/icons/gear-six-duotone.png" width="24" alt="" /> | **Joint State** | Joint vector (rad; toggle ° on `J`) |
 | <img src="src/Motus.GH/Resources/icons/crosshair-duotone.png" width="24" alt="" /> | **TCP Pose** | FK joints → TCP plane |
+| <img src="src/Motus.GH/Resources/icons/list-plus-duotone.png" width="24" alt="" /> | **Robot Info** | Planning joint order, per-axis units, collision body names (for Touch) |
+| | **Terrain Patch** | Heightfield mesh (m) for Walk terrain `Tn` (Legged panel) |
 
 **Urdf authoring** (same Model palette): Link / Joint / Assemble / Explode / Attach use `stack`, `gear-six`, `tree-structure`, `list-plus`, `paperclip` — build a mechanism without a file on disk; **Export URDF** writes it out.
 
@@ -69,6 +76,7 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 | <img src="src/Motus.GH/Resources/icons/line-segments-duotone.png" width="24" alt="" /> | **Move** | One PTP / LIN / CIRC / SET / WAIT line |
 | <img src="src/Motus.GH/Resources/icons/stack-duotone.png" width="24" alt="" /> | **Program** | Plan a Motus Move list (industrial motion) |
 | <img src="src/Motus.GH/Resources/icons/list-plus-duotone.png" width="24" alt="" /> | **Planning Group** | Lock non-group joints (SRDF / manual) |
+| | **Pick Place** | Pick/place targets → one Program with Attach/Detach (`10_pick_place.ghx`) |
 
 | Goal type | Planner |
 |-----------|---------|
@@ -87,6 +95,7 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 | <img src="src/Motus.GH/Resources/icons/bounding-box-duotone.png" width="24" alt="" /> | **ColBox** | Box obstacle (half extents, m) |
 | <img src="src/Motus.GH/Resources/icons/intersect-square-duotone.png" width="24" alt="" /> | **ColPlane** | Floor / wall half-space |
 | <img src="src/Motus.GH/Resources/icons/polygon-duotone.png" width="24" alt="" /> | **ColMesh** | Mesh / Brep obstacle |
+| <img src="src/Motus.GH/Resources/icons/bounding-box-duotone.png" width="24" alt="" /> | **Collision Boxes** | Box obstacles from a plane list |
 | <img src="src/Motus.GH/Resources/icons/circles-three-plus-duotone.png" width="24" alt="" /> | **ColScene** | Merge obstacles (+ optional SRDF) → Plan `Collision` |
 | <img src="src/Motus.GH/Resources/icons/paperclip-duotone.png" width="24" alt="" /> | **Attach Body** | Grasped volume in TCP frame → Plan `Attach` |
 
@@ -104,6 +113,26 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 **Family handoff:** serial `Q` = radians (UR MoveJ OK). Stewart `Q` = **leg lengths in meters** (not MoveJ). Legged `Q` = radians for the mechanism — not a UR arm MoveJ. Aerial `Family=aerial` = HolonomicSE3 body poses — not MoveJ (Export bodyPose).
 
 </details>
+
+<details>
+<summary><strong>Assembly</strong> — Structure, Site, Plan, Preview (experimental; click to expand)</summary>
+
+Thin wrappers over Motus.NET [`Motus.Construction`](https://www.nuget.org/packages/Motus.Construction/2.1.0) `AssemblyPlanner.Plan`. The structure is input data; Grasshopper adds no truss-specific logic.
+
+| | Component | What it does |
+|:-:|-----------|--------------|
+| <img src="src/Motus.GH/Resources/icons/line-segments-duotone.png" width="24" alt="" /> | **Assembly Structure** | Member lines (m) → structure; list order = default build order |
+| <img src="src/Motus.GH/Resources/icons/bounding-box-duotone.png" width="24" alt="" /> | **Assembly Site** | Supports on nodes (first = start), obstacles, ground pads, stock point |
+| <img src="src/Motus.GH/Resources/icons/flow-arrow-duotone.png" width="24" alt="" /> | **Assembly Plan** | Pick, carry, place, walk; replay-checked for collisions; runs in the background while **Run** is true |
+| <img src="src/Motus.GH/Resources/icons/eye-duotone.png" width="24" alt="" /> | **Assembly Preview** | Robot meshes, placed and active canes, task label at `t` (0..1) |
+
+Check `Ok` / `V` before using a plan. A live plan (no embedded match) can take minutes. Pins: [docs/grasshopper-components.md#assembly](docs/grasshopper-components.md#assembly).
+
+</details>
+
+## Experimental surface
+
+These are not GA and may change: **Assembly** components and `Motus.Construction`; `Family=aerial` (free-flyer, `11_aerial_hover.ghx`); humanoid (H2) and quadruped (Go2) URDF loads. See [docs/supported-surface.md](docs/supported-surface.md).
 
 ## Algorithms and references
 
@@ -137,13 +166,15 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
 - Motus.NET **2.1.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
-- **Yak live** — `motus` **2.0.0** on Rhino Package Manager (`yak search --all motus`). Source install still supported for tip / CI.
+- **Yak live** — `motus` **2.0.0** is the current Rhino Package Manager release (`yak search --all motus`). **2.1.0** installs from source until it is pushed to Yak.
 
 ## Install
 
-**Package Manager (recommended):** Rhino → Tools → Package Manager → search **motus** → install **2.0.0**.
+**Package Manager:** Rhino → Tools → Package Manager → search **motus** → install **2.0.0** (current Yak release). For **2.1.0**, build from source below.
 
 ## Install from source
+
+Two build modes: **NuGet** (default) restores Motus.NET **2.1.0** packages from nuget.org via [`build/MotusNetPackages.props`](build/MotusNetPackages.props); **UseLocal** references a sibling `../Motus.NET` checkout (tip / CI).
 
 **Windows**
 
@@ -187,10 +218,10 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 
 ## Examples
 
-Nine generated definitions in [`examples/`](examples/README.md) (**never hand-edit `.ghx`** — edit `scripts/generate-examples.mjs`, then regenerate):
+Definitions in [`examples/`](examples/README.md). Generated files: **never hand-edit `.ghx`** — edit `scripts/generate-examples.mjs`, then regenerate (`10_pick_place.ghx` is hand-authored).
 
 <details>
-<summary><strong>Example index</strong> (01–09)</summary>
+<summary><strong>Example index</strong> (01–12)</summary>
 
 | File | Demo |
 |------|------|
@@ -203,6 +234,9 @@ Nine generated definitions in [`examples/`](examples/README.md) (**never hand-ed
 | `07_urdf_gripper_tool.ghx` | Actuated gripper as Tool Description |
 | `08_stewart_tcp_path.ghx` | Stewart TCP Plan (meters) |
 | `09_walking_hexapod.ghx` | Walk graph + N slider (default 6, range 4–12) |
+| `10_pick_place.ghx` | UR10e destack: Collision Boxes + Pick Place → one Program |
+| `11_aerial_hover.ghx` | Free-flyer HolonomicSE3 Start → Goal (experimental) |
+| `12_bamboo_truss_assembly.ghx` | Warren truss: Assembly Structure / Site → Plan → Preview (experimental); static web viewer `12_bamboo_mobile_robot_viewer.html` |
 
 </details>
 
@@ -221,8 +255,9 @@ Exports are neutral trajectories. Prefer **Motus Waypoints** `Q` → joint MoveJ
 
 | Doc | Contents |
 |-----|----------|
-| [docs/regression-matrix.md](docs/regression-matrix.md) | Milestone 1.8 host-readiness checklist (NuGet + Rhino + experimental) |
+| [docs/regression-matrix.md](docs/regression-matrix.md) | Host-readiness checklist (NuGet + Rhino + experimental) |
 | [docs/grasshopper-components.md](docs/grasshopper-components.md) | Every component, pins, planner rules |
+| [docs/supported-surface.md](docs/supported-surface.md) | Supported / advanced / experimental / out |
 | [docs/motus-net/METHODS.md](docs/motus-net/METHODS.md) | Full methods table (API + units + DOI) |
 | [docs/citation-audit.md](docs/citation-audit.md) | Citation coverage audit |
 | [examples/README.md](examples/README.md) | Example coverage matrix |
