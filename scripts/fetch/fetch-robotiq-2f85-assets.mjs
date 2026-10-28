@@ -205,6 +205,8 @@ function patchUrdfGripper(urdfPath) {
 
   const marker = '  <link name="tool0"/>';
   if (!src.includes(marker)) throw new Error(`tool0 link not found in ${urdfPath}`);
+  // Drop blank lines the strip leaves behind so reruns don't grow the file.
+  src = src.replace(/(  <link name="tool0"\/>\r?\n)(?:[ \t]*\r?\n)+/, '$1');
   const replaced = src.replace(marker, `${marker}\n${gripperBlock}`);
   fs.writeFileSync(urdfPath, replaced);
   console.log(`Patched gripper visuals in ${urdfPath}`);
