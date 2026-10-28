@@ -622,8 +622,13 @@ const PIPE = {
   /** Play stage scribble X offset from Plan origin (clears Plan header width). */
   playHeaderDx: 200,
 };
+/** Deterministic GUIDs (seeded per graph builder) so regenerating is a no-op diff — CI enforces it. */
+let idSeed = '';
+let idSeq = 0;
 function id() {
-  return crypto.randomUUID();
+  const h = crypto.createHash('sha1').update(`${idSeed}:${idSeq++}`).digest('hex');
+  const variant = ((parseInt(h[16], 16) & 3) | 8).toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 function esc(s) {
@@ -2142,7 +2147,7 @@ function buildGraph(objects) {
         </chunk>
         <chunk name="DefinitionProperties">
           <items count="4">
-            ${item('Date', 'gh_date', '8', String(Date.now() * 10000 + 621355968000000000))}
+            ${item('Date', 'gh_date', '8', String(Date.UTC(2026, 0, 1) * 10000 + 621355968000000000))}
             ${item('Description', 'gh_string', '10', esc(description))}
             ${item('KeepOpen', 'gh_bool', '1', 'true')}
             ${item('Name', 'gh_string', '10', fileName)}
@@ -3345,6 +3350,8 @@ const buildList = onlyGraph
   : graphs;
 
 for (const buildFn of buildList) {
+  idSeed = buildFn.name;
+  idSeq = 0;
   const xml = buildFn();
   const meta = lastGraphMeta;
   if (!meta?.fileName) throw new Error(`missing meta for ${buildFn.name}`);

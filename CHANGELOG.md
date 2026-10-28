@@ -13,6 +13,10 @@
 ### Fixed
 
 - qa-smoke: Example 12 block no longer references undefined `examples` / missing types (PR #36 smoke compile failure).
+- CI smoke: `.ghx` regen diff check and planner-only fence now actually fail on Windows (bash shell; `git grep` instead of the missing `rg`). `generate-examples.mjs` emits deterministic GUIDs / date so regenerating is a no-op; example `.ghx` regenerated once.
+- `fetch-robotiq-2f85-assets.mjs` no longer adds a blank line to `ur10e_robotiq.urdf` on every run.
+- `pack-yak.sh` / `build.ps1 -Yak`: drop the stale "do not push until 2.0.0" gate; production push stays a manual `yak push`.
+- `10_pick_place.ghx` library metadata 2.0.0 → 2.1.0.
 
 ## 2.0.0 — Public product · Yak GA — 2026-09-20
 

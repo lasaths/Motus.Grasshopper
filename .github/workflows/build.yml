@@ -108,6 +108,7 @@ jobs:
         run: node scripts/fetch/fetch-ur10e-assets.mjs
 
       - name: Regenerate + validate example GHX
+        shell: bash
         run: |
           node scripts/generate-examples.mjs
           git diff --exit-code -- examples/*.ghx
@@ -116,15 +117,21 @@ jobs:
       - name: Planner-only dependency fence
         shell: bash
         run: |
-          if rg -n -i "(rtde|socket|tcpclient|udpclient|serialport|modbus|opcua|robot command)" src/Motus.GH; then
+          # git grep: always present on the runner (rg is not on windows-latest). 0 = match, 1 = none, >1 = error.
+          rc=0
+          git grep -n -i -E "(rtde|socket|tcpclient|udpclient|serialport|modbus|opcua|robot command)" -- src/Motus.GH || rc=$?
+          if [ "$rc" -eq 0 ]; then
             echo "Planner-only fence failed: control transport dependency detected."
+            exit 1
+          elif [ "$rc" -ne 1 ]; then
+            echo "Planner-only fence could not run (git grep exit $rc)."
             exit 1
           fi
 
       - name: Verify Motus.NET NuGet pin + docs
         run: node scripts/verify/verify-motus-net-pin.mjs
 
-      - name: Verify Yak packaging anatomy (2.0.0 live)
+      - name: Verify Yak packaging anatomy
         run: node scripts/verify/verify-yak-packaging.mjs
 
       # Compiles against NuGet RhinoCommon (ref-only). Runtime loads Rhino 8 System\RhinoCommon.dll.
