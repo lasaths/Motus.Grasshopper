@@ -29,7 +29,7 @@ src/Motus.GH/
   Preview/ UI/    # Scrub, ButtonAttributes, FK preview
   Resources/icons/# Phosphor duotone PNGs (embedded)
 examples/         # 01–10 GHX + assets/ (URDF/SRDF); 10 Cassis-authored
-packaging/yak/    # Package Manager manifest + icon (motus 2.0.0 live)
+packaging/yak/    # Package Manager manifest + icon (motus 2.1.0 live)
 scripts/          # generate-examples, fetch/, verify/, pack-yak, qa-smoke
 ```
 
@@ -39,7 +39,7 @@ After code changes: `graphify update .` (AST graph in `graphify-out/`).
 
 ## Motus.NET
 
-Pinned **2.1.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) — Motus.NET **2.1.0** (incl. Motus.Construction) is live on nuget.org. Default build restores NuGet; optional `-p:UseMotusNetProjectReference=true` / `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)) for sibling tip. CI NuGet jobs use the props pin; Prefer UseLocal jobs still checkout `lasaths/Motus.NET`. Yak `motus` **2.0.0** is live on Rhino Package Manager; pack with `-Yak` / `./scripts/pack-yak.sh` for local rebuilds.
+Pinned **2.1.0** via [`build/MotusNetPackages.props`](build/MotusNetPackages.props) — Motus.NET **2.1.0** (incl. Motus.Construction) is live on nuget.org. Default build restores NuGet; optional `-p:UseMotusNetProjectReference=true` / `./build.ps1 -UseLocal` ([`build/MotusNetLocal.props`](build/MotusNetLocal.props)) for sibling tip. CI NuGet jobs use the props pin; Prefer UseLocal jobs still checkout `lasaths/Motus.NET`. Yak `motus` **2.1.0** is live on Rhino Package Manager (first public 2.0.0); pack with `-Yak` / `./scripts/pack-yak.sh` for local rebuilds.
 
 | Package | Role |
 |---------|------|

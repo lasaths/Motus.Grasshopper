@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 — Assembly planner · Motus.NET 2.1.0 (not yet on Yak)
+## 2.1.0 — Assembly planner · Motus.NET 2.1.0 — 2026-10-28
 
 ### Added
 
@@ -8,7 +8,7 @@
 
 ### Changed
 
-- `MotusNetVersion` pin **2.0.0 → 2.1.0** ([Motus.NET 2.1.0](https://www.nuget.org/packages/Motus.Core/2.1.0) on nuget.org); NuGet mode adds the `Motus.Construction` package reference. Plugin / yak manifest version **2.0.0 → 2.1.0** to match the pin (`verify-yak-packaging`); Yak `motus` **2.0.0** remains the live Package Manager release (2.1.0 not published).
+- `MotusNetVersion` pin **2.0.0 → 2.1.0** ([Motus.NET 2.1.0](https://www.nuget.org/packages/Motus.Core/2.1.0) on nuget.org); NuGet mode adds the `Motus.Construction` package reference. Plugin / yak manifest version **2.0.0 → 2.1.0** to match the pin (`verify-yak-packaging`); Yak `motus` **2.1.0** live on Package Manager.
 
 ### Fixed
 
