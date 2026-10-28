@@ -485,10 +485,66 @@ const MOTUS = {
       { name: 'Support', nick: 'Sp', desc: 'Support polygon', typeId: PTYPE.curve },
     ],
   },
+  // Motus.Construction assembly planner (Assembly subcategory; compiled with the sibling Motus.NET).
+  assemblyStructure: { guid: '8585f8a2-f9c2-46a2-8216-959233e54b3d', name: 'Motus Assembly Structure', nick: 'AStruct', w: 96, h: 104,
+    desc: 'Structure to assemble from member lines (m). List order = default build order.',
+    inputs: [
+      { name: 'Members', nick: 'M', desc: 'Member lines node to node (m)', optional: false, access: 1 },
+      { name: 'Nodes', nick: 'N', desc: 'Optional node points', optional: true, access: 1 },
+      { name: 'Names', nick: 'Nm', desc: 'Optional node names', optional: true, access: 1 },
+      { name: 'Lengths', nick: 'L', desc: 'Optional cane length per member (m)', optional: true, access: 1 },
+    ],
+    outputs: [
+      { name: 'Structure', nick: 'S', desc: 'Assembly structure' },
+      { name: 'Ids', nick: 'Id', desc: 'Member ids in build order', access: 1 },
+    ] },
+  assemblySite: { guid: 'd627c341-a801-4299-9c9e-dfe45d11a642', name: 'Motus Assembly Site', nick: 'ASite', w: 96, h: 144,
+    desc: 'Assembly site: supports on structure nodes, obstacles, optional ground and stock.',
+    inputs: [
+      { name: 'Supports', nick: 'Sp', desc: 'Support points on structure nodes; first = start support', optional: false, access: 1 },
+      { name: 'Obstacles', nick: 'O', desc: 'Optional obstacle Breps / Meshes', optional: true, access: 1 },
+      { name: 'Ground', nick: 'G', desc: 'Optional ground pads', optional: true, access: 1 },
+      { name: 'Stock', nick: 'St', desc: 'Optional stock point', optional: true },
+      { name: 'Clamp', nick: 'Ch', desc: 'Optional clamp height (m)', optional: true },
+      { name: 'Heading', nick: 'Hd', desc: 'Optional clamp heading per support (deg)', optional: true, access: 1 },
+    ],
+    outputs: [{ name: 'Site', nick: 'Si', desc: 'Assembly site' }] },
+  assemblyPlan: { guid: 'dacb82c2-aaaa-4703-a074-ce482518c24f', name: 'Motus Assembly Plan', nick: 'APlan', w: 96, h: 144,
+    desc: 'Plan the robotic assembly (Motus.Construction) in the background when Run is true.',
+    inputs: [
+      { name: 'Structure', nick: 'S', desc: 'From Motus Assembly Structure', optional: false },
+      { name: 'Site', nick: 'Si', desc: 'From Motus Assembly Site', optional: false },
+      { name: 'Robot', nick: 'U', desc: 'Robot URDF path or XML', optional: false },
+      { name: 'Margin', nick: 'Cm', desc: 'Clearance margin (m)', optional: true, number: 0.002 },
+      { name: 'Shipped', nick: 'Sh', desc: 'Use the embedded plan when the input matches it', optional: true, bool: false },
+      { name: 'Run', nick: 'R', desc: 'Plan in the background when true', optional: true, bool: false },
+    ],
+    outputs: [
+      { name: 'Plan', nick: 'P', desc: 'Assembly plan' },
+      { name: 'Tasks', nick: 'T', desc: 'Task sequence', access: 1 },
+      { name: 'Verdict', nick: 'V', desc: 'Built members and collision verdict' },
+      { name: 'CollisionFree', nick: 'Ok', desc: 'All built and collision-free' },
+    ] },
+  assemblyPreview: { guid: 'edc2b97a-2acb-461b-95af-0530cd3c983d', name: 'Motus Assembly Preview', nick: 'APrev', w: 96, h: 104,
+    desc: 'Assembly plan at time t (0..1): robot, placed canes, active cane, task label.',
+    inputs: [
+      { name: 'Plan', nick: 'P', desc: 'From Motus Assembly Plan', optional: false },
+      { name: 'Time', nick: 't', desc: 'Normalised time 0..1', optional: true, number: 0 },
+    ],
+    outputs: [
+      { name: 'Robot', nick: 'R', desc: 'Robot part meshes', access: 1 },
+      { name: 'Placed', nick: 'C', desc: 'Placed canes', access: 1 },
+      { name: 'Active', nick: 'A', desc: 'Active cane', access: 1 },
+      { name: 'Task', nick: 'L', desc: 'Task label' },
+      { name: 'Holding', nick: 'H', desc: 'Robot holds a cane' },
+    ] },
 };
 
 const NATIVE = {
   panel: { guid: '59e0b89a-e487-49f8-bab8-b5bab16be14c', name: 'Panel', w: 160, h: 60 },
+  paramLine: { guid: '8529dbdf-9b6f-42e9-8e1f-c7a2bde56a70', name: 'Line', w: 50, h: 24 },
+  paramPoint: { guid: 'fbac3e32-f100-4292-8692-77240a42fd1a', name: 'Point', w: 50, h: 24 },
+  booleanToggle: { guid: '2e78987b-9dfb-42a2-8b76-3923ac8bd91a', name: 'Boolean Toggle', w: 100, h: 22 },
   // GUIDs verified live against Rhino 8 / Grasshopper (placeholders mean stale GUIDs).
   constructPoint: { guid: '3581f42a-9592-4549-bd6b-1c0fc39d067b', name: 'Construct Point', nick: 'Pt', w: 44, h: 44,
     inputs: ['X', 'Y', 'Z'], outputs: ['Point'] },
@@ -566,8 +622,13 @@ const PIPE = {
   /** Play stage scribble X offset from Plan origin (clears Plan header width). */
   playHeaderDx: 200,
 };
+/** Deterministic GUIDs (seeded per graph builder) so regenerating is a no-op diff — CI enforces it. */
+let idSeed = '';
+let idSeq = 0;
 function id() {
-  return crypto.randomUUID();
+  const h = crypto.createHash('sha1').update(`${idSeed}:${idSeq++}`).digest('hex');
+  const variant = ((parseInt(h[16], 16) & 3) | 8).toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 function esc(s) {
@@ -1264,6 +1325,108 @@ function nativeFilePath(x, y, path, filter = '*.urdf|*.urdf|All files|*.*') {
                 </chunk>
               </chunks>
             </chunk>`, node };
+}
+
+/** Internalised GH data items (GH_IO names verified with Grasshopper's GH_Line / GH_Point Write). */
+function persistentGoo(itemsXml) {
+  const chunks = itemsXml.map((x, i) => `<chunk name="Item" index="${i}">
+                                  <items count="1">
+                                    ${x}
+                                  </items>
+                                </chunk>`).join('\n                                ');
+  return `<chunk name="PersistentData">
+                          <items count="1">
+                            ${item('Count', 'gh_int32', '3', '1')}
+                          </items>
+                          <chunks count="1">
+                            <chunk name="Branch" index="0">
+                              <items count="2">
+                                ${item('Count', 'gh_int32', '3', String(itemsXml.length))}
+                                ${item('Path', 'gh_string', '10', '{0}')}
+                              </items>
+                              <chunks count="${itemsXml.length}">
+                                ${chunks}
+                              </chunks>
+                            </chunk>
+                          </chunks>
+                        </chunk>`;
+}
+
+const ghNum = (v) => String(Math.round(v * 1e9) / 1e9);
+
+/** Native floating parameter (Line / Point) with internalised Rhino geometry — Rhino-native input. */
+function nativeGeometryParam(kind, x, y, nick, itemsXml) {
+  const spec = NATIVE[kind];
+  const instance = id();
+  const node = { key: kind, instance, outputs: [{ name: spec.name, _guid: instance }] };
+  return { xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', spec.guid)}
+                ${item('Name', 'gh_string', '10', spec.name)}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="6">
+                    ${item('Description', 'gh_string', '10', `Internalised ${spec.name.toLowerCase()} data`)}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', spec.name)}
+                    ${item('NickName', 'gh_string', '10', esc(nick))}
+                    ${item('Optional', 'gh_bool', '1', 'false')}
+                    ${item('SourceCount', 'gh_int32', '3', '0')}
+                  </items>
+                  <chunks count="2">
+                    ${bounds(x, y, spec.w, spec.h)}
+                    ${persistentGoo(itemsXml)}
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`, node };
+}
+
+function nativeLines(x, y, nick, lines) {
+  return nativeGeometryParam('paramLine', x, y, nick, lines.map(([a, b]) =>
+    `<item name="Line" type_name="gh_line" type_code="70"><Ax>${ghNum(a[0])}</Ax><Ay>${ghNum(a[1])}</Ay><Az>${ghNum(a[2])}</Az><Bx>${ghNum(b[0])}</Bx><By>${ghNum(b[1])}</By><Bz>${ghNum(b[2])}</Bz></item>`));
+}
+
+function nativePoints(x, y, nick, points) {
+  return nativeGeometryParam('paramPoint', x, y, nick, points.map((p) =>
+    `<item name="Coordinate" type_name="gh_point3d" type_code="51"><X>${ghNum(p[0])}</X><Y>${ghNum(p[1])}</Y><Z>${ghNum(p[2])}</Z></item>`));
+}
+
+/** Native Boolean Toggle. Wire outRef(node, 'Boolean Toggle'). */
+function nativeToggle(x, y, value, nick) {
+  const spec = NATIVE.booleanToggle;
+  const instance = id();
+  const node = { key: 'booleanToggle', instance, outputs: [{ name: spec.name, _guid: instance }] };
+  return { xml: `<chunk name="Object" index="PLACEHOLDER">
+              <items count="2">
+                ${item('GUID', 'gh_guid', '9', spec.guid)}
+                ${item('Name', 'gh_string', '10', spec.name)}
+              </items>
+              <chunks count="1">
+                <chunk name="Container">
+                  <items count="5">
+                    ${item('Description', 'gh_string', '10', 'Boolean (true/false) toggle')}
+                    ${item('InstanceGuid', 'gh_guid', '9', instance)}
+                    ${item('Name', 'gh_string', '10', spec.name)}
+                    ${item('NickName', 'gh_string', '10', esc(nick))}
+                    ${item('ToggleValue', 'gh_bool', '1', value ? 'true' : 'false')}
+                  </items>
+                  <chunks count="1">
+                    ${bounds(x, y, spec.w, spec.h)}
+                  </chunks>
+                </chunk>
+              </chunks>
+            </chunk>`, node };
+}
+
+/** Wire one source into a native Panel (output display). */
+function withSource(part, ref) {
+  const xml = part.xml
+    .replace(/(<chunk name="Container">\s*<items count=")(\d+)(">)/, (_, a, n, c) => `${a}${Number(n) + 1}${c}`)
+    .replace(/(\s*)(<item name="SourceCount" type_name="gh_int32" type_code="3">)0(<\/item>)/,
+      (_, ws, open, close) => `${ws}${sourceItem(0, ref._guid).trim()}${ws}${open}1${close}`);
+  return { ...part, xml };
 }
 
 function tcpGoalPlane(x, y) {
@@ -1984,7 +2147,7 @@ function buildGraph(objects) {
         </chunk>
         <chunk name="DefinitionProperties">
           <items count="4">
-            ${item('Date', 'gh_date', '8', String(Date.now() * 10000 + 621355968000000000))}
+            ${item('Date', 'gh_date', '8', String(Date.UTC(2026, 0, 1) * 10000 + 621355968000000000))}
             ${item('Description', 'gh_string', '10', esc(description))}
             ${item('KeepOpen', 'gh_bool', '1', 'true')}
             ${item('Name', 'gh_string', '10', fileName)}
@@ -3062,7 +3225,90 @@ function graph11() {
   return buildGraph(objs);
 }
 
-const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11];
+/**
+ * Example 12: bamboo truss assembly (Motus.Construction AssemblyPlanner).
+ * Rhino-native Warren truss lines + support points → Structure / Site → Plan (Run toggle, background)
+ * → Preview (time slider). Generic components; the structure is just input data.
+ */
+const WARREN = (() => {
+  const p = 0.30;            // panel = cane 0.28 m + 2 × 0.01 m node gap
+  const h = p * Math.sqrt(3) / 2;
+  const y = -0.11;           // structure plane (Rhino Y)
+  const z = 0.19;            // bottom chord height (Rhino Z)
+  const n = { A: [-p, y, z], M: [0, y, z], D: [p, y, z], T1: [-p / 2, y, z + h], T2: [p / 2, y, z + h] };
+  const order = [['A', 'M'], ['A', 'T1'], ['T1', 'M'], ['M', 'T2'], ['T1', 'T2'], ['M', 'D'], ['T2', 'D']];
+  return { n, names: Object.keys(n), lines: order.map(([a, b]) => [n[a], n[b]]), supports: [n.A, n.D] };
+})();
+
+function graph12() {
+  const { title, note } = exampleHeader(
+    '12 · Bamboo truss assembly',
+    'Warren truss lines (Rhino) → Assembly Structure + Site → Assembly Plan (Run) → Assembly Preview (t). Planning / preview only.',
+  );
+  const hy = PIPE.y0;
+  const cy = stageContentY(hy);
+  const rx = PIPE.x0;
+
+  // Structure — Rhino-native lines (build order = list order), nodes, names
+  const lines = nativeLines(rx, cy, 'Warren', WARREN.lines);
+  const nodes = hidePreview(nativePoints(rx, cy + 50, 'Nodes', Object.values(WARREN.n)));
+  const sx = rx + 120;
+  const structure = motusComponent('assemblyStructure', sx, cy, {
+    Members: [outRef(lines.node, 'Line')],
+    Nodes: [outRef(nodes.node, 'Point')],
+  }, { textList: { Names: WARREN.names } });
+
+  // Site — support points (first = robot start support)
+  const supports = nativePoints(rx, cy + 170, 'Supports', WARREN.supports);
+  const site = motusComponent('assemblySite', sx, cy + 150, {
+    Supports: [outRef(supports.node, 'Point')],
+  });
+
+  // Plan — URDF (relative asset), Run toggle; Shipped on = embedded plan when the layout matches
+  const planX = sx + 260;
+  const urdf = pathPanel(planX - 10, cy, repoRel('assets', 'icd', 'bamboo_icd.urdf'), 'Urdf', 200, 36);
+  const run = nativeToggle(planX - 10, cy + 56, false, 'Run');
+  const plan = motusComponent('assemblyPlan', planX, cy + 100, {
+    Structure: [outRef(structure.node, 'Structure')],
+    Site: [outRef(site.node, 'Site')],
+    Robot: [outRef(urdf.node, 'Text')],
+    Run: [outRef(run.node, 'Boolean Toggle')],
+  }, { bools: { Shipped: true } });
+  const verdict = nativePanel(planX - 10, cy + 270, '', 'Verdict', 200, 40);
+
+  // Play — time slider → preview
+  const px = planX + 280;
+  const t = nativeNumberSlider(px, cy, { value: 0, min: 0, max: 1, nick: 't', w: 220, digits: 3, interval: 0 });
+  const preview = motusComponent('assemblyPreview', px, cy + 50, {
+    Plan: [outRef(plan.node, 'Plan')],
+    Time: [outRef(t.node, 'Number')],
+  });
+  const task = nativePanel(px, cy + 180, '', 'Task', 220, 40);
+
+  const gStruct = stageGroup('Structure', [lines, nodes, structure], GROUP_COLOUR.model, rx, hy);
+  const gSite = stageGroup('Site', [supports, site], GROUP_COLOUR.env, rx, cy + 120);
+  const gPlan = stageGroup('Plan', [urdf, run, plan, verdict], GROUP_COLOUR.plan, planX - 10, hy);
+  const gPlay = stageGroup('Play', [t, preview, task], GROUP_COLOUR.play, px, hy);
+
+  // Panels show outputs: wire Verdict / Task into the panels.
+  const objs = [
+    title, note,
+    lines, nodes, structure, supports, site,
+    urdf, run, plan, withSource(verdict, outRef(plan.node, 'Verdict')),
+    t, preview, withSource(task, outRef(preview.node, 'Task')),
+    gStruct.header, gSite.header, gPlan.header, gPlay.header,
+    gStruct.group, gSite.group, gPlan.group, gPlay.group,
+  ];
+  objs._meta = {
+    fileName: '12_bamboo_truss_assembly.ghx',
+    description:
+      'Bamboo Warren truss assembly (Motus.Construction): Rhino lines + supports → Motus Assembly Structure / Site → Motus Assembly Plan (assets/icd/bamboo_icd.urdf; Run toggle, background) → Motus Assembly Preview (t). Needs the Motus.NET sibling build (Motus.Construction). Planning / preview only.',
+    view: { x: 520, y: 220, zoom: 0.7 },
+  };
+  return buildGraph(objs);
+}
+
+const graphs = [graph01, graph02, graph03, graph04, graph05, graph06, graph07, graph08, graph09, graph11, graph12];
 // graph10 (10_pick_place.ghx) is Cassis-authored — not in default regen list.
 const legacy = [
   '01_basic_planning.ghx',
@@ -3080,6 +3326,7 @@ const legacy = [
   '11_gripper_motion_program.ghx',
   '12_sequential_goals.ghx',
   '10_funky_octopod.ghx',
+  '12_bamboo_mobile_robot.ghx',
 ];
 
 for (const name of legacy) {
@@ -3091,7 +3338,7 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const onlyGraph = onlyArg?.slice('--only='.length);
 const onlyBuilders = {
   1: graph01, 2: graph02, 3: graph03, 4: graph04, 5: graph05,
-  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11,
+  6: graph06, 7: graph07, 8: graph08, 9: graph09, 10: graph10, 11: graph11, 12: graph12,
 };
 
 const buildList = onlyGraph
@@ -3103,6 +3350,8 @@ const buildList = onlyGraph
   : graphs;
 
 for (const buildFn of buildList) {
+  idSeed = buildFn.name;
+  idSeq = 0;
   const xml = buildFn();
   const meta = lastGraphMeta;
   if (!meta?.fileName) throw new Error(`missing meta for ${buildFn.name}`);

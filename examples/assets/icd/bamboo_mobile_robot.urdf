@@ -1,0 +1,287 @@
+<?xml version="1.0"?>
+<!-- ICD/LIS Bamboo Mobile Robot
+     5-DOF symmetric brachiation robot for bamboo bundle construction.
+     
+     Team: Nicolas Kubail Kalousdian, Samuel Leder, Achim Menges, Marc Toussaint
+     Institute for Computational Design and Construction (ICD), University of Stuttgart
+     Learning, Intelligent Systems Lab (LIS), University of Tübingen
+     
+     Published kinematics: RAL 2022 (Kalousdian et al., "Learning Robotic Manipulation 
+     of Natural Materials with Variable Properties for Construction Tasks")
+     
+     5-DOF symmetric chain:
+     - θ1: Wrist Z-axis [-170°, 170°]
+     - θ2: Elbow X-axis [-90°, 90°]  
+     - θ3: Shoulder X-axis [-135°, 135°]
+     - θ4: Elbow X-axis [-90°, 90°]
+     - θ5: Wrist Z-axis [-170°, 170°]
+     
+     Dimensions: ~40 cm height, 2.3 kg mass (ACADIA 2021)
+     Motors: Dynamixel MX-64 (shoulder, elbows), XL430-W250-T (wrists, claws)
+     
+     Note: Claws are variable-diameter grippers that adapt to irregular bamboo bundles.
+     This URDF models claws as fixed geometry; actual hardware has adaptive grip.
+-->
+<robot name="icd_bamboo_mobile_robot">
+  
+  <!-- Base link: Left claw (can act as base or end-effector) -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.08" radius="0.04"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.08" radius="0.04"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Wrist link 1 (small body segment after left claw) -->
+  <link name="wrist1_link">
+    <visual>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.06"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.06"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- θ1: Left wrist (axial Z-axis rotation) -->
+  <joint name="wrist1_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="wrist1_link"/>
+    <origin xyz="0 0 0.04" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.967" upper="2.967" effort="10" velocity="3.0"/>
+  </joint>
+
+  <!-- Link segment between wrist1 and elbow1 -->
+  <link name="link1">
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.10" radius="0.015"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.10" radius="0.015"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wrist1_to_link1" type="fixed">
+    <parent link="wrist1_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Elbow link 1 -->
+  <link name="elbow1_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.06 0.04"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.06 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- θ2: Left elbow (revolute X-axis) -->
+  <joint name="elbow1_joint" type="revolute">
+    <parent link="link1"/>
+    <child link="elbow1_link"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.571" upper="1.571" effort="10" velocity="3.0"/>
+  </joint>
+
+  <!-- Link segment between elbow1 and shoulder -->
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.09" radius="0.015"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.09" radius="0.015"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="elbow1_to_link2" type="fixed">
+    <parent link="elbow1_link"/>
+    <child link="link2"/>
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Shoulder link (central pivot) -->
+  <link name="shoulder_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.07 0.07 0.04"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.07 0.07 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- θ3: Shoulder (central revolute X-axis) -->
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="link2"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.356" upper="2.356" effort="10" velocity="3.0"/>
+  </joint>
+
+  <!-- Link segment between shoulder and elbow2 -->
+  <link name="link3">
+    <visual>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.09" radius="0.015"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.09" radius="0.015"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="shoulder_to_link3" type="fixed">
+    <parent link="shoulder_link"/>
+    <child link="link3"/>
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Elbow link 2 -->
+  <link name="elbow2_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.06 0.04"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.06 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- θ4: Right elbow (revolute X-axis) -->
+  <joint name="elbow2_joint" type="revolute">
+    <parent link="link3"/>
+    <child link="elbow2_link"/>
+    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.571" upper="1.571" effort="10" velocity="3.0"/>
+  </joint>
+
+  <!-- Link segment between elbow2 and wrist2 -->
+  <link name="link4">
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.10" radius="0.015"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.10" radius="0.015"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="elbow2_to_link4" type="fixed">
+    <parent link="elbow2_link"/>
+    <child link="link4"/>
+    <origin xyz="0 0 0.02" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Wrist link 2 (small body segment before right claw) -->
+  <link name="wrist2_link">
+    <visual>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.06"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.06"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- θ5: Right wrist (axial Z-axis rotation) -->
+  <joint name="wrist2_joint" type="revolute">
+    <parent link="link4"/>
+    <child link="wrist2_link"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.967" upper="2.967" effort="10" velocity="3.0"/>
+  </joint>
+
+  <!-- Right claw (end effector) -->
+  <link name="right_claw">
+    <visual>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.08" radius="0.04"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="0.08" radius="0.04"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="wrist2_to_claw" type="fixed">
+    <parent link="wrist2_link"/>
+    <child link="right_claw"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Tool frame at right claw tip -->
+  <link name="tool0"/>
+
+  <joint name="tool0_joint" type="fixed">
+    <parent link="right_claw"/>
+    <child link="tool0"/>
+    <origin xyz="0 0 0.08" rpy="0 0 0"/>
+  </joint>
+
+</robot>

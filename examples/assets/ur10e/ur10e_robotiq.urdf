@@ -194,9 +194,6 @@
     <limit lower="0" upper="0.8" velocity="0.5" effort="50"/>
     <mimic joint="robotiq_left_knuckle" multiplier="1"/>
   </joint>
-
-
-
   <joint name="base_link-base_link_inertia" type="fixed">
     <parent link="base_link"/><child link="base_link_inertia"/>
     <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>

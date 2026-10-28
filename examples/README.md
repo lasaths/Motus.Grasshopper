@@ -5,11 +5,12 @@
 ```bash
 node scripts/generate-examples.mjs
 node scripts/verify/validate-ghx.mjs
+node scripts/verify/verify-example-viewers.mjs
 ```
 
 ## Prerequisite: Motus.GH installed
 
-Examples target the **current Motus.Grasshopper** build (Motus.NET **2.0.0** NuGet pin). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
+Examples target the **current Motus.Grasshopper** build (Motus.NET **2.1.0** NuGet pin). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
 
 ```powershell
 .\build.ps1 -Configuration Release -Install
@@ -39,6 +40,7 @@ Component behavior: [docs/grasshopper-components.md](../docs/grasshopper-compone
 | `09_walking_hexapod.ghx` | Body+Leg+Mechanism → Walk; Number Slider `N` (4–12, default 6) |
 | `10_pick_place.ghx` | UR10e destack: C# layout (5×4 tower → 5 columns × 4) + Collision Boxes + Pick Place (`Touch=robotiq_2f85`) → one Program; plan ColScene empty; preview ColScene = table+bricks |
 | `11_aerial_hover.ghx` | Motus 2.1: free-flyer HolonomicSE3 Start→Goal (WorldXY body); Preview / Export bodyPose; `assets/aerial/free_flyer_box.urdf` (arm pass-off deferred) |
+| `12_bamboo_truss_assembly.ghx` | Bamboo Warren truss assembly (Motus.Construction, experimental; NuGet 2.1.0 or `-UseLocal`): Rhino lines + supports → Assembly Structure / Site → Assembly Plan (`assets/icd/bamboo_icd.urdf`, **Run** toggle, background) → Assembly Preview (`t` slider). Planning / preview only. **Static web viewer:** `12_bamboo_mobile_robot_viewer.html` |
 
 ## Component coverage (01–06 core)
 
