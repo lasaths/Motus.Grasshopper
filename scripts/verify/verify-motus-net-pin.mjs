@@ -72,7 +72,7 @@ if (onNuget) {
       if (re.test(slice)) fail(`${rel} still claims "${label}" after ${EXPECTED} is on nuget.org`);
     }
   }
-  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak motus 2.0.0 live on Package Manager.`);
+  console.log(`verify-motus-net-pin: OK — pin ${EXPECTED} on nuget.org; docs aligned; Yak motus live on Package Manager.`);
 } else {
   // Pre-publish: require at least one doc to mention UseLocal / pending publish for this cut.
   const joined = docFiles.map(read).join("\n");
@@ -95,5 +95,5 @@ if (/Yak unpublished/i.test(readme) || /no Rhino Package Manager entry for `motu
   fail("README still claims Yak unpublished after motus 2.0.0 GA");
 }
 if (!/Yak live|Package Manager.*motus|motus.*2\.0\.0.*Package Manager/i.test(readme)) {
-  fail("README must state Yak / Package Manager motus 2.0.0 is live");
+  fail("README must state Yak / Package Manager motus is live");
 }

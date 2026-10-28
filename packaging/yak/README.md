@@ -40,7 +40,7 @@ Output: `dist/motus-<version>-rh8_*-any.yak`
 
 ## Push (post-GA)
 
-`motus` **2.0.0** is live on production Yak. Further SemVers need a version bump (csproj + `MotusGhPlugin.Version` + manifest template + Motus.NET pin when required), fresh dual-TFM pack, then:
+`motus` **2.1.0** is live on production Yak. Further SemVers need a version bump (csproj + `MotusGhPlugin.Version` + manifest template + Motus.NET pin when required), fresh dual-TFM pack, then:
 
 ```bash
 yak push dist/motus-<version>-rh8_*-any.yak
