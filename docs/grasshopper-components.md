@@ -43,10 +43,10 @@ Experimental: compiled with `MOTUS_CONSTRUCTION` — NuGet builds reference the 
 |-----------|--------|---------|
 | **Motus Assembly Structure** (`AStruct`) | `M` member lines (m; list order = default build order), `N` node points (optional, default line ends), `Nm` node names (optional), `L` cane length per member (optional) | `S` structure, `Id` member ids (start + end node name) |
 | **Motus Assembly Site** (`ASite`) | `Sp` support points on nodes (first = start support), `O` obstacle Breps/Meshes, `G` ground pads, `St` stock point, `Ch` clamp height (m), `Hd` clamp heading per support (deg) — all but `Sp` optional | `Si` site |
-| **Motus Assembly Plan** (`APlan`) | `S`, `Si`, `U` robot URDF (path or XML), `Cm` clearance margin (m, 0.002), `Sh` use the embedded plan when the layout matches, `R` Run | `P` plan, `T` tasks, `V` verdict, `Ok` all built and collision-free |
+| **Motus Assembly Plan** (`APlan`) | `S`, `Si`, `U` robot URDF (path or XML), `Cm` clearance margin (m, 0.002), `Sh` use the embedded plan when the layout matches, `R` Run; opt-in (default off): `St` stability-checked build search, `Kg` robot mass (kg, 1.0), `Cs` certified moves, `Ly` planning layer, `Lg` optional outcome log (JSONL) | `P` plan, `T` tasks, `V` verdict, `Ok` all built and collision-free |
 | **Motus Assembly Preview** (`APrev`) | `P`, `t` normalised time 0..1 | `R` robot meshes, `C` placed canes, `A` active cane, `L` task label, `H` holding |
 
-Assembly Plan runs in the background while `R` is true and re-plans only when the inputs change; check `Ok` / `V` before use. A live plan (no embedded match) can take minutes.
+Assembly Plan runs in the background while `R` is true and re-plans only when the inputs change; check `Ok` / `V` before use. A live plan (no embedded match) can take minutes. `St` / `Ly` search the build order live and `Cs` plans live, so they skip the embedded plan and are slower; collision checks stay exact. They need Motus.NET newer than 2.1.0 (`-UseLocal` until the next NuGet).
 
 ## Model
 
