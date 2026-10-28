@@ -17,9 +17,6 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $out = Join-Path $root "src\Motus.GH\bin\$Configuration\$Tfm"
-# First public Rhino Package Manager release — do not push earlier SemVers to production Yak.
-$script:FirstPublicYakVersion = "2.0.0"
-
 function Stage-MotusPlugin([string]$StageDir, [string]$OutputDir = $out) {
     if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
@@ -174,13 +171,9 @@ if ($Yak) {
             Write-Host "`nYak package (Win+Mac): $dest"
             Write-Host "  net8.0-windows/ → Rhino 8 Windows"
             Write-Host "  net8.0/         → Rhino 8 macOS"
-            if ($version -eq $script:FirstPublicYakVersion) {
-                Write-Host "GA $version — after auth: yak push `"$dest`""
-                Write-Host "Verify:           yak search --all motus"
-            } else {
-                Write-Host "Pre-GA pack ($version): do NOT push production Yak until $($script:FirstPublicYakVersion)."
-                Write-Host "Test server only: yak push --source https://test.yak.rhino3d.com `"$dest`""
-            }
+            Write-Host "Production push is manual (needs yak login; never re-push an existing version):"
+            Write-Host "  yak push `"$dest`"; yak search --all motus"
+            Write-Host "Test server: yak push --source https://test.yak.rhino3d.com `"$dest`""
         }
     }
     finally {

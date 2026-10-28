@@ -100,12 +100,7 @@ if [[ "$moved" -eq 0 ]]; then
   exit 1
 fi
 
-if [[ "$VERSION" != "2.0.0" ]]; then
-  echo
-  echo "Pre-GA pack ($VERSION): OK for local/test-server."
-  echo "Do NOT push to production Yak until Version is 2.0.0 (first public Package Manager release)."
-  echo "Test server: yak push --source https://test.yak.rhino3d.com dist/motus-${VERSION}-*.yak"
-else
-  echo
-  echo "GA pack 2.0.0 — after auth: yak push dist/motus-2.0.0-*.yak"
-fi
+echo
+echo "Packed $VERSION. Production push is a manual step (needs yak login; never re-push an existing version):"
+echo "  yak push dist/motus-${VERSION}-*.yak && yak search --all motus"
+echo "Test server: yak push --source https://test.yak.rhino3d.com dist/motus-${VERSION}-*.yak"
