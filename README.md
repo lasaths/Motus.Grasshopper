@@ -10,8 +10,6 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 **Version 2.1.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
 
-*Example 12: the shipped `AssemblyPlanner` plan for the 7-member Warren truss (21 tasks, collision-free), replayed in the Motus.NET viewer.*
-
 ## Contents
 
 - [First plan](#first-plan)
