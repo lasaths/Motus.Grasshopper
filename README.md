@@ -9,7 +9,6 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 
 **Version 2.1.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
-
 ## Contents
 
 - [First plan](#first-plan)
