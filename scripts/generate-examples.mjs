@@ -509,7 +509,7 @@ const MOTUS = {
       { name: 'Heading', nick: 'Hd', desc: 'Optional clamp heading per support (deg)', optional: true, access: 1 },
     ],
     outputs: [{ name: 'Site', nick: 'Si', desc: 'Assembly site' }] },
-  assemblyPlan: { guid: 'dacb82c2-aaaa-4703-a074-ce482518c24f', name: 'Motus Assembly Plan', nick: 'APlan', w: 96, h: 144,
+  assemblyPlan: { guid: 'dacb82c2-aaaa-4703-a074-ce482518c24f', name: 'Motus Assembly Plan', nick: 'APlan', w: 96, h: 264,
     desc: 'Plan the robotic assembly (Motus.Construction) in the background when Run is true.',
     inputs: [
       { name: 'Structure', nick: 'S', desc: 'From Motus Assembly Structure', optional: false },
@@ -518,6 +518,11 @@ const MOTUS = {
       { name: 'Margin', nick: 'Cm', desc: 'Clearance margin (m)', optional: true, number: 0.002 },
       { name: 'Shipped', nick: 'Sh', desc: 'Use the embedded plan when the input matches it', optional: true, bool: false },
       { name: 'Run', nick: 'R', desc: 'Plan in the background when true', optional: true, bool: false },
+      { name: 'Stability', nick: 'St', desc: 'Stability-checked build search (live)', optional: true, bool: false },
+      { name: 'RobotMass', nick: 'Kg', desc: 'Robot mass (kg) for the stability check', optional: true, number: 1 },
+      { name: 'Certified', nick: 'Cs', desc: 'Certify moves contact-free between samples', optional: true, bool: false },
+      { name: 'Layer', nick: 'Ly', desc: 'Planning-layer build search (live)', optional: true, bool: false },
+      { name: 'Log', nick: 'Lg', desc: 'Optional planning-layer outcome log (JSONL)', optional: true },
     ],
     outputs: [
       { name: 'Plan', nick: 'P', desc: 'Assembly plan' },
@@ -3274,7 +3279,7 @@ function graph12() {
     Robot: [outRef(urdf.node, 'Text')],
     Run: [outRef(run.node, 'Boolean Toggle')],
   }, { bools: { Shipped: true } });
-  const verdict = nativePanel(planX - 10, cy + 270, '', 'Verdict', 200, 40);
+  const verdict = nativePanel(planX - 10, cy + 380, '', 'Verdict', 200, 40);
 
   // Play — time slider → preview
   const px = planX + 280;

@@ -177,6 +177,17 @@ public sealed class MotusAssemblyPlanComponent : MotusComponentBase
         p[p.ParamCount - 1].Optional = true;
         p.AddBooleanParameter("Run", "R", "Plan (in the background) when true", GH_ParamAccess.item, false);
         p[p.ParamCount - 1].Optional = true;
+        // Opt-in (appended so existing wiring keeps its indices): off = unchanged behaviour.
+        p.AddBooleanParameter("Stability", "St", "Search the build order live, dropping partial frames that sag too far under self-weight and robot load", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddNumberParameter("RobotMass", "Kg", "Robot mass (kg) clamped on the frame, for the stability check", GH_ParamAccess.item, 1.0);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter("Certified", "Cs", "Prove every robot move contact-free between samples, not only at them (slower)", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddBooleanParameter("Layer", "Ly", "Search the build order live with the planning layer (lazy reach checks, failure and dead-end memory)", GH_ParamAccess.item, false);
+        p[p.ParamCount - 1].Optional = true;
+        p.AddTextParameter("Log", "Lg", "Optional planning-layer outcome log file (JSONL, appended; relative to the .gh)", GH_ParamAccess.item);
+        p[p.ParamCount - 1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -192,6 +203,8 @@ public sealed class MotusAssemblyPlanComponent : MotusComponentBase
         IGH_Goo? sGoo = null, siGoo = null; string urdf = ""; double margin = 0.002; bool shipped = false, run = false;
         if (!da.GetData(0, ref sGoo) || !da.GetData(1, ref siGoo) || !da.GetData(2, ref urdf)) return;
         da.GetData(3, ref margin); da.GetData(4, ref shipped); da.GetData(5, ref run);
+        bool stability = false, certified = false, layer = false; double robotMass = 1.0; string log = "";
+        da.GetData(6, ref stability); da.GetData(7, ref robotMass); da.GetData(8, ref certified); da.GetData(9, ref layer); da.GetData(10, ref log);
         if (sGoo is not AssemblyStructureGoo { Value: { } structure }) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "S: wire Motus Assembly Structure."); return; }
         if (siGoo is not AssemblySiteGoo { Value: { } site }) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Si: wire Motus Assembly Site."); return; }
 
@@ -201,6 +214,7 @@ public sealed class MotusAssemblyPlanComponent : MotusComponentBase
         {
             var xml = LoadUrdf(urdf);
             req = AssemblyRhino.Request(structure, site, xml, margin, shipped, warnings);
+            req = AssemblyRhino.WithOptions(req, stability, robotMass, certified, layer, LogPath(log));
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {
@@ -244,6 +258,15 @@ public sealed class MotusAssemblyPlanComponent : MotusComponentBase
             lock (_lock) { _result = r; _error = err; _resultKey = key; _runningKey = null; }
             RhinoApp.InvokeOnUiThread((Action)(() => { if (OnPingDocument() is not null) ExpireSolution(true); }));
         });
+    }
+
+    string? LogPath(string log)
+    {
+        var t = log.Trim();
+        if (t.Length == 0 || Path.IsPathRooted(t)) return t.Length == 0 ? null : t;
+        var dir = Path.GetDirectoryName(OnPingDocument()?.FilePath);
+        if (string.IsNullOrEmpty(dir)) throw new ArgumentException("Log: relative path needs a saved .gh (or give an absolute path).");
+        return Path.GetFullPath(Path.Combine(dir, t));
     }
 
     static string LoadUrdf(string urdf)

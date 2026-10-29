@@ -222,6 +222,27 @@ public static class AssemblyRhino
         };
     }
 
+    /// <summary>
+    /// Opt-in planning options (all off = request unchanged): stability-checked and/or planning-layer build search
+    /// (<see cref="AssemblyPlanRequest.Search"/>, searched live) and certified segments (<see cref="MotionConstraints.CertifiedSegments"/>).
+    /// </summary>
+    public static AssemblyPlanRequest WithOptions(AssemblyPlanRequest r, bool stability, double robotMassKg, bool certified, bool layer, string? logPath)
+    {
+        if (stability && (!double.IsFinite(robotMassKg) || robotMassKg < 0)) throw new ArgumentException("Robot mass must be a finite value ≥ 0 kg.");
+        if (logPath is not null && !layer) throw new ArgumentException("Log: turn on the planning layer (Ly) to write the outcome log.");
+        if (certified) r = r with { Settings = (r.Settings ?? MotionConstraints.Current) with { CertifiedSegments = true } };
+        if (stability || layer)
+            r = r with
+            {
+                Search = new BambooBuildSearch.Options
+                {
+                    Stability = stability ? new BambooFrameStability.Settings { RobotMassKg = robotMassKg } : null,
+                    Tamp = layer ? new BambooBuildSearch.TampSettings { OutcomeLogPath = logPath } : null
+                }
+            };
+        return r;
+    }
+
     /// <summary>Stable key of a request (replan only when it changes).</summary>
     public static string Key(AssemblyPlanRequest r)
     {
@@ -234,7 +255,9 @@ public static class AssemblyRhino
         foreach (var t in s.Stakes) sb.Append(t.Name).Append(':').Append(F(t.X)).Append(',').Append(F(t.Z)).Append(',').Append(F(t.ClampY)).Append(',').Append(F(t.HeadingDeg)).Append(';');
         foreach (var o in r.Obstacles ?? Array.Empty<CollisionObject>()) sb.Append(o.Name).Append('#').Append(o.ContentHash).Append(';');
         foreach (var p in r.Ground?.Pads ?? []) sb.Append(p.Name).Append(':').Append(F(p.X)).Append(',').Append(F(p.Z)).Append(',').Append(F(p.HalfX)).Append(',').Append(F(p.HalfZ)).Append(';');
-        sb.Append('|').Append(r.RobotUrdfXml!.GetHashCode(StringComparison.Ordinal)).Append('|').Append(F(r.Settings!.ClearanceMarginM)).Append('|').Append(r.UseShippedPlan);
+        sb.Append('|').Append(r.RobotUrdfXml!.GetHashCode(StringComparison.Ordinal)).Append('|').Append(F(r.Settings!.ClearanceMarginM)).Append('|').Append(r.UseShippedPlan)
+            .Append('|').Append(r.Settings.CertifiedSegments).Append('|').Append(r.Search?.Stability is { } st ? F(st.RobotMassKg) : "-")
+            .Append('|').Append(r.Search?.Tamp is { } tp ? tp.OutcomeLogPath ?? "+" : "-");
         return sb.ToString();
     }
 

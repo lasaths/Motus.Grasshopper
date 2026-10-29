@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Motus Assembly Plan** opt-in inputs (appended; defaults keep current behaviour): `St` stability-checked build search + `Kg` robot mass (1.0 kg), `Cs` certified moves, `Ly` planning layer + `Lg` outcome log path. Needs Motus.NET with `AssemblyPlanRequest.Search` (master; next NuGet after 2.1.0).
+
 ## 2.1.0 — Assembly planner · Motus.NET 2.1.0 — 2026-10-28
 
 ### Added

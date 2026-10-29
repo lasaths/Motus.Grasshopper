@@ -1630,6 +1630,20 @@ catch (DllNotFoundException)
     if (last12.Canes.Count(c => c.Name != Motus.Construction.BambooIcdCell.Strut) < 7)
         Fail($"Example 12 final frame expected 7 placed canes, got {last12.Canes.Count}");
     Ok($"Example 12 Warren truss 7/7 collision-free ({run12.Frames.Count} preview frames)");
+
+    // APlan opt-in inputs: all off = same request; each option changes the replan key.
+    if (!ReferenceEquals(AssemblyRhino.WithOptions(req12, false, 1.0, false, false, null), req12))
+        Fail("APlan options off must leave the request unchanged");
+    var keys12 = new[]
+    {
+        AssemblyRhino.Key(req12),
+        AssemblyRhino.Key(AssemblyRhino.WithOptions(req12, true, 1.0, false, false, null)),
+        AssemblyRhino.Key(AssemblyRhino.WithOptions(req12, true, 2.0, false, false, null)),
+        AssemblyRhino.Key(AssemblyRhino.WithOptions(req12, false, 1.0, true, false, null)),
+        AssemblyRhino.Key(AssemblyRhino.WithOptions(req12, false, 1.0, false, true, null)),
+    };
+    if (keys12.Distinct().Count() != keys12.Length) Fail("APlan options must change the replan key");
+    Ok("APlan opt-in options: off = unchanged request, each option replans");
 }
 #endif
 
