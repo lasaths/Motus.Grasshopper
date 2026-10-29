@@ -46,7 +46,7 @@ Experimental: compiled with `MOTUS_CONSTRUCTION` — NuGet builds reference the 
 | **Motus Assembly Plan** (`APlan`) | `S`, `Si`, `U` robot URDF (path or XML), `Cm` clearance margin (m, 0.002), `Sh` use the embedded plan when the layout matches, `R` Run; opt-in (default off): `St` stability-checked build search, `Kg` robot mass (kg, 1.0), `Cs` certified moves, `Ly` planning layer, `Lg` optional outcome log (JSONL) | `P` plan, `T` tasks, `V` verdict, `Ok` all built and collision-free |
 | **Motus Assembly Preview** (`APrev`) | `P`, `t` normalised time 0..1 | `R` robot meshes, `C` placed canes, `A` active cane, `L` task label, `H` holding |
 
-Assembly Plan runs in the background while `R` is true and re-plans only when the inputs change; check `Ok` / `V` before use. A live plan (no embedded match) can take minutes. `St` / `Ly` search the build order live and `Cs` plans live, so they skip the embedded plan and are slower; collision checks stay exact. They need Motus.NET newer than 2.1.0 (`-UseLocal` until the next NuGet).
+Assembly Plan runs in the background while `R` is true and re-plans only when the inputs change; check `Ok` / `V` before use. A live plan (no embedded match) can take minutes. `St` / `Ly` search the build order live and `Cs` plans live, so they skip the embedded plan and are slower; collision checks stay exact. They need Motus.NET 2.2.0 or newer (the NuGet pin).
 
 ## Model
 

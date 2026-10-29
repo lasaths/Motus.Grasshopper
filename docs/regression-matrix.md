@@ -1,15 +1,15 @@
 # P8 / Milestone 1.9 Regression Matrix
 
-Host-readiness checklist for Motus.Grasshopper against Motus.NET **2.1.0** (nuget.org live).
+Host-readiness checklist for Motus.Grasshopper against Motus.NET **2.2.0** (nuget.org live).
 
-**Default path:** NuGet pin (`build/MotusNetPackages.props`). **CI tip path:** `-UseLocal` sibling Motus.NET (Prefer UseLocal jobs; NuGet CI jobs use props **2.1.0**). **Yak:** `motus` **2.1.0** live on Rhino Package Manager (first public 2.0.0).
+**Default path:** NuGet pin (`build/MotusNetPackages.props`). **CI tip path:** `-UseLocal` sibling Motus.NET (Prefer UseLocal jobs; NuGet CI jobs use props **2.2.0**). **Yak:** `motus` **2.1.0** live on Rhino Package Manager (first public 2.0.0).
 
 ## Non-Rhino (automatable)
 
 CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-motus-net-pin.mjs`, and QaSmoke **compile**. Also run:
 
-- [ ] `node scripts/verify/verify-motus-net-pin.mjs` — props pin = **2.1.0**; Motus.Core **2.1.0** on nuget.org; docs must not claim UseLocal-only / publish-pending.
-- [ ] `node scripts/verify/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest / Motus.NET pin agree; icon + dual-TFM pack path present; docs state Yak live on Package Manager (first public **2.0.0**, current **2.1.0**).
+- [ ] `node scripts/verify/verify-motus-net-pin.mjs` — props pin = **2.2.0**; Motus.Core **2.2.0** on nuget.org; docs must not claim UseLocal-only / publish-pending.
+- [ ] `node scripts/verify/verify-yak-packaging.mjs` — csproj / `MotusGhPlugin` / manifest agree, Motus.NET pin not older than the plugin; icon + dual-TFM pack path present; docs state Yak live on Package Manager (first public **2.0.0**, current **2.1.0**).
 - [ ] Default NuGet restore/build (no UseLocal): `dotnet build src/Motus.GH/Motus.GH.csproj -c Release` (local / release gate; CI `build-*-nuget` jobs).
 - [ ] UseLocal still builds: `dotnet build src/Motus.GH/Motus.GH.csproj -c Release -p:UseMotusNetProjectReference=true` (CI does this).
 - [ ] Motus.NET tip: `RegressionMatrixLogicTests` (serial / Stewart / SE2 / PlanBodyPath / Example 10 / export TotgLite) + Cap `ToolCapContract.TryValidateBinding` + Pick Place `PickPlaceTouchContract.TryRequireTouch` + `FamilyHandoffWarnings` / `ExperimentalUrdfLoad` via qa-smoke.
@@ -25,7 +25,7 @@ CI smoke already covers GHX regenerate/validate, planner-only fence, `verify-mot
 - [ ] Motus Plan legged: Walk `Rb` (Mechanism) + ≥2 planes → full-driver gait `Tr` (`PlanBodyPath`, hard SSM, not TCP LIN); tip joint / 1-plane LIN unchanged; mixed plane+joint fails named.
 - [ ] Export: family warnings mirror Waypoints; `Retime` remains bool and optional `Retimer` defaults to `TotgLite`.
 - [ ] Example 10: Pick Place → one Program Auto Plan; SET 0.085/0.04; Preview holds Detach poses between cycles; plan ColScene = table only.
-- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect pin **2.1.0**; Package Manager install documents `motus` **2.1.0** live.
+- [ ] Docs/examples: component reference, README, AGENTS, and generated `.ghx` metadata reflect Motus.NET pin **2.2.0** (plugin **2.1.0**); Package Manager install documents `motus` **2.1.0** live.
 
 ## Experimental mobility (Motus.NET tip — not GA)
 
