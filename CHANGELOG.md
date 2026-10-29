@@ -4,7 +4,11 @@
 
 ### Added
 
-- **Motus Assembly Plan** opt-in inputs (appended; defaults keep current behaviour): `St` stability-checked build search + `Kg` robot mass (1.0 kg), `Cs` certified moves, `Ly` planning layer + `Lg` outcome log path. Needs Motus.NET with `AssemblyPlanRequest.Search` (master; next NuGet after 2.1.0).
+- **Motus Assembly Plan** opt-in inputs (appended; defaults keep current behaviour): `St` stability-checked build search + `Kg` robot mass (1.0 kg), `Cs` certified moves, `Ly` planning layer + `Lg` outcome log path. Needs Motus.NET with `AssemblyPlanRequest.Search` (Motus.NET 2.2.0).
+
+### Changed
+
+- Motus.NET NuGet pin 2.1.0 → 2.2.0 (`build/MotusNetPackages.props`, `verify-motus-net-pin`, docs) so the NuGet CI jobs get `AssemblyPlanRequest.Search`, certified segments, stability and TAMP options. Plugin version stays 2.1.0; `verify-yak-packaging` now allows the pin to run ahead of the plugin version.
 
 ## 2.1.0 — Assembly planner · Motus.NET 2.1.0 — 2026-10-28
 

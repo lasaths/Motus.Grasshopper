@@ -68,10 +68,15 @@ if (vCsproj !== vManifest) {
     `Motus.GH.csproj Version (${vCsproj}) != packaging/yak/manifest.yml (${vManifest}) — keep template in sync (build.ps1 -Yak also rewrites stage copy)`,
   );
 }
-if (vCsproj !== vNet) {
-  fail(
-    `plugin Version (${vCsproj}) != MotusNetVersion pin (${vNet}) — Yak packs NuGet Motus.NET; pin must match ship identity`,
-  );
+// Yak packs NuGet Motus.NET: the pin may run ahead of the plugin (e.g. plugin 2.1.0 on Motus.NET 2.2.0), never behind.
+const semver = (v) => v.split("-")[0].split(".").map(Number);
+const cmp = (a, b) => {
+  const [x, y] = [semver(a), semver(b)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  return 0;
+};
+if (cmp(vNet, vCsproj) < 0) {
+  fail(`MotusNetVersion pin (${vNet}) is older than plugin Version (${vCsproj}) — Yak packs NuGet Motus.NET`);
 }
 
 if (!/^name:\s*motus\s*$/m.test(manifest)) fail("manifest name must be motus");
@@ -114,5 +119,5 @@ const status = isGa
   : `post-GA identity ${vCsproj} — keep Package Manager docs honest; pack before yak push`;
 
 console.log(`verify-yak-packaging: OK — ${status}`);
-console.log(`  csproj/plugin/manifest/MotusNetVersion = ${vCsproj}`);
+console.log(`  csproj/plugin/manifest = ${vCsproj}; MotusNetVersion pin = ${vNet}`);
 console.log(`  icon + dual-TFM pack scripts present`);

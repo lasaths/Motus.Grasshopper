@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const EXPECTED = "2.1.0";
+const EXPECTED = "2.2.0";
 
 function fail(msg) {
   console.error(`verify-motus-net-pin: ${msg}`);

@@ -5,7 +5,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | This repo | Motus.NET |
 |-----------|-----------|
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
-| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.1.0**) |
+| Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.2.0**) |
 
 **Version 2.1.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
@@ -113,7 +113,7 @@ Pin-level detail: [docs/grasshopper-components.md](docs/grasshopper-components.m
 <details>
 <summary><strong>Assembly</strong> — Structure, Site, Plan, Preview (experimental; click to expand)</summary>
 
-Thin wrappers over Motus.NET [`Motus.Construction`](https://www.nuget.org/packages/Motus.Construction/2.1.0) `AssemblyPlanner.Plan`. The structure is input data; Grasshopper adds no truss-specific logic.
+Thin wrappers over Motus.NET [`Motus.Construction`](https://www.nuget.org/packages/Motus.Construction/2.2.0) `AssemblyPlanner.Plan`. The structure is input data; Grasshopper adds no truss-specific logic.
 
 | | Component | What it does |
 |:-:|-----------|--------------|
@@ -161,7 +161,7 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 - Rhino 8.19+ + Grasshopper (Windows or macOS) — RhinoCommon/Grasshopper `8.19.25132.1001`
 - .NET 8 SDK
-- Motus.NET **2.1.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
+- Motus.NET **2.2.0** pin ([`build/MotusNetPackages.props`](build/MotusNetPackages.props)) — live on nuget.org. Default `./build.ps1` restores NuGet; `./build.ps1 -UseLocal` for sibling tip (CI Prefer UseLocal jobs).
 - **Yak live** — `motus` **2.1.0** is the current Rhino Package Manager release (`yak search --all motus`; first public release 2.0.0).
 
 ## Install
@@ -170,12 +170,12 @@ Stub/NuGet builds often list only **RrtConnect** in Motus RRT Settings — expec
 
 ## Install from source
 
-Two build modes: **NuGet** (default) restores Motus.NET **2.1.0** packages from nuget.org via [`build/MotusNetPackages.props`](build/MotusNetPackages.props); **UseLocal** references a sibling `../Motus.NET` checkout (tip / CI).
+Two build modes: **NuGet** (default) restores Motus.NET **2.2.0** packages from nuget.org via [`build/MotusNetPackages.props`](build/MotusNetPackages.props); **UseLocal** references a sibling `../Motus.NET` checkout (tip / CI).
 
 **Windows**
 
 ```powershell
-./build.ps1                      # Release (NuGet Motus.NET 2.1.0)
+./build.ps1                      # Release (NuGet Motus.NET 2.2.0)
 ./build.ps1 -UseLocal            # sibling Motus.NET project refs (tip / CI)
 ./build.ps1 -Zip                 # dist/Motus.Grasshopper-Release.zip
 ./build.ps1 -Yak                 # pack → dist/motus-*-rh8_*-any.yak
@@ -200,7 +200,7 @@ Libraries folder needs `Motus.GH.gha`, Motus.*.dll, and `resources/robots/`. Ver
 |----------|---------|
 | `RhinoCommonPackageVersion` | RhinoCommon/Grasshopper NuGet floor |
 | `Rhino8Dir` / `Rhino8App` | Rhino 8 install hints |
-| `MotusNetVersion` | Override NuGet pin (default `2.1.0`) |
+| `MotusNetVersion` | Override NuGet pin (default `2.2.0`) |
 
 ## Common workflows
 
