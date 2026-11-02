@@ -23,7 +23,7 @@ public sealed class MotusStewartComponent : RobotSourceComponentBase
             "Motus Stewart",
             "Stewart",
             "Stewart/Gough hexapod (6 prismatic legs). Family=stewart; JointState = leg lengths in meters. Wire Base+Plat points or classic Br/Pr; Plan with TCP plane goals.",
-            "stack")
+            "polygon")
     {
     }
 

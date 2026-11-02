@@ -26,7 +26,7 @@ public sealed class MotusToolStateComponent : MotusDropDownComponentBase
             "ToolState",
             "Build end-effector parameter values from Motus Tool Cap schema (e.g. Robotiq jaw width). Preset dropdown on component.",
             "Model",
-            "sliders-horizontal") { }
+            "faders") { }
 
     public override void CreateAttributes() => CreateDropDownAttributes(BuildDropdownModel, OnDropdownSelect);
 
@@ -128,6 +128,9 @@ public sealed class MotusToolStateComponent : MotusDropDownComponentBase
         var state = caps.Clamp(new EndEffectorState(values));
         foreach (var err in caps.Validate(state))
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, err);
+
+        if (Params.Input[1].SourceCount > 0 && preset != "Custom")
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Width is ignored when Preset is not Custom.");
 
         da.SetData(0, new EndEffectorStateGoo(state));
     }

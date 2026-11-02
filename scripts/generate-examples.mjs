@@ -174,7 +174,7 @@ const MOTUS = {
       { name: 'State', nick: 'Js', desc: 'Joint state', optional: false },
     ],
     outputs: [{ name: 'Plane', nick: 'P', desc: 'TCP pose in robot base frame (position + orientation)' }] },
-  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Quick', w: 96, h: 104,
+  plan: { guid: '8bb0bae3-527f-4e80-a8a4-c8a88b7276de', name: 'Motus Plan', nick: 'Plan', w: 96, h: 104,
     desc: 'Quick planner: plane=LIN, joint=joint-linear/RRT. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.',
     inputs: [
       { name: 'Robot', nick: 'Rb', desc: 'Robot model from Motus UR10e or Motus Robot', optional: false, typeId: PTYPE.robot },

@@ -73,7 +73,7 @@ public sealed class MotusJointTableComponent : RobotSourceComponentBase
             || !da.GetDataList(3, ox))
         {
             ClearPreview();
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Wire Parent, Child, Type, Ox lists (same length).");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Wire Parent, Child, Type, Ox lists (same length).");
             return;
         }
 

@@ -41,7 +41,7 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     private bool _showRrtSettings;
 
     public MotusPlanComponent()
-        : base("Motus Plan", "Quick", "Quick planner: plane goals = TCP LIN (serial/Stewart) or body-path gait (Family=legged + Mechanism, ≥2 planes); joint goals = joint-linear or RRT with collision. Click Plan or enable Auto Plan. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.", "Plan", "flow-arrow")
+        : base("Motus Plan", "Plan", "Quick planner: plane goals = TCP LIN (serial/Stewart) or body-path gait (Family=legged + Mechanism, ≥2 planes); joint goals = joint-linear or RRT with collision. Click Plan or enable Auto Plan. For PTP/CIRC/SET/WAIT use Motus Move → Motus Program.", "Plan", "flow-arrow")
     {
         _worker = new PlanWorker(this);
         BaseWorker = _worker;
@@ -69,11 +69,11 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
     public override void CreateAttributes() =>
         m_attributes = new ButtonAttributes(this, PlanButtonLabel, () => _autoPlan || IsOperationInProgress, RequestRun);
 
-    internal string ActivePlanningStage = "Preparing";
+    internal volatile string ActivePlanningStage = "Preparing";
     private long _planningStarted;
 
     private string PlanButtonLabel() =>
-        IsOperationInProgress ? "Working" : _autoPlan ? "Replan" : "Plan";
+        IsOperationInProgress ? "Cancel" : _autoPlan ? "Replan" : "Plan";
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -560,7 +560,8 @@ public sealed class MotusPlanComponent : MotusAsyncComponentBase, IGH_VariablePa
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
                     "Plan checks URDF collision meshes (often larger than visuals) plus tool collision hull. " +
                     "Right-click the robot component → Preview collision meshes to compare. " +
-                    "Confirm Plan Start matches the ShowStart ghost pose.");
+                    "To see the start ghost, enable ShowStart (SS) on the Motus Preview component (off by default) " +
+                    "and confirm Plan Start matches that pose.");
             }
         }
     }

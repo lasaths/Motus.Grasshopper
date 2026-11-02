@@ -725,7 +725,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
             "Program",
             "Plan a mixed Motus Move sequence (PTP/LIN/CIRC/SET/WAIT). Click Plan or enable Auto Plan. Unlike Motus Plan plane goals, LIN failures do not fall back to joint-space paths.",
             "Plan",
-            "stack") { }
+            "circles-three-plus") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [
@@ -851,6 +851,7 @@ public sealed class MotusProgramPlanComponent : MotusComponentBase
 
     private void InvalidInputs(IGH_DataAccess da, string error)
     {
+        da.SetData(0, null);
         CancelPlanning(expire: false);
         _lastPlannedFingerprint = null;
         AddRuntimeMessage(GH_RuntimeMessageLevel.Error, error);

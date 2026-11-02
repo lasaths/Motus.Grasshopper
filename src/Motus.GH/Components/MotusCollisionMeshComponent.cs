@@ -14,7 +14,7 @@ public sealed class MotusCollisionMeshComponent : MotusComponentBase
     private List<Mesh> _previewMeshes = new();
     private string? _previewKey;
 
-    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "polygon") { }
+    public MotusCollisionMeshComponent() : base("Motus Collision Mesh", "ColMesh", "Mesh or Brep obstacle (meters)", "Collision", "tree-structure") { }
 
     protected override IReadOnlyList<string> AiKeywords { get; } =
     [

@@ -17,7 +17,7 @@ public sealed class MotusRrtSettingsComponent : MotusComponentBase
             "Sampling",
             "Tune sampling planners for collision-aware paths; wire Settings into Motus Plan or Motus Program",
             "Plan",
-            "faders") { }
+            "gear-six") { }
 
     public override GH_Exposure Exposure => GH_Exposure.secondary;
 
