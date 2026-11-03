@@ -7,7 +7,7 @@ Rhino 8 / Grasshopper plugin for [Motus.NET](https://github.com/lasaths/Motus.NE
 | Grasshopper components, icons, examples | Kinematics, planners, collision, retiming, method DOIs |
 | Wires Rhino geometry ↔ Motus types | Host-agnostic .NET libraries ([NuGet](https://www.nuget.org/profiles/lasaths) pin **2.2.0**) |
 
-**Version 2.1.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
+**Version 2.2.0** · **Planning and preview only** — no live robot control, no RTDE. MIT ([LICENSE](LICENSE)).
 
 ## Contents
 

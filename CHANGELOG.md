@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 — Assembly Plan options · Motus.NET 2.2.0 — unreleased (Yak `motus` still 2.1.0)
 
 ### Added
 
@@ -8,7 +8,17 @@
 
 ### Changed
 
-- Motus.NET NuGet pin 2.1.0 → 2.2.0 (`build/MotusNetPackages.props`, `verify-motus-net-pin`, docs) so the NuGet CI jobs get `AssemblyPlanRequest.Search`, certified segments, stability and TAMP options. Plugin version stays 2.1.0; `verify-yak-packaging` now allows the pin to run ahead of the plugin version.
+- Motus.NET NuGet pin 2.1.0 → 2.2.0 (`build/MotusNetPackages.props`, `verify-motus-net-pin`, docs) so the NuGet CI jobs get `AssemblyPlanRequest.Search`, certified segments, stability and TAMP options.
+- Plugin / yak manifest version **2.1.0 → 2.2.0** to match the pin; `verify-yak-packaging` again requires plugin version == Motus.NET pin. Not pushed to Yak.
+- Motus Plan nickname `Quick` → `Plan`; button shows `Cancel` while planning; start-ghost hint names Preview `SS`.
+- Icon de-collisions: Collision Mesh, RRT Settings, Program and related components get distinct Phosphor icons.
+- README: removed the Motus.NET web-viewer GIF.
+
+### Fixed
+
+- Motus Program clears stale `Tr` output on invalid inputs.
+- Motus Tool State remarks that `Width` is ignored unless Preset is `Custom`.
+- Motus Joint Table: mismatched Parent/Child/Type/Ox list lengths are an Error, not a Remark.
 
 ## 2.1.0 — Assembly planner · Motus.NET 2.1.0 — 2026-10-28
 
