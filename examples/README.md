@@ -10,7 +10,7 @@ node scripts/verify/verify-example-viewers.mjs
 
 ## Prerequisite: Motus.GH installed
 
-Examples target the **current Motus.Grasshopper** build (Motus.NET **2.1.0** NuGet pin). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
+Examples target the **current Motus.Grasshopper** build (Motus.NET **2.2.0** NuGet pin). If Grasshopper shows **Unrecognized Objects**, the plugin is not loaded — install, then restart Rhino:
 
 ```powershell
 .\build.ps1 -Configuration Release -Install
